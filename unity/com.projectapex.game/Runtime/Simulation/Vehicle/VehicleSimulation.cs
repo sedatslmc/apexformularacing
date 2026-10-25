@@ -34,6 +34,17 @@ namespace Apex.Vehicle
         public bool assistAbs = true;
         public bool assistSteering = true;
         public bool autoGearbox = true;
+        /// <summary>Holds the car (grid, pause, calibration): full brakes, no drive and
+        /// never engages reverse, unlike holding the brake pedal at a standstill.</summary>
+        public bool holdBrake;
+
+        // Conditions
+        public readonly TireState[] tires = new TireState[4];
+        /// <summary>Simulate tire temperature, wear and compound grip.</summary>
+        public bool simulateTires = true;
+        /// <summary>Track water level 0..1 (from the weather model).</summary>
+        public float trackWetness;
+        public float trackTemperature = 34f;
 
         // Telemetry
         public float EngineRpm { get; private set; }
@@ -62,7 +73,11 @@ namespace Apex.Vehicle
             tireRear = setup.tireRear;
             engine = setup.engine;
             gearbox = setup.gearbox;
-            for (int i = 0; i < 4; i++) wheels[i] = new WheelState(i, setup);
+            for (int i = 0; i < 4; i++)
+            {
+                wheels[i] = new WheelState(i, setup);
+                tires[i] = new TireState { coolingScale = i < 2 ? 1f : 1.3f };
+            }
             Reset();
         }
 
@@ -82,6 +97,24 @@ namespace Apex.Vehicle
         }
 
         public TireModel TireFor(WheelState w) => w.front ? tireFront : tireRear;
+
+        /// <summary>Fits a fresh set of tires (pit stop / session start).</summary>
+        public void FitTires(TireCompound compound, float startTemp = float.NaN)
+        {
+            foreach (var t in tires) t.Fit(compound, startTemp);
+        }
+
+        public float TireWearMultiplier
+        {
+            set { foreach (var t in tires) t.wearMultiplier = value; }
+        }
+
+        public float AverageTireWear()
+        {
+            float s = 0f;
+            foreach (var t in tires) s += t.wear;
+            return s / 4f;
+        }
 
         public void RequestShiftUp() => shiftUpRequested = true;
         public void RequestShiftDown() => shiftDownRequested = true;
@@ -112,7 +145,12 @@ namespace Apex.Vehicle
             SimTime += dt;
             float throttleIn = throttle;
             float brakeIn = brake;
-            if (gearbox.gear < 0)
+            if (holdBrake)
+            {
+                throttleIn = 0f;
+                brakeIn = 1f;
+            }
+            else if (gearbox.gear < 0)
             {
                 // In reverse the pedals swap so "brake" backs the car up.
                 throttleIn = brake;
@@ -231,6 +269,14 @@ namespace Apex.Vehicle
                 w.fx = fxSum[i] / subN;
                 w.fy = fySum[i] / subN;
                 w.spinAngle = ApexMath.PosMod(w.spinAngle + w.omega * dt, ApexMath.Tau);
+                if (simulateTires)
+                {
+                    // Frictional power at the contact patch heats and wears the tire.
+                    float slipPower = w.contact
+                        ? MathF.Abs(w.fx * (w.omega * w.radius - w.longitudinalVelocity)) + MathF.Abs(w.fy * w.lateralVelocity)
+                        : 0f;
+                    tires[i].Update(dt, slipPower, w.load, Speed, trackTemperature, trackWetness);
+                }
             }
 
             // --- Aerodynamics ---------------------------------------------------------
@@ -249,7 +295,8 @@ namespace Apex.Vehicle
             foreach (var w in wheels)
             {
                 var props = SurfaceProperties.For(w.surface);
-                w.grip = props.grip * w.conditionGrip;
+                float tireGrip = simulateTires ? tires[w.index].GripMultiplier(trackWetness) : 1f;
+                w.grip = props.grip * w.conditionGrip * tireGrip;
                 if (w.loadOverride >= 0f)
                 {
                     w.load = w.loadOverride;
@@ -285,7 +332,7 @@ namespace Apex.Vehicle
             {
                 float wheelRpm = ForwardSpeed / setup.wheelRadiusRear * 60f / ApexMath.Tau;
                 // Simcade convenience: hold brake at a standstill to engage reverse.
-                if (MathF.Abs(ForwardSpeed) < 0.8f && brake > 0.5f && throttle < 0.05f && gearbox.gear > 0)
+                if (!holdBrake && MathF.Abs(ForwardSpeed) < 0.8f && brake > 0.5f && throttle < 0.05f && gearbox.gear > 0)
                 {
                     reverseTimer += dt;
                     if (reverseTimer > 0.6f)
@@ -298,7 +345,12 @@ namespace Apex.Vehicle
                 {
                     reverseTimer = 0f;
                 }
-                if (gearbox.gear < 0)
+                if (holdBrake && gearbox.gear < 0)
+                {
+                    gearbox.gear = 1;
+                    shifted = true;
+                }
+                else if (gearbox.gear < 0)
                 {
                     if (throttle > 0.3f && ForwardSpeed > -1f)
                     {

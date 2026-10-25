@@ -78,10 +78,11 @@ namespace Apex.Game
             CheckTrackLimits(Time.fixedDeltaTime);
             CheckWrongWay(proj.distance, Time.fixedDeltaTime);
 
+            sim.holdBrake = !InputEnabled;
             if (!InputEnabled)
             {
                 sim.throttle = 0f;
-                sim.brake = 1f;
+                sim.brake = 0f;
                 sim.steer = 0f;
                 return;
             }
