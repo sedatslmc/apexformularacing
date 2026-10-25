@@ -383,6 +383,8 @@ namespace Apex.Game
             Line($"rpm {sim.EngineRpm:00000}  Gas {sim.throttle:0.00}  Bremse {sim.brake:0.00}  Lenk {sim.steer:+0.00;-0.00}");
             Line($"Lenkwinkel {sim.SteerAngle * ApexMath.Rad2Deg:+0.0;-0.0}°  Gegenlenk {sim.CounterSteer * ApexMath.Rad2Deg:+0.0;-0.0}°  TC {sim.TcCut:0.00}");
             Line($"Abtrieb V {sim.DownforceFront:0} N  H {sim.DownforceRear:0} N  Luftwid. {sim.Drag:0} N");
+            Line($"Fahrhöhe V {sim.RideHeightFront * 1000f:0} mm  H {sim.RideHeightRear * 1000f:0} mm  Boden x{sim.FloorGain:0.00}  Bal. {sim.AeroBalance * 100f:0.0} %{(sim.Bottoming ? "  AUFSETZEN" : "")}");
+            Line($"Kupplung {(sim.ClutchSlipping ? "schleift" : "geschlossen")}{(sim.LimiterActive ? "  BEGRENZER" : "")}  Frame {Time.smoothDeltaTime * 1000f:0.0} ms ({1f / Mathf.Max(Time.smoothDeltaTime, 1e-4f):0} fps)");
             for (int i = 0; i < 4; i++)
             {
                 var w = sim.wheels[i];

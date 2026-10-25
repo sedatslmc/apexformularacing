@@ -459,22 +459,9 @@ namespace Apex.Vehicle
                 var props = SurfaceProperties.For(w.surface);
                 float tireGrip = simulateTires ? tires[w.index].GripMultiplier(trackWetness) : 1f;
                 w.grip = props.grip * w.conditionGrip * tireGrip;
-                if (w.loadOverride >= 0f)
-                {
-                    w.load = w.loadOverride;
-                    w.prevCompression = w.compression;
-                    continue;
-                }
-                if (!w.contact)
-                {
-                    w.roadOffset = 0f;
-                    w.load = 0f;
-                    w.prevCompression = w.compression;
-                    continue;
-                }
                 // Surface texture (kerb ripples, grass, gravel) excites the suspension.
                 // Its frequency is capped well below the 120 Hz step to avoid aliasing.
-                if (props.textureAmplitude > 0f)
+                if (props.textureAmplitude > 0f && w.contact)
                 {
                     float freq = MathF.Min(MathF.Abs(w.longitudinalVelocity) / props.textureWavelength, 24f);
                     w.roadPhase = ApexMath.PosMod(w.roadPhase + freq * ApexMath.Tau * dt, ApexMath.Tau);
@@ -482,6 +469,19 @@ namespace Apex.Vehicle
                     w.roadOffset = props.textureAmplitude * speedFade * 0.5f * (1f + MathF.Sin(w.roadPhase));
                 }
                 else w.roadOffset = 0f;
+                if (w.loadOverride >= 0f)
+                {
+                    // Test rigs prescribe the load; the texture still adds spring force.
+                    w.load = MathF.Max(0f, w.loadOverride + w.spring * w.roadOffset);
+                    w.prevCompression = w.compression;
+                    continue;
+                }
+                if (!w.contact)
+                {
+                    w.load = 0f;
+                    w.prevCompression = w.compression;
+                    continue;
+                }
                 float comp = w.compression + w.roadOffset;
                 float compVel = (comp - w.prevCompression) / dt;
                 w.prevCompression = comp;

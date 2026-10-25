@@ -4,7 +4,7 @@ Stand: Alle Inhalte sind selbst erstellt oder prozedural erzeugt. Es gibt keine 
 
 | Asset | Herkunft | Lizenz | Hinweis |
 |---|---|---|---|
-| Fahrzeug „Apex FA-1“ (Platzhalter aus Primitiven) | selbst erstellt (Code) | Projekteigentum | originales Design, keine reale Vorlage |
+| Fahrzeug „Apex FA-1“ (prozeduraler Platzhalter: `CarGeometry`, 3 LODs, ~12,7k/5,2k/3,0k Dreiecke) | selbst erstellt (Code) | Projekteigentum | originales, fiktives Design, keine reale Vorlage, keine Marken; nicht fotorealistisch. Premium-Modell: siehe `VEHICLE_ASSET_SPEC.md` (noch nicht beauftragt) |
 | Strecken Testoval, Bosphorus GP (Graybox) | selbst erstellt (Daten und Generator) | Projekteigentum | fiktiv; nicht georeferenziert, keine Kartendaten verwendet |
 | Materialien, Himmel | Unity-Standard-Shader (URP Lit, Skybox/Procedural) | Unity-Lizenz | keine Texturen von Dritten |
 | Motor- und Reifensound | prozedural synthetisiert | Projekteigentum | keine Aufnahmen |

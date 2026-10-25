@@ -40,6 +40,9 @@ namespace Apex.Game
 
         public void Snap() => initialised = false;
 
+        Transform visualsOwner;
+        CarVisuals visuals;
+
         void LateUpdate()
         {
             if (target == null) return;
@@ -52,12 +55,20 @@ namespace Apex.Game
                 smoothedForward = flat;
                 initialised = true;
             }
+            if (target != visualsOwner)
+            {
+                if (visuals != null) visuals.FirstPerson = false;
+                visualsOwner = target;
+                visuals = target.GetComponent<CarVisuals>();
+            }
+            if (visuals != null) visuals.FirstPerson = mode == Mode.Cockpit;
             switch (mode)
             {
                 case Mode.Cockpit:
                 {
                     if (cam) cam.fieldOfView = 70f;
-                    Vector3 eye = target.TransformPoint(new Vector3(0f, 0.58f, 0.4f));
+                    // Driver's eye inside the helmet: steering wheel, halo and mirrors in view.
+                    Vector3 eye = target.TransformPoint(new Vector3(0f, 0.47f, 0.02f));
                     Vector3 up = Vector3.Slerp(target.up, Vector3.up, horizonStabilisation);
                     transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd, up));
                     smoothedForward = flat;
