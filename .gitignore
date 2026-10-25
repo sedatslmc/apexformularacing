@@ -24,3 +24,4 @@ Thumbs.db
 __pycache__/
 build/refs/
 export/
+unity/Logs-Setup/

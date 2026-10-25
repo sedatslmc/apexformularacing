@@ -28,6 +28,15 @@ namespace Apex.EditorTools
             Debug.Log("[Apex] Projekt eingerichtet. Szene: " + ScenePath + " – Play drücken.");
         }
 
+        /// <summary>Opens the Boot scene and enters Play mode (used by Setup-Windows.bat).</summary>
+        [MenuItem("Project Apex/Spiel starten", priority = 1)]
+        public static void OpenBootSceneAndPlay()
+        {
+            if (!File.Exists(ScenePath)) SetupAll();
+            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            EditorApplication.delayCall += () => EditorApplication.isPlaying = true;
+        }
+
         [MenuItem("Project Apex/1. Player-Einstellungen anwenden", priority = 20)]
         public static void ApplyPlayerSettings()
         {

@@ -3,6 +3,18 @@
 Ziel: Das Projekt in Unity 6 öffnen, die Testoval-Session starten und die M1-Abnahme durchführen.
 Dauer beim ersten Mal: ca. 20–40 Minuten (vor allem Downloads).
 
+## Schnellweg (empfohlen): ein Doppelklick
+1. **Unity Hub** installieren (https://unity.com/download), anmelden und unter *Installs* eine **Unity 6 LTS** installieren (Modul *Android Build Support* ankreuzen).
+2. Dieses Repository herunterladen: auf GitHub **Code → Download ZIP** und entpacken, oder per GitHub Desktop klonen.
+3. Im Repository-Ordner **`Setup-Windows.bat`** doppelklicken.
+
+Das Skript findet Unity 6 und legt das Projekt `unity\ProjectApex` an. Es trägt das Spielpaket ein, führt die Einrichtung aus und öffnet Unity mit gestartetem Spiel.
+Beim ersten Mal dauert das einige Minuten. Logs liegen in `unity\Logs-Setup`.
+Später startet derselbe Doppelklick das Spiel schnell wieder. Alternativ in Unity: Menü **Project Apex → Spiel starten**.
+
+Hinweis: Das Skript legt ein Projekt mit der Standard-Render-Pipeline an. Für den Fahr-Prototyp reicht das. Die URP-Umstellung folgt mit dem Grafik-Meilenstein (M3).
+Die folgenden Abschnitte beschreiben den manuellen Weg mit URP-Vorlage.
+
 ## 1. Voraussetzungen
 1. **Git** und dieses Repository lokal klonen, z. B. nach `C:\Dev\project-apex`.
 2. **Unity Hub** installieren und eine **Unity 6 LTS**-Version hinzufügen (die neueste 6000.x LTS im Hub).
