@@ -37,6 +37,8 @@ namespace Apex.Vehicle
         /// <summary>Holds the car (grid, pause, calibration): full brakes, no drive and
         /// never engages reverse, unlike holding the brake pedal at a standstill.</summary>
         public bool holdBrake;
+        /// <summary>Pit limiter / speed cap in m/s (infinity = off).</summary>
+        public float speedLimit = float.PositiveInfinity;
 
         // Conditions
         public readonly TireState[] tires = new TireState[4];
@@ -178,6 +180,16 @@ namespace Apex.Vehicle
                                   || (throttleIn > 0.05f && engagedRpm < setup.launchRpm);
             float effThrottle = throttleIn;
             if (gearbox.IsShifting) effThrottle = 0f;
+            if (ForwardSpeed > speedLimit)
+            {
+                // Limiter: cut drive and brake gently back to the limit.
+                effThrottle = 0f;
+                brakeIn = MathF.Max(brakeIn, ApexMath.Clamp01((ForwardSpeed - speedLimit) * 0.15f));
+            }
+            else if (ForwardSpeed > speedLimit - 1.5f)
+            {
+                effThrottle *= ApexMath.Clamp01((speedLimit - ForwardSpeed) / 1.5f);
+            }
             float crankTorque = 0f;
             if (clutchSlipping)
             {

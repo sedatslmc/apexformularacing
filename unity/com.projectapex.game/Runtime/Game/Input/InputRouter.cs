@@ -33,6 +33,22 @@ namespace Apex.Game
         public bool CameraPressed { get; private set; }
         public bool TelemetryPressed { get; private set; }
         public bool ConfirmPressed { get; private set; }
+        public bool RadioPressed { get; private set; }
+        public bool PitPressed { get; private set; }
+        public bool TowerPressed { get; private set; }
+        public bool TowerHeld { get; private set; }
+        public bool MapPressed { get; private set; }
+        public bool HudPresetPressed { get; private set; }
+        public bool HelpPressed { get; private set; }
+        public bool LayoutDebugPressed { get; private set; }
+        public bool RestartPressed { get; private set; }
+        public bool ScreenshotPressed { get; private set; }
+        public bool NavUp { get; private set; }
+        public bool NavDown { get; private set; }
+        /// <summary>Number key 1-9 pressed this frame (0 = none).</summary>
+        public int NumberPressed { get; private set; }
+        /// <summary>When true, Up/Down arrows navigate the radio instead of driving.</summary>
+        public bool radioOpen;
 
         public readonly TiltSteering tilt = new TiltSteering();
         public bool TiltAvailable { get; private set; }
@@ -44,7 +60,8 @@ namespace Apex.Game
         readonly DigitalAxis steerAxis = new DigitalAxis(3.2f, 5f, 7f);
         readonly DigitalAxis throttleAxis = new DigitalAxis(7f, 7f, 7f);
         readonly DigitalAxis brakeAxis = new DigitalAxis(9f, 9f, 9f);
-        bool prevShiftUpTouch, prevShiftDownTouch, prevRecenterTouch, prevPauseTouch;
+        readonly HashSet<int> heldTouch = new HashSet<int>();
+        readonly HashSet<int> prevHeldTouch = new HashSet<int>();
         Vector2Int layoutScreen;
         ControlPreset layoutPreset;
         bool layoutManual;
@@ -118,14 +135,37 @@ namespace Apex.Game
             CameraPressed = (kb != null && kb.cKey.wasPressedThisFrame) || (pad != null && pad.buttonNorth.wasPressedThisFrame);
             TelemetryPressed = kb != null && kb.f3Key.wasPressedThisFrame;
             ConfirmPressed = (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) || (pad != null && pad.buttonSouth.wasPressedThisFrame);
+            RadioPressed = (kb != null && kb.rKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame && !radioOpen);
+            PitPressed = kb != null && kb.pKey.wasPressedThisFrame;
+            TowerPressed = kb != null && kb.tabKey.wasPressedThisFrame;
+            TowerHeld = kb != null && kb.tabKey.isPressed;
+            MapPressed = kb != null && kb.mKey.wasPressedThisFrame;
+            HudPresetPressed = kb != null && kb.hKey.wasPressedThisFrame;
+            HelpPressed = kb != null && kb.f1Key.wasPressedThisFrame;
+            LayoutDebugPressed = kb != null && kb.f2Key.wasPressedThisFrame;
+            RestartPressed = kb != null && kb.f5Key.wasPressedThisFrame;
+            ScreenshotPressed = kb != null && kb.f9Key.wasPressedThisFrame;
+            NavUp = (kb != null && kb.upArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame);
+            NavDown = (kb != null && kb.downArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.down.wasPressedThisFrame);
+            NumberPressed = 0;
+            if (kb != null)
+            {
+                if (kb.digit1Key.wasPressedThisFrame) NumberPressed = 1;
+                else if (kb.digit2Key.wasPressedThisFrame) NumberPressed = 2;
+                else if (kb.digit3Key.wasPressedThisFrame) NumberPressed = 3;
+                else if (kb.digit4Key.wasPressedThisFrame) NumberPressed = 4;
+                else if (kb.digit5Key.wasPressedThisFrame) NumberPressed = 5;
+                else if (kb.digit6Key.wasPressedThisFrame) NumberPressed = 6;
+            }
 
             // Keyboard and gamepad.
             float kThrottle = 0f, kBrake = 0f, kSteer = 0f;
             bool analogSteer = false;
             if (kb != null)
             {
-                if (kb.wKey.isPressed || kb.upArrowKey.isPressed) kThrottle = 1f;
-                if (kb.sKey.isPressed || kb.downArrowKey.isPressed) kBrake = 1f;
+                // While the radio is open the arrows navigate it; W/S still drive.
+                if (kb.wKey.isPressed || (kb.upArrowKey.isPressed && !radioOpen)) kThrottle = 1f;
+                if (kb.sKey.isPressed || (kb.downArrowKey.isPressed && !radioOpen)) kBrake = 1f;
                 if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) kSteer -= 1f;
                 if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) kSteer += 1f;
             }
@@ -144,16 +184,18 @@ namespace Apex.Game
             float tThrottle = touch.IsHeld(TouchLayout.Throttle) ? 1f : 0f;
             float tBrake = touch.IsHeld(TouchLayout.Brake) ? 1f : 0f;
             float tSteer = (touch.IsHeld(TouchLayout.SteerRight) ? 1f : 0f) - (touch.IsHeld(TouchLayout.SteerLeft) ? 1f : 0f);
-            bool su = touch.IsHeld(TouchLayout.ShiftUp), sd = touch.IsHeld(TouchLayout.ShiftDown), rc = touch.IsHeld(TouchLayout.Recenter);
-            if (su && !prevShiftUpTouch) ShiftUpPressed = true;
-            if (sd && !prevShiftDownTouch) ShiftDownPressed = true;
-            if (rc && !prevRecenterTouch) CalibrateTilt();
-            bool pz = touch.IsHeld(TouchLayout.Pause);
-            if (pz && !prevPauseTouch) PausePressed = true;
-            prevPauseTouch = pz;
-            prevShiftUpTouch = su;
-            prevShiftDownTouch = sd;
-            prevRecenterTouch = rc;
+            prevHeldTouch.Clear();
+            foreach (int id in heldTouch) prevHeldTouch.Add(id);
+            heldTouch.Clear();
+            foreach (var b in Buttons)
+                if (touch.IsHeld(b.id)) heldTouch.Add(b.id);
+            if (TouchTapped(TouchLayout.ShiftUp)) ShiftUpPressed = true;
+            if (TouchTapped(TouchLayout.ShiftDown)) ShiftDownPressed = true;
+            if (TouchTapped(TouchLayout.Recenter)) CalibrateTilt();
+            if (TouchTapped(TouchLayout.Pause)) PausePressed = true;
+            if (TouchTapped(TouchLayout.Radio)) RadioPressed = true;
+            for (int k = 0; k < 6; k++)
+                if (TouchTapped(TouchLayout.RadioEntry0 + k)) NumberPressed = k + 1;
 
             // Tilt.
             float tiltSteer = 0f;
@@ -185,15 +227,27 @@ namespace Apex.Game
             Brake = Mathf.Max(brakeAxis.Update(Mathf.Max(kBrake, tBrake), dt), padBrake);
         }
 
+        /// <summary>True on the frame a touch button went down.</summary>
+        public bool TouchTapped(int id) => heldTouch.Contains(id) && !prevHeldTouch.Contains(id);
+
+        /// <summary>Show driving controls (false in menus).</summary>
+        public bool drivingControls = true;
+        bool layoutRadio;
+        bool layoutDriving = true;
+
         void UpdateTouch()
         {
             var size = new Vector2Int(Screen.width, Screen.height);
-            if (size != layoutScreen || layoutPreset != settings.controlPreset || layoutManual != manualGears)
+            if (size != layoutScreen || layoutPreset != settings.controlPreset || layoutManual != manualGears || layoutRadio != radioOpen || layoutDriving != drivingControls)
             {
                 layoutScreen = size;
                 layoutPreset = settings.controlPreset;
                 layoutManual = manualGears;
-                Buttons = TouchLayout.Compute(settings, settings.controlPreset == ControlPreset.Tilt, manualGears);
+                layoutRadio = radioOpen;
+                layoutDriving = drivingControls;
+                Buttons = drivingControls
+                    ? TouchLayout.Compute(settings, settings.controlPreset == ControlPreset.Tilt, manualGears, radioOpen)
+                    : new List<TouchLayout.Button>();
                 touch.SetControls(TouchLayout.ToControls(Buttons));
             }
             touch.BeginFrame();

@@ -1593,5 +1593,35 @@
    640,
    2200
   ]
+ ],
+ "pit": {
+  "side": -1,
+  "entry": 20,
+  "exit": 600,
+  "box_start": 240,
+  "box_spacing": 10,
+  "speed_limit_kmh": 80
+ },
+ "corner_names": [
+  "Waterfront",
+  "Iskele",
+  "Bosporus 1",
+  "Bosporus 2",
+  "Bosporus 3",
+  "Ortaköy",
+  "Yokuş",
+  "Kuppe",
+  "Tepe 1",
+  "Tepe 2",
+  "Tepe 3",
+  "Grand Descent",
+  "Feribot 1",
+  "Feribot 2",
+  "Feribot 3",
+  "Taş 1",
+  "Taş 2",
+  "Taş 3",
+  "Panorama",
+  "Final"
  ]
 }

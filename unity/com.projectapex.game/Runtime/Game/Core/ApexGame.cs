@@ -1,65 +1,70 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Apex.Career;
 using Apex.Core;
 using Apex.Race;
 using Apex.Tracks;
+using Apex.Vehicle;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.Rendering;
 
 namespace Apex.Game
 {
+    public enum SessionKind
+    {
+        Practice,
+        TimeTrial,
+        GrandPrix,
+        Championship,
+    }
+
     /// <summary>
     /// Boot entry point and owner of the authoritative <see cref="GameStateMachine"/>.
-    /// Builds the menu showroom, loads sessions, routes pause/back, applies and saves
-    /// settings, and draws the interim IMGUI menus and HUD (M0/M1). Every menu item
-    /// leads somewhere real; unimplemented modes are not listed.
+    /// Loads sessions (practice, time trial, Grand Prix weekend, championship rounds),
+    /// routes pause/back/radio, persists settings, career and the last Grand Prix
+    /// configuration, and draws the interim IMGUI menus and broadcast HUD (partial
+    /// files ApexGame.Menus.cs and ApexGame.Hud.cs). Every menu entry leads to a
+    /// working feature; nothing decorative.
     /// </summary>
-    public sealed class ApexGame : MonoBehaviour
+    public sealed partial class ApexGame : MonoBehaviour
     {
-        struct SessionOption
-        {
-            public string trackId;
-            public string label;
-            public bool autopilot;
-        }
-
-        static readonly SessionOption[] Sessions =
-        {
-            new SessionOption { trackId = "test_loop", label = "Freies Training – Apex Testoval", autopilot = false },
-            new SessionOption { trackId = "bosphorus_gp", label = "Freies Training – Bosphorus GP (Graybox)", autopilot = false },
-            new SessionOption { trackId = "test_loop", label = "Auto-Pilot-Demo – Testoval", autopilot = true },
-        };
+        public static readonly string[] TrackIds = { "bosphorus_gp", "test_loop" };
+        const string CareerFile = "career.json";
+        const string ConfigFile = "session.json";
 
         readonly GameStateMachine sm = new GameStateMachine();
         public GameStateMachine State => sm;
         public SettingsData Settings { get; private set; }
-        public RaceSession Session { get; private set; }
+        public CareerData Career { get; private set; }
+        public SessionConfig Config { get; private set; }
+        public RaceController Race { get; private set; }
 
         InputRouter input;
         Camera cam;
         RaceCamera raceCam;
+        Light sun;
         GameObject showroom;
+        VehicleController showroomCar;
         GameObject world;
-        string trackId = "";
-        bool autopilotSession;
+        WeatherVisuals weatherVisuals;
 
-        // UI state
-        bool settingsOpen;
-        int focus;
+        SessionKind kind;
+        SessionType currentType;
+        string trackId = "";
         bool calibrating;
-        bool showTelemetry;
-        string message = "";
-        Color messageColor = Color.white;
-        float messageTime;
-        float fps = 60f;
         double sessionRecord;
-        readonly string[] sectorText = { "S1 --.---", "S2 --.---", "S3 --.---" };
-        readonly Color[] sectorColor = { ApexStyle.TextDim, ApexStyle.TextDim, ApexStyle.TextDim };
-        bool navUp, navDown, navLeft, navRight, navConfirm;
-        float uiScale = 1f;
-        Vector2 virtualSize;
+        int startPosition;
+        List<int> pendingRaceGrid;
+        ResultsData lastResults;
+        readonly Dictionary<string, CircuitDefinition> definitions = new Dictionary<string, CircuitDefinition>();
+
+        // Messages: one high-priority and one low-priority toast at a time.
+        struct Toast { public string text; public Color color; public float time; }
+        Toast toastHigh, toastLow;
+
+        float fps = 60f;
+        float restartArmed;
 
         void Awake()
         {
@@ -75,6 +80,10 @@ namespace Apex.Game
             Screen.orientation = ScreenOrientation.AutoRotation;
 
             Settings = SaveService.LoadSettings();
+            Career = SaveService.Load(CareerFile, () => new CareerData());
+            if (Career.MigrateAndValidate()) SaveService.Save(CareerFile, Career);
+            Config = SaveService.Load(ConfigFile, () => new SessionConfig());
+            Config.Validate();
             showTelemetry = Settings.showTelemetry;
             SetupCameraAndLighting();
             input = gameObject.AddComponent<InputRouter>();
@@ -83,7 +92,30 @@ namespace Apex.Game
             sm.TryTransition(GameState.MainMenu);
         }
 
-        // --- Scene setup ---------------------------------------------------------------
+        // --- Data --------------------------------------------------------------------------
+
+        public CircuitDefinition Definition(string id)
+        {
+            if (definitions.TryGetValue(id, out var d)) return d;
+            var text = Resources.Load<TextAsset>("Tracks/" + id);
+            if (text == null) return null;
+            try
+            {
+                d = CircuitDefinition.FromJson(text.text);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[Apex] Invalid track data " + id + ": " + e.Message);
+                return null;
+            }
+            definitions[id] = d;
+            return d;
+        }
+
+        public void SaveCareer() => SaveService.Save(CareerFile, Career);
+        public void SaveConfig() => SaveService.Save(ConfigFile, Config);
+
+        // --- Scene setup -------------------------------------------------------------------
 
         void SetupCameraAndLighting()
         {
@@ -100,16 +132,14 @@ namespace Apex.Game
             if (raceCam == null) raceCam = cam.gameObject.AddComponent<RaceCamera>();
             raceCam.enabled = false;
 
-            if (FindAnyObjectByType<Light>() == null)
+            sun = FindAnyObjectByType<Light>();
+            if (sun == null)
             {
-                var sun = new GameObject("Sun").AddComponent<Light>();
+                sun = new GameObject("Sun").AddComponent<Light>();
                 sun.type = LightType.Directional;
-                sun.intensity = 1.25f;
-                sun.color = new Color(1f, 0.95f, 0.86f);
                 sun.shadows = LightShadows.Soft;
-                // Late-afternoon sun from the south-west lights the European shore.
-                sun.transform.rotation = Quaternion.Euler(38f, 35f, 0f);
             }
+            ResetMenuLighting();
             var sky = Resources.Load<Material>(ApexMaterials.ResourceFolder + "/Sky");
             if (sky == null)
             {
@@ -123,13 +153,65 @@ namespace Apex.Game
             RenderSettings.ambientGroundColor = new Color(0.25f, 0.24f, 0.2f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
+        }
+
+        void ResetMenuLighting()
+        {
+            sun.intensity = 1.25f;
+            sun.color = new Color(1f, 0.95f, 0.86f);
+            sun.shadowStrength = 0.9f;
+            sun.transform.rotation = Quaternion.Euler(38f, 35f, 0f);
+            RenderSettings.ambientIntensity = 1f;
             RenderSettings.fogColor = new Color(0.72f, 0.78f, 0.84f);
             RenderSettings.fogStartDistance = 300f;
             RenderSettings.fogEndDistance = 3500f;
         }
 
+        public static Color PaintColour(int index)
+        {
+            // Same order as the colour rewards in Progression.
+            Color[] table =
+            {
+                new Color(0.05f, 0.33f, 0.62f), new Color(0.75f, 0.1f, 0.12f), new Color(0.93f, 0.93f, 0.95f), new Color(0.85f, 0.78f, 0.64f),
+                new Color(0.12f, 0.38f, 0.22f), new Color(0.9f, 0.68f, 0.2f), new Color(0.16f, 0.17f, 0.19f), new Color(0.1f, 0.85f, 0.95f),
+                new Color(0.95f, 0.5f, 0.1f), new Color(0.58f, 0.6f, 0.63f), new Color(0.85f, 0.15f, 0.3f), new Color(0.35f, 0.15f, 0.55f),
+                new Color(0.75f, 0.88f, 0.95f), new Color(0.95f, 0.3f, 0.65f), new Color(0.82f, 0.7f, 0.48f), new Color(0.2f, 0.55f, 0.25f),
+                new Color(0.15f, 0.35f, 0.6f), new Color(0.75f, 0.76f, 0.78f), new Color(0.75f, 0.55f, 0.2f), new Color(0.1f, 0.7f, 0.7f),
+            };
+            return table[((index % table.Length) + table.Length) % table.Length];
+        }
+
+        public static string PaintName(int index)
+        {
+            int k = 0;
+            foreach (var r in Progression.Rewards)
+            {
+                if (r.kind != RewardKind.PaintColour) continue;
+                if (k == index) return r.name;
+                k++;
+            }
+            return "Lackierung " + (index + 1);
+        }
+
+        /// <summary>Paint colours unlocked so far (the first two are always available).</summary>
+        public List<int> UnlockedPaints()
+        {
+            var list = new List<int>();
+            int colourIndex = 0;
+            foreach (var r in Progression.Rewards)
+            {
+                if (r.kind != RewardKind.PaintColour) continue;
+                if (colourIndex < 2 || r.level <= Career.Level) list.Add(colourIndex);
+                colourIndex++;
+            }
+            return list;
+        }
+
+        Color PlayerPaint() => PaintColour(Career.paintIndex);
+
         void BuildShowroom()
         {
+            ResetMenuLighting();
             if (showroom != null) return;
             showroom = new GameObject("Showroom");
             var floor = new GameObject("Floor");
@@ -138,109 +220,191 @@ namespace Apex.Game
             floor.transform.localPosition = new Vector3(0f, -0.05f, 0f);
             floor.AddComponent<MeshFilter>().sharedMesh = CarBuilder.PrimitiveMesh(PrimitiveType.Cylinder);
             floor.AddComponent<MeshRenderer>().sharedMaterial = ApexMaterials.Get("Asphalt");
-            var car = CarBuilder.Build("ShowroomCar", new Apex.Vehicle.VehicleSetup());
-            car.GetComponent<Rigidbody>().isKinematic = true;
-            car.enabled = false;
-            car.transform.SetParent(showroom.transform, false);
-            car.transform.localPosition = new Vector3(0f, car.setup.cogHeight, 0f);
+            RebuildShowroomCar();
+        }
+
+        void RebuildShowroomCar()
+        {
+            if (showroom == null) return;
+            if (showroomCar != null) Destroy(showroomCar.gameObject);
+            var team = Roster.Teams[Config.playerTeam];
+            showroomCar = CarBuilder.Build("ShowroomCar", new VehicleSetup(), PlayerPaint(), new Color(team.ar, team.ag, team.ab));
+            showroomCar.GetComponent<Rigidbody>().isKinematic = true;
+            showroomCar.enabled = false;
+            showroomCar.transform.SetParent(showroom.transform, false);
+            showroomCar.transform.localPosition = new Vector3(0f, showroomCar.setup.cogHeight, 0f);
             for (int i = 0; i < 4; i++)
             {
-                var w = car.WheelVisuals[i];
-                var m = car.setup.MountPosition(i, out float sc);
-                w.localPosition = new Vector3(m.X, (i < 2 ? car.setup.wheelRadiusFront : car.setup.wheelRadiusRear) - car.setup.cogHeight, m.Z);
+                var m = showroomCar.setup.MountPosition(i, out float sc);
+                showroomCar.WheelVisuals[i].localPosition = new Vector3(m.X, (i < 2 ? showroomCar.setup.wheelRadiusFront : showroomCar.setup.wheelRadiusRear) - showroomCar.setup.cogHeight, m.Z);
             }
         }
 
         void UpdateShowroomCamera()
         {
             float t = Time.unscaledTime * 0.12f;
-            var pos = new Vector3(Mathf.Sin(t) * 7.5f, 2.2f, Mathf.Cos(t) * 7.5f);
+            float dist = sm.Current == GameState.Garage ? 6f : 7.5f;
+            var pos = new Vector3(Mathf.Sin(t) * dist, 2.0f, Mathf.Cos(t) * dist);
             cam.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(new Vector3(0f, 0.3f, 0f) - pos));
             cam.fieldOfView = 45f;
         }
 
-        // --- Sessions -----------------------------------------------------------------
+        // --- Sessions -----------------------------------------------------------------------
 
-        void StartSession(SessionOption option)
+        public void StartSession(SessionKind k, SessionType type, List<int> grid = null)
         {
             if (!sm.TryTransition(GameState.Loading)) return;
-            StartCoroutine(LoadSession(option));
+            kind = k;
+            currentType = type;
+            StartCoroutine(LoadSession(grid));
         }
 
-        IEnumerator LoadSession(SessionOption option)
+        List<int> DefaultGrid(int aiCount, int seed)
         {
-            // One frame so the loading screen is visible before the synchronous build.
+            var field = Roster.PickField(aiCount, Config.playerTeam, 0);
+            var order = new List<int>();
+            foreach (var d in field) order.Add(Array.IndexOf(Roster.Drivers, d));
+            var rng = new System.Random(seed);
+            for (int i = order.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                (order[i], order[j]) = (order[j], order[i]);
+            }
+            // Without qualifying the player starts mid-pack.
+            order.Insert(Mathf.Clamp(order.Count / 2, 0, order.Count), -1);
+            return order;
+        }
+
+        SessionConfig ConfigForSession()
+        {
+            if (kind == SessionKind.Championship)
+            {
+                return new SessionConfig
+                {
+                    trackId = Career.calendar[Career.nextRound],
+                    laps = Career.championshipLaps,
+                    aiCount = Career.championshipAi,
+                    difficulty = Career.championshipDifficulty,
+                    format = WeekendFormat.RaceOnly,
+                    weather = Config.weather,
+                    dynamicWeather = Config.dynamicWeather,
+                    timeOfDay = Config.timeOfDay,
+                    tireWear = Config.tireWear,
+                    falseStarts = Config.falseStarts,
+                    trackLimitPenalties = Config.trackLimitPenalties,
+                    playerTeam = Config.playerTeam,
+                    seed = 100 + Career.nextRound,
+                };
+            }
+            if (kind == SessionKind.Practice || kind == SessionKind.TimeTrial)
+            {
+                return new SessionConfig
+                {
+                    trackId = Config.trackId,
+                    aiCount = 0,
+                    weather = kind == SessionKind.TimeTrial ? Apex.Weather.WeatherState.Clear : Config.weather,
+                    timeOfDay = Config.timeOfDay,
+                    tireWear = kind == SessionKind.TimeTrial ? 0f : Config.tireWear,
+                    startCompound = kind == SessionKind.TimeTrial ? TireCompound.Soft : Config.startCompound,
+                    playerTeam = Config.playerTeam,
+                    seed = Config.seed,
+                };
+            }
+            return Config;
+        }
+
+        IEnumerator LoadSession(List<int> grid)
+        {
             yield return null;
-            var text = Resources.Load<TextAsset>("Tracks/" + option.trackId);
-            if (text == null)
+            var cfg = ConfigForSession();
+            cfg.Validate();
+            var def = Definition(cfg.trackId);
+            if (def == null)
             {
-                Debug.LogError("[Apex] Missing track data: " + option.trackId);
-                sm.TryTransition(GameState.MainMenu);
-                yield break;
-            }
-            CircuitDefinition def;
-            try
-            {
-                def = CircuitDefinition.FromJson(text.text);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("[Apex] Invalid track data: " + e.Message);
                 sm.TryTransition(GameState.MainMenu);
                 yield break;
             }
             if (showroom != null) Destroy(showroom);
             showroom = null;
+            showroomCar = null;
             world = new GameObject("World");
             var circuit = CircuitBuilder.Build(def, world.transform);
-            var car = CarBuilder.Build("PlayerCar", new Apex.Vehicle.VehicleSetup());
-            car.transform.SetParent(world.transform, false);
-            var audioSrc = car.gameObject.AddComponent<AudioSource>();
+            yield return null;
+
+            if (grid == null) grid = DefaultGrid(cfg.aiCount, cfg.seed);
+            startPosition = grid.IndexOf(-1) + 1;
+            var type = kind == SessionKind.Practice || kind == SessionKind.TimeTrial ? SessionType.Practice : currentType;
+            var raceGo = new GameObject("Race");
+            raceGo.transform.SetParent(world.transform, false);
+            Race = raceGo.AddComponent<RaceController>();
+            Race.Setup(circuit, cfg, type, grid, PlayerPaint(), Career.carNumber, "Du");
+            if (kind == SessionKind.Practice || kind == SessionKind.TimeTrial) Race.Director.rules.sessionSeconds = 0f;
+            Race.Input = input;
+            Race.Message += (t, c, p) => ShowMessage(t, c, p >= 2 ? 3f : 2.2f, p >= 1);
+            Race.SessionComplete += OnSessionComplete;
+            Race.Player.entry.timer.LapCompleted += OnPlayerLap;
+            Race.Player.entry.timer.SectorCompleted += OnPlayerSector;
+            Race.Player.entry.timer.LapStarted += _ => ResetSectorColours();
+            var playerCar = Race.Player.car;
+            var audioSrc = playerCar.gameObject.AddComponent<AudioSource>();
             audioSrc.playOnAwake = false;
-            var engineAudio = car.gameObject.AddComponent<EngineAudio>();
-            engineAudio.car = car;
+            var engineAudio = playerCar.gameObject.AddComponent<EngineAudio>();
+            engineAudio.car = playerCar;
             engineAudio.volume = Settings.masterVolume * 0.75f;
-            Session = world.AddComponent<RaceSession>();
-            Session.Setup(circuit, car, input, option.autopilot);
-            Session.Message += ShowMessage;
-            Session.Timer.LapCompleted += OnLapCompleted;
-            Session.Timer.SectorCompleted += OnSectorCompleted;
-            Session.Timer.LapStarted += OnLapStarted;
-            Session.Timer.LapInvalidated += r => ShowMessage("Runde ungültig: " + r, ApexStyle.Urgent);
+            weatherVisuals = world.AddComponent<WeatherVisuals>();
+            weatherVisuals.weather = Race.Weather;
+            weatherVisuals.timeOfDay = cfg.timeOfDay;
+            weatherVisuals.sun = sun;
+            weatherVisuals.cameraTransform = cam.transform;
+            weatherVisuals.Bind(circuit.gameObject);
+
             trackId = def.id;
-            autopilotSession = option.autopilot;
             sessionRecord = SaveService.BestLap(Settings, trackId);
-            for (int i = 0; i < 3; i++) { sectorText[i] = $"S{i + 1} --.---"; sectorColor[i] = ApexStyle.TextDim; }
-            raceCam.target = car.transform;
+            ResetSectorColours();
+            raceCam.target = playerCar.transform;
             raceCam.SetMode(Settings.cameraMode);
             raceCam.enabled = true;
             input.ReleaseAll();
             ApplyAssists();
-            calibrating = Settings.controlPreset == ControlPreset.Tilt && !option.autopilot;
-            sm.TryTransition(calibrating ? GameState.Grid : GameState.Driving);
-            ShowMessage(def.name + " – Freies Training", Color.white, 3f);
+            calibrating = Settings.controlPreset == ControlPreset.Tilt;
+            Race.PlayerInputEnabled = !calibrating;
+            sm.TryTransition(GameState.Grid);
+            if (!calibrating) BeginSession();
+            string label = type == SessionType.Race ? "Rennen" : type == SessionType.Qualifying ? "Qualifying" : kind == SessionKind.TimeTrial ? "Zeitfahren" : "Freies Training";
+            ShowMessage($"{def.name} – {label}", Color.white, 3f, true);
+        }
+
+        void BeginSession()
+        {
+            Race.PlayerInputEnabled = true;
+            Race.Begin();
+            if (sm.Current == GameState.Grid) sm.TryTransition(GameState.Driving);
         }
 
         void EndSession()
         {
             if (world != null) Destroy(world);
             world = null;
-            Session = null;
+            Race = null;
+            weatherVisuals = null;
             raceCam.enabled = false;
             raceCam.target = null;
             Time.timeScale = 1f;
             AudioListener.pause = false;
+            radioOpen = false;
+            input.radioOpen = false;
         }
 
         void ApplyAssists()
         {
-            if (Session == null) return;
-            var sim = Session.Car.Sim;
+            if (Race == null) return;
+            var sim = Race.Player.Sim;
             sim.assistTraction = Settings.tractionControl;
             sim.assistAbs = Settings.abs;
-            sim.assistSteering = Settings.steeringAssist && !autopilotSession;
-            sim.autoGearbox = Settings.autoGearbox || autopilotSession;
+            sim.assistSteering = Settings.steeringAssist;
+            sim.autoGearbox = Settings.autoGearbox;
             input.manualGears = !sim.autoGearbox;
+            Race.PitAssist = Settings.pitAssist;
         }
 
         void OnStateChanged(GameState from, GameState to)
@@ -248,422 +412,296 @@ namespace Apex.Game
             bool paused = to == GameState.Pause;
             Time.timeScale = paused ? 0f : 1f;
             AudioListener.pause = paused;
-            focus = 0;
+            if (from != GameState.Pause || to == GameState.MainMenu) focus = 0;
             settingsOpen = false;
+            helpOpen = false;
             if (paused) input.ReleaseAll();
-            if (to == GameState.MainMenu)
+            input.drivingControls = to == GameState.Driving || to == GameState.Grid || to == GameState.RadioOverlay || to == GameState.PitApproach || to == GameState.PitStop;
+            if (to == GameState.MainMenu || to == GameState.Garage || to == GameState.TrackSelect)
             {
-                EndSession();
+                if (world != null) EndSession();
                 BuildShowroom();
+            }
+            if (to == GameState.Garage) RebuildShowroomCar();
+        }
+
+        // --- Timing events ----------------------------------------------------------------
+
+        readonly string[] sectorText = { "S1 --.---", "S2 --.---", "S3 --.---" };
+        readonly Color[] sectorColor = new Color[3];
+
+        void ResetSectorColours()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                sectorColor[i] = ApexStyle.TextDim;
+                if (Race == null || Race.Player.entry.LapsCompleted == 0) sectorText[i] = $"S{i + 1} --.---";
             }
         }
 
-        // --- Timing events --------------------------------------------------------------
-
-        void OnLapStarted(int lap)
-        {
-            for (int i = 0; i < 3; i++) sectorColor[i] = ApexStyle.TextDim;
-        }
-
-        void OnSectorCompleted(int index, double time, double delta)
+        void OnPlayerSector(int index, double time, double delta)
         {
             if (index >= sectorText.Length) return;
             sectorText[index] = $"S{index + 1} {time:0.000}";
-            var t = Session.Timer;
+            var t = Race.Player.entry.timer;
             if (!t.LapValid) sectorColor[index] = ApexStyle.Urgent;
             else if (double.IsNaN(delta) || Math.Abs(t.bestSectorTimes[index] - time) < 1e-9) sectorColor[index] = ApexStyle.Best;
             else sectorColor[index] = delta <= 0 ? ApexStyle.Faster : ApexStyle.Caution;
         }
 
-        void OnLapCompleted(int lap, double time, bool valid, bool personalBest)
+        void OnPlayerLap(int lap, double time, bool valid, bool personalBest)
         {
-            if (valid && !autopilotSession && SaveService.SubmitLap(Settings, trackId, time))
+            if (valid && SaveService.SubmitLap(Settings, trackId, time))
             {
                 sessionRecord = time;
-                ShowMessage("Neuer Rekord  " + ApexStyle.FormatTime(time), ApexStyle.Best, 3f);
+                ShowMessage("Neuer Rekord  " + ApexStyle.FormatTime(time), ApexStyle.Best, 3f, true);
             }
             else if (personalBest)
             {
-                ShowMessage("Beste Runde  " + ApexStyle.FormatTime(time), ApexStyle.Best, 2.5f);
+                ShowMessage("Persönliche Bestzeit  " + ApexStyle.FormatTime(time), ApexStyle.Faster, 2.5f, false);
             }
         }
 
-        void ShowMessage(string text, Color color) => ShowMessage(text, color, 2.5f);
+        // --- Results ------------------------------------------------------------------------
 
-        void ShowMessage(string text, Color color, float duration)
+        public sealed class ResultsData
         {
-            message = text;
-            messageColor = color;
-            messageTime = duration;
+            public SessionType type;
+            public SessionKind kind;
+            public string trackName;
+            public readonly List<string[]> rows = new List<string[]>();
+            public int playerRow = -1;
+            public int playerPosition;
+            public int xpGained;
+            public int levelBefore;
+            public int levelAfter;
+            public List<int> order;
+            public string[] championshipLines;
+            public bool championshipFinished;
         }
 
-        // --- Update ---------------------------------------------------------------------
+        void OnSessionComplete()
+        {
+            var d = Race.Director;
+            var res = new ResultsData { type = Race.Type, kind = kind, trackName = Race.Circuit.Definition.name, order = Race.ResultOrder() };
+            foreach (var e in d.Standings)
+            {
+                var rc = Race.Cars.Find(c => c.entry == e);
+                string gap;
+                if (Race.Type == SessionType.Race)
+                {
+                    int lapsDown = d.Leader.LapsCompleted - e.LapsCompleted;
+                    gap = e.position == 1 ? ApexStyle.FormatTime(e.finishTime + e.penalties) : lapsDown > 0 ? $"+{lapsDown} Rd." : ApexStyle.FormatDelta(d.GapToLeader(e));
+                }
+                else
+                {
+                    gap = e.position == 1 ? ApexStyle.FormatTime(e.BestLap) : ApexStyle.FormatDelta(d.GapToLeader(e));
+                }
+                res.rows.Add(new[]
+                {
+                    e.position.ToString(), rc.code, e.name, Roster.Teams[rc.teamIndex].name, gap,
+                    ApexStyle.FormatTime(e.BestLap), e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
+                    Race.Type == SessionType.Race ? d.PointsFor(e).ToString() : "",
+                });
+                if (e.isPlayer)
+                {
+                    res.playerRow = res.rows.Count - 1;
+                    res.playerPosition = e.position;
+                }
+            }
+            res.levelBefore = Career.Level;
+            var pe = Race.Player.entry;
+            int clean = 0;
+            foreach (var lap in pe.timer.completedLaps) if (lap.valid) clean++;
+            if (Race.Type == SessionType.Race)
+            {
+                res.xpGained = Progression.RaceXp(pe.position, d.entries.Count, clean, d.FastestLapHolder == pe, pe.finished, startPosition - pe.position);
+                Career.racesStarted++;
+                if (pe.position == 1) Career.wins++;
+                if (pe.position <= 3) Career.podiums++;
+            }
+            else
+            {
+                res.xpGained = 60 + clean * 25 + (pe.position == 1 && Race.Type == SessionType.Qualifying ? 150 : 0);
+                if (Race.Type == SessionType.Qualifying && pe.position == 1) Career.poles++;
+            }
+            Career.xp += res.xpGained;
+            res.levelAfter = Career.Level;
+            if (kind == SessionKind.Championship && Race.Type == SessionType.Race)
+            {
+                foreach (var e in d.Standings)
+                {
+                    var rc = Race.Cars.Find(c => c.entry == e);
+                    int idx = rc.isPlayer ? 0 : rc.driverIndex + 1;
+                    if (idx >= 0 && idx < Career.points.Length) Career.points[idx] += d.PointsFor(e);
+                }
+                Career.nextRound++;
+                res.championshipLines = ChampionshipTable(10);
+                res.championshipFinished = !Career.ChampionshipActive;
+            }
+            SaveCareer();
+            lastResults = res;
+            pendingRaceGrid = Race.Type == SessionType.Qualifying ? res.order : null;
+            sm.TryTransition(GameState.Results);
+        }
+
+        public string[] ChampionshipTable(int rows)
+        {
+            var idx = new List<int>();
+            for (int i = 0; i < Career.points.Length; i++) idx.Add(i);
+            idx.Sort((a, b) => Career.points[b].CompareTo(Career.points[a]));
+            var lines = new List<string>();
+            for (int k = 0; k < Mathf.Min(rows, idx.Count); k++)
+            {
+                int i = idx[k];
+                string name = i == 0 ? "Du" : Roster.Drivers[i - 1].name;
+                lines.Add($"{k + 1,2}.  {name}   –   {Career.points[i]} Pkt.");
+            }
+            return lines.ToArray();
+        }
+
+        // --- Update -------------------------------------------------------------------------
+
+        void ShowMessage(string text, Color color, float duration, bool high)
+        {
+            var t = new Toast { text = text, color = color, time = duration };
+            if (high) toastHigh = t;
+            else toastLow = t;
+        }
 
         void Update()
         {
             fps = Mathf.Lerp(fps, 1f / Mathf.Max(Time.unscaledDeltaTime, 1e-4f), 0.05f);
-            if (messageTime > 0f) messageTime -= Time.unscaledDeltaTime;
+            float udt = Time.unscaledDeltaTime;
+            toastHigh.time -= udt;
+            toastLow.time -= udt;
+            restartArmed -= udt;
             ReadNavigation();
+            if (input.ScreenshotPressed)
+            {
+                string path = System.IO.Path.Combine(Application.persistentDataPath, $"apex_{DateTime.Now:yyyyMMdd_HHmmss}.png");
+                ScreenCapture.CaptureScreenshot(path);
+                ShowMessage("Screenshot gespeichert", Color.white, 1.5f, false);
+            }
+            if (input.HelpPressed) helpOpen = !helpOpen;
 
             switch (sm.Current)
             {
                 case GameState.MainMenu:
+                case GameState.TrackSelect:
+                case GameState.Garage:
                     UpdateShowroomCamera();
-                    if (input.PausePressed && settingsOpen) CloseSettings();
+                    if (input.PausePressed) MenuBack();
+                    break;
+                case GameState.Results:
+                    if (input.PausePressed) sm.TryTransition(GameState.MainMenu);
                     break;
                 case GameState.Grid:
                 case GameState.Driving:
-                    if (input.PausePressed)
-                    {
-                        sm.TryTransition(GameState.Pause);
-                        break;
-                    }
-                    if (calibrating && (input.ConfirmPressed || navConfirm)) FinishCalibration();
-                    if (input.CameraPressed) ShowMessage(RaceCamera.ModeNames[Settings.cameraMode = raceCam.Cycle()] + "-Kamera", Color.white, 1f);
-                    if (input.ResetPressed && Session != null && !autopilotSession) Session.ResetCarToTrack();
-                    if (input.TelemetryPressed) showTelemetry = !showTelemetry;
-                    if (Session != null && !autopilotSession)
-                    {
-                        if (input.ShiftUpPressed) Session.Car.Sim.RequestShiftUp();
-                        if (input.ShiftDownPressed) Session.Car.Sim.RequestShiftDown();
-                    }
+                case GameState.RadioOverlay:
+                case GameState.PitApproach:
+                case GameState.PitStop:
+                    UpdateInRace();
                     break;
                 case GameState.Pause:
                     if (input.PausePressed)
                     {
-                        if (settingsOpen) CloseSettings();
+                        if (settingsOpen) settingsOpen = false;
                         else sm.Resume();
                     }
                     break;
             }
-            if (Session != null) input.vehicleSpeed = Mathf.Abs(Session.Car.Sim.ForwardSpeed);
-            if (Session != null)
-                Session.InputEnabled = (sm.Current == GameState.Driving || sm.Current == GameState.RadioOverlay) && !calibrating;
+            if (Race != null) input.vehicleSpeed = Mathf.Abs(Race.Player.Sim.ForwardSpeed);
         }
 
-        void ReadNavigation()
+        void MenuBack()
         {
-            var kb = Keyboard.current;
-            var pad = Gamepad.current;
-            navUp = (kb != null && kb.upArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame);
-            navDown = (kb != null && kb.downArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.down.wasPressedThisFrame);
-            navLeft = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
-            navRight = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
-            navConfirm = input.ConfirmPressed;
+            if (settingsOpen) { settingsOpen = false; focus = 0; return; }
+            if (helpOpen) { helpOpen = false; return; }
+            if (sm.Current != GameState.MainMenu) sm.TryTransition(GameState.MainMenu);
+        }
+
+        void UpdateInRace()
+        {
+            if (Race == null) return;
+            if (input.PausePressed)
+            {
+                if (radioOpen) CloseRadio();
+                else sm.TryTransition(GameState.Pause);
+                return;
+            }
+            if (calibrating && (input.ConfirmPressed || navConfirm)) FinishCalibration();
+            if (input.CameraPressed) ShowMessage(RaceCamera.ModeNames[Settings.cameraMode = raceCam.Cycle()] + "-Kamera", Color.white, 1f, false);
+            if (input.ResetPressed) Race.ResetPlayerToTrack();
+            if (input.TelemetryPressed) showTelemetry = !showTelemetry;
+            if (input.TowerPressed) towerExpanded = !towerExpanded;
+            if (input.MapPressed) showMap = !showMap;
+            if (input.HudPresetPressed) hudPreset = (hudPreset + 1) % 3;
+            if (input.LayoutDebugPressed) layoutDebug = !layoutDebug;
+            if (input.ShiftUpPressed) Race.Player.Sim.RequestShiftUp();
+            if (input.ShiftDownPressed) Race.Player.Sim.RequestShiftDown();
+            if (input.PitPressed) Race.RequestPlayerPit(radioCompound);
+            if (input.RadioPressed)
+            {
+                if (radioOpen) CloseRadio();
+                else OpenRadio();
+            }
+            if (radioOpen) UpdateRadio();
+            if (input.RestartPressed && Race.Type != SessionType.Race)
+            {
+                if (restartArmed > 0f)
+                {
+                    restartArmed = 0f;
+                    var k = kind;
+                    var t = currentType;
+                    EndSession();
+                    StartSessionDirect(k, t);
+                    return;
+                }
+                restartArmed = 2f;
+                ShowMessage("F5 erneut drücken: Session neu starten", ApexStyle.Caution, 2f, true);
+            }
+            SyncPitState();
+        }
+
+        void StartSessionDirect(SessionKind k, SessionType t)
+        {
+            // Restart from inside a session: Driving -> Loading is an allowed transition.
+            if (!sm.TryTransition(GameState.Loading)) return;
+            kind = k;
+            currentType = t;
+            StartCoroutine(LoadSession(null));
+        }
+
+        /// <summary>Keeps the state machine in step with the player's pit stage and radio.</summary>
+        void SyncPitState()
+        {
+            if (sm.Current == GameState.Grid || sm.Current == GameState.Pause) return;
+            var stage = Race.Player.pit.stage;
+            GameState want = stage == PitState.Stage.Stopped ? GameState.PitStop
+                : stage == PitState.Stage.InLane ? GameState.PitApproach
+                : radioOpen ? GameState.RadioOverlay : GameState.Driving;
+            if (sm.Current != want && sm.CanTransition(want)) sm.TryTransition(want);
         }
 
         void FinishCalibration()
         {
             input.CalibrateTilt();
             calibrating = false;
-            sm.TryTransition(GameState.Driving);
-            ShowMessage("Lenkung zentriert", ApexStyle.Accent, 1.5f);
+            BeginSession();
+            ShowMessage("Lenkung zentriert", ApexStyle.Accent, 1.5f, false);
         }
 
         void OnApplicationPause(bool paused)
         {
-            if (paused && (sm.Current == GameState.Driving || sm.Current == GameState.Grid)) sm.TryTransition(GameState.Pause);
+            if (paused && Race != null && sm.Current != GameState.Pause && sm.Current != GameState.Results && sm.Current != GameState.Loading)
+                sm.TryTransition(GameState.Pause);
         }
 
         void OnApplicationFocus(bool focused)
         {
-            if (!focused && (sm.Current == GameState.Driving || sm.Current == GameState.Grid)) sm.TryTransition(GameState.Pause);
-        }
-
-        // --- Settings model -------------------------------------------------------------
-
-        struct Row
-        {
-            public string label;
-            public Func<string> value;
-            public Action<int> change; // -1 / +1, 0 = activate
-        }
-
-        List<Row> SettingsRows()
-        {
-            var s = Settings;
-            return new List<Row>
-            {
-                new Row { label = "Steuerung", value = () => s.controlPreset == ControlPreset.Keyboard ? "Tastatur/Gamepad" : s.controlPreset == ControlPreset.TouchButtons ? "Touch-Tasten" : "Neigung (Gyro)",
-                    change = d => s.controlPreset = (ControlPreset)(((int)s.controlPreset + (d < 0 ? 2 : 1)) % 3) },
-                new Row { label = "Traktionskontrolle", value = () => OnOff(s.tractionControl), change = d => s.tractionControl = !s.tractionControl },
-                new Row { label = "ABS", value = () => OnOff(s.abs), change = d => s.abs = !s.abs },
-                new Row { label = "Lenkhilfe (tempoabhängig)", value = () => OnOff(s.steeringAssist), change = d => s.steeringAssist = !s.steeringAssist },
-                new Row { label = "Automatikgetriebe", value = () => OnOff(s.autoGearbox), change = d => s.autoGearbox = !s.autoGearbox },
-                new Row { label = "Neigung: max. Winkel", value = () => $"{s.tiltMaxAngleDeg:0}°", change = d => s.tiltMaxAngleDeg += (d == 0 ? 5 : d * 5) },
-                new Row { label = "Neigung: Empfindlichkeit", value = () => $"{s.tiltSensitivity:0.0}", change = d => s.tiltSensitivity += (d == 0 ? 0.1f : d * 0.1f) },
-                new Row { label = "Neigung: Totzone", value = () => $"{s.tiltDeadZoneDeg:0.0}°", change = d => s.tiltDeadZoneDeg += (d == 0 ? 0.5f : d * 0.5f) },
-                new Row { label = "Neigung: Glättung", value = () => $"{s.tiltSmoothing * 1000f:0} ms", change = d => s.tiltSmoothing += (d == 0 ? 0.01f : d * 0.01f) },
-                new Row { label = "Neigung umkehren", value = () => OnOff(s.invertTilt), change = d => s.invertTilt = !s.invertTilt },
-                new Row { label = "Linkshänder-Layout", value = () => OnOff(s.leftHanded), change = d => s.leftHanded = !s.leftHanded },
-                new Row { label = "Tastengröße", value = () => $"{s.touchButtonScale * 100f:0} %", change = d => s.touchButtonScale += (d == 0 ? 0.1f : d * 0.1f) },
-                new Row { label = "Tasten-Deckkraft", value = () => $"{s.touchButtonOpacity * 100f:0} %", change = d => s.touchButtonOpacity += (d == 0 ? 0.1f : d * 0.1f) },
-                new Row { label = "HUD-Größe", value = () => $"{s.hudScale * 100f:0} %", change = d => s.hudScale += (d == 0 ? 0.05f : d * 0.05f) },
-                new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 0.1f : d * 0.1f) },
-                new Row { label = "Telemetrie anzeigen", value = () => OnOff(showTelemetry), change = d => showTelemetry = !showTelemetry },
-            };
-        }
-
-        static string OnOff(bool b) => b ? "An" : "Aus";
-
-        void ChangeSetting(Row row, int dir)
-        {
-            row.change(dir);
-            Settings.showTelemetry = showTelemetry;
-            Settings.MigrateAndValidate();
-            input.ApplySettings(Settings);
-            ApplyAssists();
-            SaveService.SaveSettings(Settings);
-        }
-
-        void CloseSettings()
-        {
-            settingsOpen = false;
-            focus = 0;
-        }
-
-        // --- IMGUI ----------------------------------------------------------------------
-
-        void OnGUI()
-        {
-            uiScale = UnityEngine.Screen.height / 1080f * Settings.hudScale;
-            GUI.matrix = Matrix4x4.Scale(new Vector3(uiScale, uiScale, 1f));
-            virtualSize = new Vector2(UnityEngine.Screen.width / uiScale, UnityEngine.Screen.height / uiScale);
-            switch (sm.Current)
-            {
-                case GameState.MainMenu:
-                    if (settingsOpen) DrawSettings();
-                    else DrawMainMenu();
-                    break;
-                case GameState.Loading:
-                    DrawLoading();
-                    break;
-                case GameState.Grid:
-                case GameState.Driving:
-                    DrawHud();
-                    if (calibrating) DrawCalibration();
-                    break;
-                case GameState.Pause:
-                    DrawHud();
-                    if (settingsOpen) DrawSettings();
-                    else DrawPause();
-                    break;
-            }
-        }
-
-        Rect SafeRect()
-        {
-            var s = UnityEngine.Screen.safeArea;
-            return new Rect(s.x / uiScale, (UnityEngine.Screen.height - s.yMax) / uiScale, s.width / uiScale, s.height / uiScale);
-        }
-
-        int MenuNav(int count)
-        {
-            if (navDown) focus = (focus + 1) % count;
-            if (navUp) focus = (focus - 1 + count) % count;
-            return focus;
-        }
-
-        void DrawMainMenu()
-        {
-            var safe = SafeRect();
-            float x = safe.x + 70f, y = safe.y + 70f;
-            ApexStyle.Text(new Rect(x, y, 900f, 110f), "PROJECT APEX", 92, ApexStyle.Fg, FontStyle.Bold);
-            ApexStyle.Box(new Rect(x, y + 112f, 160f, 5f), ApexStyle.Accent);
-            ApexStyle.Text(new Rect(x, y + 128f, 900f, 40f), "Prototyp · Meilenstein 1 · Fahrphysik-Vertical-Slice", 26, ApexStyle.TextDim);
-            var items = new List<(string, Action)>();
-            foreach (var opt in Sessions)
-            {
-                var o = opt;
-                double best = SaveService.BestLap(Settings, o.trackId);
-                string label = o.label + (best > 0 && !o.autopilot ? $"   ·   Rekord {ApexStyle.FormatTime(best)}" : "");
-                items.Add((label, () => StartSession(o)));
-            }
-            items.Add(("Einstellungen", () => { settingsOpen = true; focus = 0; }));
-            items.Add(("Beenden", Application.Quit));
-            int f = MenuNav(items.Count);
-            float by = y + 220f;
-            for (int i = 0; i < items.Count; i++)
-            {
-                var r = new Rect(x, by + i * 92f, 900f, 80f);
-                if (ApexStyle.Button(r, items[i].Item1, i == f) || (navConfirm && i == f))
-                {
-                    focus = i;
-                    items[i].Item2();
-                    break;
-                }
-            }
-            ApexStyle.Text(new Rect(x, safe.yMax - 60f, 1600f, 40f),
-                "Tastatur: W/S Gas/Bremse · A/D Lenken · Q/E Schalten · C Kamera · Rücktaste Reset · F3 Telemetrie · Esc Pause",
-                20, ApexStyle.TextDim);
-        }
-
-        void DrawSettings()
-        {
-            var safe = SafeRect();
-            float w = Mathf.Min(1100f, safe.width - 80f);
-            float x = safe.x + (safe.width - w) * 0.5f;
-            float y = safe.y + 40f;
-            ApexStyle.Box(new Rect(x - 20f, y - 20f, w + 40f, safe.height - 40f), ApexStyle.PanelSolid);
-            ApexStyle.Text(new Rect(x, y, w, 60f), "EINSTELLUNGEN", 44, ApexStyle.Fg, FontStyle.Bold);
-            var rows = SettingsRows();
-            int count = rows.Count + 1;
-            int f = MenuNav(count);
-            float rowH = Mathf.Min(58f, (safe.height - 220f) / count);
-            float ry = y + 80f;
-            for (int i = 0; i < rows.Count; i++)
-            {
-                var r = new Rect(x, ry + i * rowH, w, rowH - 6f);
-                bool focused = i == f;
-                ApexStyle.Box(r, focused ? new Color(0.12f, 0.2f, 0.24f, 0.95f) : new Color(1f, 1f, 1f, 0.03f));
-                if (focused) ApexStyle.Box(new Rect(r.x, r.y, 5f, r.height), ApexStyle.Accent);
-                ApexStyle.Text(new Rect(r.x + 20f, r.y, w * 0.55f, r.height), rows[i].label, 24, ApexStyle.Fg);
-                var minus = new Rect(r.xMax - 330f, r.y + 4f, 70f, r.height - 8f);
-                var plus = new Rect(r.xMax - 80f, r.y + 4f, 70f, r.height - 8f);
-                ApexStyle.Text(new Rect(r.xMax - 255f, r.y, 170f, r.height), rows[i].value(), 24, ApexStyle.Accent, FontStyle.Bold, TextAnchor.MiddleCenter);
-                if (ApexStyle.Button(minus, "−", false, 26)) { focus = i; ChangeSetting(rows[i], -1); }
-                if (ApexStyle.Button(plus, "+", false, 26)) { focus = i; ChangeSetting(rows[i], 1); }
-                if (focused && navLeft) ChangeSetting(rows[i], -1);
-                if (focused && (navRight || navConfirm)) ChangeSetting(rows[i], navConfirm ? 0 : 1);
-            }
-            var back = new Rect(x, ry + rows.Count * rowH + 6f, 360f, 64f);
-            if (ApexStyle.Button(back, "Zurück", f == rows.Count) || (navConfirm && f == rows.Count)) CloseSettings();
-            if (!input.TiltAvailable)
-                ApexStyle.Text(new Rect(x + 400f, back.y, w - 400f, 64f), "Kein Bewegungssensor erkannt – Neigungssteuerung fällt auf Touch-Tasten zurück.", 20, ApexStyle.Caution);
-        }
-
-        void DrawLoading()
-        {
-            ApexStyle.Box(new Rect(0, 0, virtualSize.x, virtualSize.y), new Color(0.04f, 0.05f, 0.06f, 1f));
-            ApexStyle.Text(new Rect(0, virtualSize.y * 0.5f - 40f, virtualSize.x, 80f), "Strecke wird aufgebaut …", 40, ApexStyle.Fg, FontStyle.Normal, TextAnchor.MiddleCenter);
-        }
-
-        void DrawPause()
-        {
-            ApexStyle.Box(new Rect(0, 0, virtualSize.x, virtualSize.y), new Color(0f, 0f, 0f, 0.55f));
-            float w = 620f, x = (virtualSize.x - w) * 0.5f, y = virtualSize.y * 0.5f - 280f;
-            ApexStyle.Text(new Rect(x, y, w, 70f), "PAUSE", 54, ApexStyle.Fg, FontStyle.Bold, TextAnchor.MiddleCenter);
-            var items = new List<(string, Action)>
-            {
-                ("Weiter", () => sm.Resume()),
-                ("Auto auf die Strecke setzen", () => { sm.Resume(); Session?.ResetCarToTrack(); }),
-                ("Session neu starten", () => { sm.Resume(); Session?.PlaceOnGrid(); }),
-                ("Einstellungen", () => { settingsOpen = true; focus = 0; }),
-                ("Zum Hauptmenü", () => sm.TryTransition(GameState.MainMenu)),
-            };
-            if (autopilotSession) items.RemoveAt(1);
-            int f = MenuNav(items.Count);
-            for (int i = 0; i < items.Count; i++)
-            {
-                var r = new Rect(x, y + 100f + i * 86f, w, 74f);
-                if (ApexStyle.Button(r, items[i].Item1, i == f, 28) || (navConfirm && i == f))
-                {
-                    items[i].Item2();
-                    break;
-                }
-            }
-        }
-
-        void DrawCalibration()
-        {
-            float w = 900f, h = 300f, x = (virtualSize.x - w) * 0.5f, y = virtualSize.y * 0.28f;
-            ApexStyle.Box(new Rect(x, y, w, h), ApexStyle.PanelSolid);
-            ApexStyle.Text(new Rect(x, y + 20f, w, 50f), "Neigungssteuerung kalibrieren", 36, ApexStyle.Fg, FontStyle.Bold, TextAnchor.MiddleCenter);
-            string hint = input.TiltAvailable
-                ? (input.TiltReliability < 0.5f ? "Gerät aufrechter halten – es liegt zu flach." : "Halte das Gerät bequem wie ein Lenkrad und tippe auf „Lenkung zentrieren“.")
-                : "Kein Bewegungssensor gefunden. Es werden Touch-Tasten verwendet.";
-            ApexStyle.Text(new Rect(x + 30f, y + 80f, w - 60f, 50f), hint, 24, ApexStyle.TextDim, FontStyle.Normal, TextAnchor.MiddleCenter);
-            ApexStyle.Text(new Rect(x, y + 130f, w, 40f), $"Aktueller Winkel: {input.RollDeg:0}°", 22, ApexStyle.Accent, FontStyle.Normal, TextAnchor.MiddleCenter);
-            if (ApexStyle.Button(new Rect(x + (w - 420f) * 0.5f, y + 190f, 420f, 80f), "Lenkung zentrieren", true, 30))
-                FinishCalibration();
-        }
-
-        void DrawHud()
-        {
-            if (Session == null) return;
-            var safe = SafeRect();
-            var sim = Session.Car.Sim;
-            var timer = Session.Timer;
-
-            // Timing panel (top-left).
-            var tp = new Rect(safe.x + 24f, safe.y + 24f, 420f, 300f);
-            ApexStyle.Box(tp, ApexStyle.Panel);
-            ApexStyle.Box(new Rect(tp.x, tp.y, 4f, tp.height), ApexStyle.Accent);
-            ApexStyle.Text(new Rect(tp.x + 20f, tp.y + 10f, 380f, 34f), timer.LapActive ? $"RUNDE {timer.LapNumber}" : "AUSFAHRT", 24, ApexStyle.TextDim, FontStyle.Bold);
-            ApexStyle.Text(new Rect(tp.x + 20f, tp.y + 44f, 380f, 64f), ApexStyle.FormatTime(timer.CurrentLapTime()), 54, timer.LapValid || !timer.LapActive ? ApexStyle.Fg : ApexStyle.Urgent, FontStyle.Bold);
-            double delta = timer.LiveDelta(Session.LapDistance);
-            ApexStyle.Text(new Rect(tp.x + 20f, tp.y + 108f, 380f, 36f), ApexStyle.FormatDelta(delta), 28, delta < 0 ? ApexStyle.Faster : ApexStyle.Urgent, FontStyle.Bold);
-            for (int i = 0; i < 3; i++)
-                ApexStyle.Text(new Rect(tp.x + 20f + i * 128f, tp.y + 148f, 128f, 32f), sectorText[i], 21, sectorColor[i]);
-            ApexStyle.Text(new Rect(tp.x + 20f, tp.y + 188f, 380f, 32f), "Letzte  " + ApexStyle.FormatTime(timer.LastLapTime) + (timer.LastLapTime > 0 && !timer.LastLapValid ? "  (ungültig)" : ""), 24, timer.LastLapValid || timer.LastLapTime <= 0 ? ApexStyle.Fg : ApexStyle.Urgent);
-            ApexStyle.Text(new Rect(tp.x + 20f, tp.y + 222f, 380f, 32f), "Beste    " + ApexStyle.FormatTime(timer.BestLapTime), 24, ApexStyle.Best);
-            ApexStyle.Text(new Rect(tp.x + 20f, tp.y + 256f, 380f, 30f), "Rekord   " + ApexStyle.FormatTime(sessionRecord), 20, ApexStyle.TextDim);
-
-            // Speed, gear, RPM (bottom-centre).
-            float dw = 420f, dx = (virtualSize.x - dw) * 0.5f, dy = safe.yMax - 170f;
-            ApexStyle.Box(new Rect(dx, dy, dw, 150f), ApexStyle.Panel);
-            float rpmFrac = Mathf.InverseLerp(4000f, 12500f, sim.EngineRpm);
-            const int segments = 15;
-            for (int i = 0; i < segments; i++)
-            {
-                float segW = (dw - 40f) / segments;
-                bool lit = rpmFrac * segments > i;
-                Color c = i < 9 ? ApexStyle.Faster : (i < 12 ? ApexStyle.Caution : ApexStyle.Urgent);
-                ApexStyle.Box(new Rect(dx + 20f + i * segW, dy + 14f, segW - 4f, 14f), lit ? c : new Color(1f, 1f, 1f, 0.08f));
-            }
-            int gear = sim.gearbox.gear;
-            ApexStyle.Text(new Rect(dx + 30f, dy + 34f, 120f, 110f), gear < 0 ? "R" : gear == 0 ? "N" : gear.ToString(), 88, ApexStyle.Accent, FontStyle.Bold, TextAnchor.MiddleCenter);
-            float spd = Mathf.Abs(sim.ForwardSpeed) * (Settings.speedInMph ? 2.23694f : 3.6f);
-            ApexStyle.Text(new Rect(dx + 170f, dy + 38f, 220f, 70f), spd.ToString("0"), 62, ApexStyle.Fg, FontStyle.Bold, TextAnchor.MiddleRight);
-            ApexStyle.Text(new Rect(dx + 170f, dy + 104f, 220f, 30f), Settings.speedInMph ? "mph" : "km/h", 20, ApexStyle.TextDim, FontStyle.Normal, TextAnchor.MiddleRight);
-            string assists = (sim.TcActive ? "TC  " : "") + (sim.AbsActive ? "ABS" : "");
-            if (assists.Length > 0) ApexStyle.Text(new Rect(dx, dy - 34f, dw, 30f), assists, 22, ApexStyle.Caution, FontStyle.Bold, TextAnchor.MiddleCenter);
-            if (autopilotSession) ApexStyle.Text(new Rect(dx, dy - 64f, dw, 30f), "AUTO-PILOT", 22, ApexStyle.Accent, FontStyle.Bold, TextAnchor.MiddleCenter);
-
-            // Top-right: FPS and pause (keyboard/mouse; touch uses its own pause button).
-            ApexStyle.Text(new Rect(safe.xMax - 300f, safe.y + 30f, 160f, 30f), $"{fps:0} FPS", 20, ApexStyle.TextDim, FontStyle.Normal, TextAnchor.MiddleRight);
-            if (Settings.controlPreset == ControlPreset.Keyboard && ApexStyle.Button(new Rect(safe.xMax - 120f, safe.y + 20f, 96f, 70f), "II", false, 30))
+            if (!focused && Race != null && sm.Current != GameState.Pause && sm.Current != GameState.Results && sm.Current != GameState.Loading)
                 sm.TryTransition(GameState.Pause);
-
-            if (messageTime > 0f)
-                ApexStyle.Text(new Rect(0, safe.y + 34f, virtualSize.x, 60f), message, 36, messageColor, FontStyle.Bold, TextAnchor.MiddleCenter);
-            if (showTelemetry) DrawTelemetry(safe, sim);
-            DrawTouchButtons();
-        }
-
-        void DrawTelemetry(Rect safe, Apex.Vehicle.VehicleSimulation sim)
-        {
-            var r = new Rect(safe.xMax - 560f, safe.y + 110f, 536f, 330f);
-            ApexStyle.Box(r, ApexStyle.Panel);
-            float y = r.y + 12f;
-            void Line(string s)
-            {
-                ApexStyle.Text(new Rect(r.x + 16f, y, r.width - 32f, 28f), s, 19, ApexStyle.Fg);
-                y += 28f;
-            }
-            Line($"rpm {sim.EngineRpm:00000}  Gas {sim.throttle:0.00}  Bremse {sim.brake:0.00}  Lenk {sim.steer:+0.00;-0.00}");
-            Line($"Lenkwinkel {sim.SteerAngle * ApexMath.Rad2Deg:+0.0;-0.0}°  TC-Kürzung {sim.TcCut:0.00}");
-            Line($"Abtrieb V {sim.DownforceFront:0} N  H {sim.DownforceRear:0} N  Luftwid. {sim.Drag:0} N");
-            foreach (var w in sim.wheels)
-                Line($"{w.label} {w.load,5:0}N  sr {w.slipRatio:+0.00;-0.00}  sa {w.slipAngle * ApexMath.Rad2Deg:+0.0;-0.0}°  Fed. {w.compression * 1000f:0}mm  {w.surface}");
-            Line($"Neigung {input.RollDeg:+0;-0}°  Zuverl. {input.TiltReliability:0.00}  Physik {1f / Time.fixedDeltaTime:0} Hz");
-        }
-
-        void DrawTouchButtons()
-        {
-            if (Settings.controlPreset == ControlPreset.Keyboard) return;
-            float h = UnityEngine.Screen.height;
-            foreach (var b in input.Buttons)
-            {
-                var r = new Rect(b.rect.x / uiScale, (h - b.rect.yMax) / uiScale, b.rect.width / uiScale, b.rect.height / uiScale);
-                bool held = input.touch.IsHeld(b.id);
-                float a = Settings.touchButtonOpacity * (held ? 1.6f : 1f);
-                Color fill = b.id == TouchLayout.Throttle ? new Color(0.3f, 0.9f, 0.45f, a * 0.6f)
-                    : b.id == TouchLayout.Brake ? new Color(1f, 0.32f, 0.27f, a * 0.6f)
-                    : new Color(1f, 1f, 1f, a * 0.35f);
-                ApexStyle.Box(r, fill);
-                ApexStyle.Text(r, b.label, 26, new Color(1f, 1f, 1f, Mathf.Clamp01(a * 2f)), FontStyle.Bold, TextAnchor.MiddleCenter);
-            }
         }
     }
 }

@@ -79,6 +79,14 @@ namespace Apex.Game
             return $"{ms / 60000}:{(ms / 1000) % 60:00}.{ms % 1000:000}";
         }
 
+        /// <summary>m:ss for session clocks.</summary>
+        public static string FormatClock(double seconds)
+        {
+            if (double.IsInfinity(seconds) || double.IsNaN(seconds)) return "--:--";
+            int s = (int)System.Math.Ceiling(System.Math.Max(0, seconds));
+            return $"{s / 60}:{s % 60:00}";
+        }
+
         public static string FormatDelta(double d)
         {
             if (double.IsNaN(d)) return "";

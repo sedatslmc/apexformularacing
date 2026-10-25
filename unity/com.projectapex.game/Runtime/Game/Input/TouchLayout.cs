@@ -21,6 +21,8 @@ namespace Apex.Game
         public const int ShiftUp = 6;
         public const int Recenter = 7;
         public const int Pause = 8;
+        public const int Radio = 9;
+        public const int RadioEntry0 = 20;
 
         public struct Button
         {
@@ -29,7 +31,9 @@ namespace Apex.Game
             public string label;
         }
 
-        public static List<Button> Compute(SettingsData s, bool tilt, bool manualGears)
+        public static readonly string[] RadioLabels = { "1 Box", "2 Reifen", "3 Wetter", "4 Abstand", "5 Strategie", "6 Schließen" };
+
+        public static List<Button> Compute(SettingsData s, bool tilt, bool manualGears, bool radioOpen = false)
         {
             var list = new List<Button>();
             if (s.controlPreset == ControlPreset.Keyboard) return list;
@@ -44,6 +48,8 @@ namespace Apex.Game
             // Small pause button top-right, outside the thumb driving zones.
             float ps = Mathf.Max(11f * mm, Screen.height * 0.09f);
             list.Add(new Button { id = Pause, rect = new Rect(safe.xMax - pad - ps, safe.yMax - pad - ps, ps, ps), label = "II" });
+            // Team radio: compact icon below pause, outside the thumb zones.
+            list.Add(new Button { id = Radio, rect = new Rect(safe.xMax - pad - ps, safe.yMax - 2f * (pad + ps), ps, ps), label = "FUNK" });
 
             // Pedals on the right (left when mirrored), steering on the other side.
             float throttleX = mirror ? left : right - size;
@@ -65,8 +71,21 @@ namespace Apex.Game
             {
                 float steerLeftX = mirror ? right - 2f * size - pad : left;
                 float steerRightX = steerLeftX + size + pad;
-                list.Add(new Button { id = SteerLeft, rect = new Rect(steerLeftX, bottom, size, size), label = "◀" });
-                list.Add(new Button { id = SteerRight, rect = new Rect(steerRightX, bottom, size, size), label = "▶" });
+                list.Add(new Button { id = SteerLeft, rect = new Rect(steerLeftX, bottom, size, size), label = "◄" });
+                list.Add(new Button { id = SteerRight, rect = new Rect(steerRightX, bottom, size, size), label = "►" });
+            }
+            if (radioOpen)
+            {
+                // Slim vertical strip on the right, above the pedals.
+                float ew = Mathf.Max(size * 1.15f, 30f * mm), eh = Mathf.Max(size * 0.32f, 9f * mm);
+                float top = safe.yMax - 2f * (pad + ps) - pad;
+                for (int k = 0; k < RadioLabels.Length; k++)
+                {
+                    // Keep clear of the pedal column (and the gear paddles above it).
+                    float stripRight = mirror ? safe.xMin + pad * 2f + ps + ew : (manualGears ? brakeX - pad : safe.xMax - pad * 2f - ps);
+                    var r = new Rect(stripRight - ew, top - (k + 1) * (eh + pad * 0.5f), ew, eh);
+                    list.Add(new Button { id = RadioEntry0 + k, rect = r, label = RadioLabels[k] });
+                }
             }
             return list;
         }

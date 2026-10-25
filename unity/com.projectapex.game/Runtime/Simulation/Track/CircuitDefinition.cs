@@ -20,6 +20,34 @@ namespace Apex.Tracks
         public float[] sectorFractions = { 0f, 1f / 3f, 2f / 3f };
         /// <summary>Control points: x = east, y = north, z = elevation, w = width.</summary>
         public readonly List<(float east, float north, float elevation, float width)> points = new List<(float, float, float, float)>();
+        /// <summary>Pit lane alongside the main straight (raw distances along the centreline).</summary>
+        public sealed class PitLane
+        {
+            /// <summary>-1 = left of the driving direction, +1 = right.</summary>
+            public int side = -1;
+            public float entry;
+            public float exit;
+            public float boxStart;
+            public float boxSpacing = 10f;
+            public float speedLimitKmh = 80f;
+            /// <summary>Lateral distance from the track edge to the lane centre.</summary>
+            public float laneCentreFromEdge = 7.5f;
+            public float laneWidth = 10f;
+
+            public float SpeedLimit => speedLimitKmh / 3.6f;
+
+            /// <summary>Is the raw distance between entry and exit (handles wrap-around)?</summary>
+            public bool Contains(float raw, float length)
+            {
+                float span = Apex.Core.ApexMath.PosMod(exit - entry, length);
+                return Apex.Core.ApexMath.PosMod(raw - entry, length) <= span;
+            }
+
+            public float BoxDistance(int box) => boxStart + box * boxSpacing;
+        }
+
+        public PitLane pit;
+        public readonly List<string> cornerNames = new List<string>();
         /// <summary>Optional shoreline polyline (east, north), water lies to the east.</summary>
         public readonly List<(float east, float north)> shoreline = new List<(float, float)>();
 
@@ -49,6 +77,20 @@ namespace Apex.Tracks
                 float w = r.Count > 3 ? Convert.ToSingle(r[3]) : def.defaultWidth;
                 def.points.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1]), Convert.ToSingle(r[2]), w));
             }
+            if (root.TryGetValue("pit", out var pv) && pv is Dictionary<string, object> pd)
+            {
+                def.pit = new PitLane
+                {
+                    side = (int)Num(pd, "side", -1f),
+                    entry = Num(pd, "entry", 0f),
+                    exit = Num(pd, "exit", 0f),
+                    boxStart = Num(pd, "box_start", 0f),
+                    boxSpacing = Num(pd, "box_spacing", 10f),
+                    speedLimitKmh = Num(pd, "speed_limit_kmh", 80f),
+                };
+            }
+            if (root.TryGetValue("corner_names", out var cn) && cn is List<object> cnl)
+                foreach (var c in cnl) def.cornerNames.Add(c as string ?? "");
             if (root.TryGetValue("shoreline", out var sh) && sh is List<object> shl)
             {
                 foreach (var row in shl)

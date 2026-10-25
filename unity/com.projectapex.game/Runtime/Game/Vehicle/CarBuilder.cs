@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using Apex.Vehicle;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Apex.Game
 {
@@ -24,6 +26,69 @@ namespace Apex.Game
             else Object.DestroyImmediate(go);
             Meshes[type] = m;
             return m;
+        }
+
+        static readonly Dictionary<string, Material> TeamMaterials = new Dictionary<string, Material>();
+
+        /// <summary>Material instance for a livery colour (cached per colour).</summary>
+        public static Material Paint(Color c, string baseKey = "CarPaint")
+        {
+            string key = baseKey + ColorUtility.ToHtmlStringRGB(c);
+            if (TeamMaterials.TryGetValue(key, out var m) && m != null) return m;
+            m = new Material(ApexMaterials.Get(baseKey)) { name = "Livery_" + key };
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
+            if (m.HasProperty("_Color")) m.SetColor("_Color", c);
+            TeamMaterials[key] = m;
+            return m;
+        }
+
+        /// <summary>Builds a car with a livery; body parts are merged per material for cheap rendering.</summary>
+        public static VehicleController Build(string name, VehicleSetup setup, Color primary, Color accent)
+        {
+            var vc = Build(name, setup);
+            var visual = vc.transform.Find("Visual");
+            var paint = Paint(primary);
+            var acc = Paint(accent, "CarAccent");
+            foreach (var mr in visual.GetComponentsInChildren<MeshRenderer>())
+            {
+                var shared = mr.sharedMaterial;
+                if (shared == ApexMaterials.Get("CarPaint")) mr.sharedMaterial = paint;
+                else if (shared == ApexMaterials.Get("CarAccent")) mr.sharedMaterial = acc;
+            }
+            CombineBody(visual, vc.WheelVisuals);
+            return vc;
+        }
+
+        /// <summary>Merges the static body parts into one mesh per material (wheels stay separate).</summary>
+        public static void CombineBody(Transform visual, Transform[] wheels)
+        {
+            var groups = new Dictionary<Material, List<CombineInstance>>();
+            var toDestroy = new List<GameObject>();
+            var toLocal = visual.worldToLocalMatrix;
+            foreach (Transform child in visual)
+            {
+                if (Array.IndexOf(wheels, child) >= 0) continue;
+                var mf = child.GetComponent<MeshFilter>();
+                var mr = child.GetComponent<MeshRenderer>();
+                if (mf == null || mr == null) continue;
+                if (!groups.TryGetValue(mr.sharedMaterial, out var list)) groups[mr.sharedMaterial] = list = new List<CombineInstance>();
+                list.Add(new CombineInstance { mesh = mf.sharedMesh, transform = toLocal * child.localToWorldMatrix });
+                toDestroy.Add(child.gameObject);
+            }
+            foreach (var kv in groups)
+            {
+                var mesh = new Mesh { name = "Body_" + kv.Key.name };
+                mesh.CombineMeshes(kv.Value.ToArray(), true, true);
+                var go = new GameObject("Body_" + kv.Key.name);
+                go.transform.SetParent(visual, false);
+                go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                go.AddComponent<MeshRenderer>().sharedMaterial = kv.Key;
+            }
+            foreach (var go in toDestroy)
+            {
+                if (Application.isPlaying) Object.Destroy(go);
+                else Object.DestroyImmediate(go);
+            }
         }
 
         public static VehicleController Build(string name, VehicleSetup setup, string paintKey = "CarPaint")

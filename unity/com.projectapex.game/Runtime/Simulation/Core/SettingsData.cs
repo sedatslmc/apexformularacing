@@ -24,6 +24,9 @@ namespace Apex.Core
         public bool abs = true;
         public bool steeringAssist = true;
         public bool autoGearbox = true;
+        /// <summary>Pit assist: the car drives itself through the pit lane and stops in its box.</summary>
+        public bool pitAssist = true;
+        public bool reducedMotion;
         /// <summary>0 cockpit, 1 T-cam (default, preferred in playtests), 2 chase, 3 far chase.</summary>
         public int cameraMode = 1;
         public bool showTelemetry;

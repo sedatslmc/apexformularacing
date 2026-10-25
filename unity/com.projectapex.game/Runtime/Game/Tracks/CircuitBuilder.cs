@@ -17,6 +17,15 @@ namespace Apex.Game
         public CircuitDefinition Definition { get; internal set; }
         public TrackGeometry Geometry { get; internal set; }
         public float[] SectorStarts { get; internal set; }
+        public System.Collections.Generic.List<TrackGeometry.Corner> Corners { get; internal set; }
+        public CircuitDefinition.PitLane Pit => Definition.pit;
+
+        /// <summary>Lateral offset (+right) of the pit lane centre at a raw distance.</summary>
+        public float PitLaneLateral(float rawDistance)
+        {
+            var p = Definition.pit;
+            return p.side * (Geometry.WidthAt(rawDistance) * 0.5f + p.laneCentreFromEdge);
+        }
 
         public float LapDistance(float rawDistance) => ApexMath.PosMod(rawDistance - Definition.startLineDistance, Geometry.Length);
         public float RawDistance(float lapDistance) => Geometry.Wrap(lapDistance + Definition.startLineDistance);
@@ -53,6 +62,8 @@ namespace Apex.Game
         const float RunoffDrop = 0.12f;
         const float WallHeight = 1.1f;
         const float SkirtDepth = 8f;
+        /// <summary>Pit area width from the track edge to the outer pit wall.</summary>
+        const float PitOuter = 13.5f;
 
         public static CircuitInstance Build(CircuitDefinition def, Transform parent = null)
         {
@@ -72,9 +83,16 @@ namespace Apex.Game
 
             BuildRoad(root.transform, g);
             BuildKerbs(root.transform, g, kerbL, kerbR);
-            BuildRunoffAndWalls(root.transform, g, kerbL, kerbR);
+            var pitMask = new bool[g.Count];
+            if (def.pit != null)
+                for (int i = 0; i < g.Count; i++) pitMask[i] = def.pit.Contains(g.Distances[i], g.Length);
+            ci.Corners = g.DetectCorners();
+            BuildRunoffAndWalls(root.transform, g, kerbL, kerbR, def.pit, pitMask);
+            if (def.pit != null) BuildPitLane(root.transform, ci, pitMask);
             BuildTerrain(root.transform, g, def);
             BuildStartLine(root.transform, ci);
+            BuildGrid(root.transform, ci);
+            BuildCornerBoards(root.transform, ci);
             return ci;
         }
 
@@ -219,9 +237,10 @@ namespace Apex.Game
             AddMesh(parent, "Kerbs", md.ToMesh("Kerbs"), new[] { "KerbRed", "KerbWhite" }, SurfaceType.Kerb);
         }
 
-        static float WallOffset(TrackGeometry g, float[] kerb, int i) => g.Widths[i] * 0.5f + KerbWidth * kerb[i] + RunoffWidth;
+        static float WallOffset(TrackGeometry g, float[] kerb, int i, bool pit) =>
+            pit ? g.Widths[i] * 0.5f + PitOuter : g.Widths[i] * 0.5f + KerbWidth * kerb[i] + RunoffWidth;
 
-        static void BuildRunoffAndWalls(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR)
+        static void BuildRunoffAndWalls(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR, CircuitDefinition.PitLane pit, bool[] pitMask)
         {
             var grass = new MeshData(1);
             var walls = new MeshData(2);
@@ -230,26 +249,30 @@ namespace Apex.Game
             foreach (float side in new[] { -1f, 1f })
             {
                 float[] k = side < 0 ? kerbL : kerbR;
+                bool pitSide = pit != null && (int)side == pit.side;
                 Ribbon(grass, 0, g, i =>
                 {
                     float inner = g.Widths[i] * 0.5f + KerbWidth * k[i];
-                    float outer = WallOffset(g, k, i);
+                    // The pit lane replaces the run-off on its side.
+                    float outer = pitSide && pitMask[i] ? inner : WallOffset(g, k, i, false);
                     return side < 0 ? new Vector4(-outer, -RunoffDrop, -inner, 0f) : new Vector4(inner, 0f, outer, -RunoffDrop);
                 }, 0.25f);
                 for (int i = 0; i < n; i++)
                 {
                     int j = (i + 1) % n;
-                    float oi = side * WallOffset(g, k, i), oj = side * WallOffset(g, k, j);
+                    bool pi_ = pitSide && pitMask[i], pj = pitSide && pitMask[j];
+                    float oi = side * WallOffset(g, k, i, pi_), oj = side * WallOffset(g, k, j, pj);
+                    float yi = pi_ ? 0f : -RunoffDrop, yj = pj ? 0f : -RunoffDrop;
                     float v = g.Distances[i] * 0.25f;
                     int sub = ((int)(g.Distances[i] / 6f)) % 2;
-                    var bi = P(g, i, oi, -RunoffDrop - 0.4f);
-                    var ti = P(g, i, oi, -RunoffDrop + WallHeight);
-                    var bj = P(g, j, oj, -RunoffDrop - 0.4f);
-                    var tj = P(g, j, oj, -RunoffDrop + WallHeight);
+                    var bi = P(g, i, oi, yi - 0.4f);
+                    var ti = P(g, i, oi, yi + WallHeight);
+                    var bj = P(g, j, oj, yj - 0.4f);
+                    var tj = P(g, j, oj, yj + WallHeight);
                     walls.Quad(sub, bi, ti, bj, tj, new Vector2(0, v), new Vector2(1, v), new Vector2(0, v + 0.5f), new Vector2(1, v + 0.5f), true);
                     // Skirt hides gaps between run-off and terrain.
-                    var si = P(g, i, oi, -RunoffDrop - SkirtDepth);
-                    var sj = P(g, j, oj, -RunoffDrop - SkirtDepth);
+                    var si = P(g, i, oi, yi - SkirtDepth);
+                    var sj = P(g, j, oj, yj - SkirtDepth);
                     skirt.Quad(0, si, bi, sj, bj, Vector2.zero, Vector2.right, Vector2.up, Vector2.one, true);
                 }
             }
@@ -258,6 +281,180 @@ namespace Apex.Game
             AddMesh(parent, "Skirt", skirt.ToMesh("Skirt"), new[] { "Ground" }, null);
         }
 
+        /// <summary>Pit apron, pit lane, pit wall, box markings and garage block.</summary>
+        static void BuildPitLane(Transform parent, CircuitInstance ci, bool[] pitMask)
+        {
+            var g = ci.Geometry;
+            var pit = ci.Pit;
+            float side = pit.side;
+            var apron = new MeshData(1);
+            var lane = new MeshData(1);
+            Ribbon(apron, 0, g, i =>
+            {
+                if (!pitMask[i]) return Vector4.zero;
+                float e = g.Widths[i] * 0.5f;
+                return side < 0 ? new Vector4(-(e + 2f), 0f, -e, 0f) : new Vector4(e, 0f, e + 2f, 0f);
+            });
+            Ribbon(lane, 0, g, i =>
+            {
+                if (!pitMask[i]) return Vector4.zero;
+                float e = g.Widths[i] * 0.5f;
+                return side < 0 ? new Vector4(-(e + PitOuter), 0f, -(e + 2f), 0f) : new Vector4(e + 2f, 0f, e + PitOuter, 0f);
+            });
+            AddMesh(parent, "PitApron", apron.ToMesh("PitApron"), new[] { "Asphalt" }, SurfaceType.Asphalt);
+            AddMesh(parent, "PitLane", lane.ToMesh("PitLane"), new[] { "PitLane" }, SurfaceType.PitLane);
+            // Pit wall between the merge zones.
+            var wall = new MeshData(1);
+            int n = g.Count;
+            for (int i = 0; i < n; i++)
+            {
+                int j = (i + 1) % n;
+                float di = ApexMath.PosMod(g.Distances[i] - pit.entry, g.Length);
+                float span = ApexMath.PosMod(pit.exit - pit.entry, g.Length);
+                if (!pitMask[i] || !pitMask[j] || di < 60f || di > span - 60f) continue;
+                float oi = side * (g.Widths[i] * 0.5f + 2.1f), oj = side * (g.Widths[j] * 0.5f + 2.1f);
+                wall.Quad(0, P(g, i, oi, -0.2f), P(g, i, oi, 1.0f), P(g, j, oj, -0.2f), P(g, j, oj, 1.0f),
+                    Vector2.zero, Vector2.up, Vector2.right, Vector2.one, true);
+            }
+            AddMesh(parent, "PitWall", wall.ToMesh("PitWall"), new[] { "Wall" }, SurfaceType.Wall, true);
+            // Box markings: a yellow frame per box on the lane.
+            var marks = new MeshData(1);
+            for (int b = 0; b < 20; b++)
+            {
+                float d = g.Wrap(pit.BoxDistance(b));
+                float lat = ci.PitLaneLateral(d);
+                Frame(marks, g, d, lat, 6f, 3.6f, 0.15f);
+            }
+            AddMesh(parent, "PitBoxes", marks.ToMesh("PitBoxes"), new[] { "Marker" }, null);
+            // Garage block behind the outer pit wall.
+            float start = pit.BoxDistance(0) - 15f, end = pit.BoxDistance(19) + 15f;
+            float mid = g.Wrap((start + end) * 0.5f);
+            var pose = ci.PoseAt(mid, side * (g.WidthAt(mid) * 0.5f + PitOuter + 6f), 3.5f);
+            var garage = new GameObject("Garages");
+            garage.transform.SetParent(parent, false);
+            garage.transform.SetPositionAndRotation(pose.position, pose.rotation);
+            garage.transform.localScale = new Vector3(10f, 7f, end - start);
+            garage.AddComponent<MeshFilter>().sharedMesh = CarBuilder.PrimitiveMesh(PrimitiveType.Cube);
+            garage.AddComponent<MeshRenderer>().sharedMaterial = ApexMaterials.Get("Building");
+            garage.AddComponent<BoxCollider>();
+        }
+
+        /// <summary>Rectangular outline on the road surface (centre distance, lateral, length, width, line width).</summary>
+        static void Frame(MeshData md, TrackGeometry g, float d, float lat, float length, float width, float lw)
+        {
+            const float lift = 0.012f;
+            void Seg(float d0, float d1, float l0, float l1)
+            {
+                int i0 = g.IndexAt(d0), i1 = g.IndexAt(d1);
+                var a = (g.PositionAt(d0) + g.RightAt(d0) * l0).ToUnity() + Vector3.up * lift;
+                var b = (g.PositionAt(d0) + g.RightAt(d0) * l1).ToUnity() + Vector3.up * lift;
+                var c = (g.PositionAt(d1) + g.RightAt(d1) * l0).ToUnity() + Vector3.up * lift;
+                var e = (g.PositionAt(d1) + g.RightAt(d1) * l1).ToUnity() + Vector3.up * lift;
+                md.Quad(0, a, b, c, e, Vector2.zero, Vector2.right, Vector2.up, Vector2.one);
+            }
+            float h = length * 0.5f, w = width * 0.5f;
+            Seg(d - h, d - h + lw, lat - w, lat + w);
+            Seg(d + h - lw, d + h, lat - w, lat + w);
+            Seg(d - h, d + h, lat - w, lat - w + lw);
+            Seg(d - h, d + h, lat + w - lw, lat + w);
+        }
+
+        /// <summary>Painted grid slots (staggered two-wide, 8 m apart).</summary>
+        static void BuildGrid(Transform parent, CircuitInstance ci)
+        {
+            var md = new MeshData(1);
+            var g = ci.Geometry;
+            for (int slot = 0; slot < 20; slot++)
+            {
+                float back = 12f + slot * 8f;
+                float d = ci.RawDistance(-back);
+                float side = slot % 2 == 0 ? -3f : 3f;
+                // Front bar and two short side lines, like a real grid box.
+                Frame(md, g, d + 2.6f, side, 0.25f, 2.6f, 0.25f);
+                Frame(md, g, d + 1.6f, side - 1.3f, 2.2f, 0.2f, 0.2f);
+                Frame(md, g, d + 1.6f, side + 1.3f, 2.2f, 0.2f, 0.2f);
+            }
+            AddMesh(parent, "GridSlots", md.ToMesh("GridSlots"), new[] { "Line" }, null);
+        }
+
+        static Font builtinFont;
+
+        static Font BuiltinFont()
+        {
+            if (builtinFont != null) return builtinFont;
+            foreach (var name in new[] { "LegacyRuntime.ttf", "Arial.ttf" })
+            {
+                try
+                {
+                    builtinFont = Resources.GetBuiltinResource<Font>(name);
+                    if (builtinFont != null) break;
+                }
+                catch (Exception)
+                {
+                    // Name differs between Unity versions; try the next one.
+                }
+            }
+            return builtinFont;
+        }
+
+        static void Sign(Transform parent, Vector3 pos, Quaternion rot, string text, Color board, Color textColor, float size)
+        {
+            var root = new GameObject("Sign_" + text);
+            root.transform.SetParent(parent, false);
+            root.transform.SetPositionAndRotation(pos, rot);
+            Prop(root.transform, PrimitiveType.Cube, "Steel", new Vector3(0f, 1.2f, 0f), new Vector3(0.12f, 2.4f, 0.12f));
+            var panel = Prop(root.transform, PrimitiveType.Cube, "Carbon", new Vector3(0f, 2.4f + size * 0.5f, 0f), new Vector3(size * 1.4f, size, 0.08f));
+            var font = BuiltinFont();
+            if (font == null) return;
+            var label = new GameObject("Text");
+            label.transform.SetParent(root.transform, false);
+            label.transform.localPosition = new Vector3(0f, 2.4f + size * 0.5f, -0.05f);
+            var tm = label.AddComponent<TextMesh>();
+            tm.font = font;
+            tm.text = text;
+            tm.anchor = TextAnchor.MiddleCenter;
+            tm.alignment = TextAlignment.Center;
+            tm.characterSize = size * 0.09f;
+            tm.fontSize = 64;
+            tm.color = textColor;
+            label.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            var mr = panel.GetComponent<MeshRenderer>();
+            var mat = new Material(mr.sharedMaterial);
+            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", board);
+            if (mat.HasProperty("_Color")) mat.SetColor("_Color", board);
+            mr.sharedMaterial = mat;
+        }
+
+        /// <summary>Numbered corner boards and 150/100/50 braking boards before heavy-braking corners.</summary>
+        static void BuildCornerBoards(Transform parent, CircuitInstance ci)
+        {
+            var g = ci.Geometry;
+            var names = ci.Definition.cornerNames;
+            var corners = new System.Collections.Generic.List<TrackGeometry.Corner>(ci.Corners);
+            float start = ci.Definition.startLineDistance;
+            corners.Sort((a, b) => ApexMath.PosMod(g.Distances[a.index] - start, g.Length).CompareTo(ApexMath.PosMod(g.Distances[b.index] - start, g.Length)));
+            for (int c = 0; c < corners.Count; c++)
+            {
+                var corner = corners[c];
+                float d = g.Distances[corner.index];
+                // Board on the outside of the corner, facing the approaching cars.
+                float outside = corner.right ? -1f : 1f;
+                float lat = outside * (g.WidthAt(d) * 0.5f + KerbWidth + 5f);
+                float bd = d - 40f;
+                g.FrameAt(bd, out var p, out var f, out _, lat);
+                // TextMesh reads from its -Z side: +Z along the driving direction faces the cars.
+                var rot = Quaternion.LookRotation(f.ToUnity(), Vector3.up);
+                string label = "T" + (c + 1) + (c < names.Count && !string.IsNullOrEmpty(names[c]) ? "\n" + names[c] : "");
+                Sign(parent, p.ToUnity(), rot, label, new Color(0.06f, 0.07f, 0.09f), new Color(0.15f, 0.85f, 0.95f), 1.4f);
+                if (corner.angleDeg < 70f || corner.minRadius > 60f) continue;
+                foreach (int metres in new[] { 150, 100, 50 })
+                {
+                    float m = d - 30f - metres;
+                    g.FrameAt(m, out var bp, out var bf, out _, outside * (g.WidthAt(m) * 0.5f + KerbWidth + 3.5f));
+                    Sign(parent, bp.ToUnity(), Quaternion.LookRotation(bf.ToUnity(), Vector3.up), metres.ToString(), new Color(0.95f, 0.95f, 0.95f), new Color(0.05f, 0.05f, 0.05f), 1.0f);
+                }
+            }
+        }
         /// <summary>
         /// Coarse terrain that follows the track's elevation (inverse-distance
         /// weighted) and stays below the road, plus water east of the shoreline.
@@ -383,7 +580,7 @@ namespace Apex.Game
                 Prop(gantry, PrimitiveType.Sphere, "KerbRed", new Vector3((k - 2) * 0.9f, 7f, -0.32f), Vector3.one * 0.44f);
         }
 
-        static void Prop(Transform parent, PrimitiveType type, string mat, Vector3 pos, Vector3 scale)
+        static Transform Prop(Transform parent, PrimitiveType type, string mat, Vector3 pos, Vector3 scale)
         {
             var go = new GameObject(type.ToString());
             go.transform.SetParent(parent, false);
@@ -391,6 +588,7 @@ namespace Apex.Game
             go.transform.localScale = scale;
             go.AddComponent<MeshFilter>().sharedMesh = CarBuilder.PrimitiveMesh(type);
             go.AddComponent<MeshRenderer>().sharedMaterial = ApexMaterials.Get(mat);
+            return go.transform;
         }
     }
 }
