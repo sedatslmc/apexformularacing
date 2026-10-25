@@ -100,7 +100,7 @@ namespace Apex.Game
             if (raceCam == null) raceCam = cam.gameObject.AddComponent<RaceCamera>();
             raceCam.enabled = false;
 
-            if (FindFirstObjectByType<Light>() == null)
+            if (FindAnyObjectByType<Light>() == null)
             {
                 var sun = new GameObject("Sun").AddComponent<Light>();
                 sun.type = LightType.Directional;

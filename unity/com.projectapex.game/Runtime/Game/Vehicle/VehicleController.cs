@@ -24,7 +24,7 @@ namespace Apex.Game
         public float ForwardSpeed => Sim?.ForwardSpeed ?? 0f;
 
         readonly RaycastHit[] hits = new RaycastHit[8];
-        readonly Dictionary<int, SurfaceType> surfaceCache = new Dictionary<int, SurfaceType>();
+        readonly Dictionary<Collider, SurfaceType> surfaceCache = new Dictionary<Collider, SurfaceType>();
         readonly Vector3[] contactPoints = new Vector3[4];
         readonly Vector3[] wheelForward = new Vector3[4];
         readonly Vector3[] wheelRight = new Vector3[4];
@@ -126,11 +126,10 @@ namespace Apex.Game
 
         SurfaceType SurfaceOf(Collider c)
         {
-            int id = c.GetInstanceID();
-            if (surfaceCache.TryGetValue(id, out var s)) return s;
+            if (surfaceCache.TryGetValue(c, out var s)) return s;
             var tag = c.GetComponent<TrackSurface>();
             s = tag != null ? tag.surface : SurfaceType.Asphalt;
-            surfaceCache[id] = s;
+            surfaceCache[c] = s;
             return s;
         }
 
