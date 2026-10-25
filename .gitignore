@@ -23,3 +23,4 @@ legacy/godot/.godot/
 Thumbs.db
 __pycache__/
 build/refs/
+export/
