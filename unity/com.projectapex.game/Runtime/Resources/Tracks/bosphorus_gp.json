@@ -1495,7 +1495,7 @@
     2080
    ]
   ],
-  "F Fährterminal / Steinschikane": [
+  "F Yıldız-Abfahrt / Steinschikane": [
    [
     -560,
     -80
@@ -1529,7 +1529,7 @@
     60,
     1640
    ],
-   "bearing_deg": 30
+   "bearing_deg": 62.2
   },
   {
    "label": "Ortaköy-Moschee (Ufer)",
@@ -1537,23 +1537,23 @@
     60,
     1640
    ],
-   "bearing_deg": 70
+   "bearing_deg": 73.7
   },
   {
-   "label": "Asiatisches Ufer / Üsküdar",
+   "label": "Asiatisches Ufer / Beylerbeyi",
    "from": [
     250,
     1000
    ],
-   "bearing_deg": 100
+   "bearing_deg": 44.9
   },
   {
-   "label": "Historische Halbinsel / Galata (fern)",
+   "label": "Galata / Historische Halbinsel (fern)",
    "from": [
     -400,
     2000
    ],
-   "bearing_deg": 200
+   "bearing_deg": 178.8
   },
   {
    "label": "Brücke + Panorama beim Ausgang",
@@ -1561,37 +1561,57 @@
     0,
     20
    ],
-   "bearing_deg": 25
+   "bearing_deg": 26.7
   }
  ],
  "shoreline": [
   [
-   110,
-   -700
+   45.9,
+   -1937.1
   ],
   [
-   110,
-   650
+   15.6,
+   -1167.6
   ],
   [
-   300,
-   760
+   -22.7,
+   -498.3
   ],
   [
-   400,
-   1150
+   41.8,
+   69.2
   ],
   [
-   500,
-   1450
+   119.5,
+   456.1
   ],
   [
-   560,
-   1800
+   299.3,
+   901.6
   ],
   [
-   640,
-   2200
+   452.6,
+   1421.2
+  ],
+  [
+   570.3,
+   1787.4
+  ],
+  [
+   379.1,
+   2171.2
+  ],
+  [
+   331.1,
+   3007.8
+  ],
+  [
+   -2.6,
+   3748.0
+  ],
+  [
+   -457.5,
+   4423.1
   ]
  ],
  "pit": {
@@ -1615,13 +1635,240 @@
   "Tepe 2",
   "Tepe 3",
   "Grand Descent",
-  "Feribot 1",
-  "Feribot 2",
-  "Feribot 3",
+  "Yıldız 1",
+  "Yıldız 2",
+  "Yıldız 3",
   "Taş 1",
   "Taş 2",
   "Taş 3",
   "Panorama",
   "Final"
- ]
+ ],
+ "geo": {
+  "note": "Rigid placement of WGS84 landmarks on the schematic circuit (1:1 scale, rotated). Shorelines are approximations, not survey data.",
+  "origin": {
+   "lat": 41.03944,
+   "lon": 29.00167,
+   "name": "Dolmabahçe"
+  },
+  "rotation_deg": 52,
+  "translation": [
+   -70,
+   -390
+  ],
+  "true_north_bearing_deg": 308,
+  "min_track_water_distance_m": 20.6,
+  "landmarks": [
+   {
+    "id": "dolmabahce",
+    "name": "Dolmabahçe-Palast",
+    "kind": "palace",
+    "height": 25,
+    "game": [
+     -70.0,
+     -390.0
+    ],
+    "lat": 41.03944,
+    "lon": 29.00167,
+    "verified": true,
+    "source": "Wikipedia (41°02′22″N 29°00′06″E)"
+   },
+   {
+    "id": "ortakoy_mosque",
+    "name": "Ortaköy-Moschee (Büyük Mecidiye)",
+    "kind": "mosque",
+    "height": 40,
+    "game": [
+     582.8,
+     1792.5
+    ],
+    "lat": 41.04694,
+    "lon": 29.02694,
+    "verified": true,
+    "source": "Wikipedia (41°02′49″N 29°01′37″E)"
+   },
+   {
+    "id": "bridge_eu",
+    "name": "15-Juli-Märtyrerbrücke, europäisches Ende",
+    "kind": "bridge_end",
+    "height": 0,
+    "game": [
+     312.1,
+     2178.8
+    ],
+    "lat": 41.05102,
+    "lon": 29.02858,
+    "verified": true,
+    "source": "Structurae"
+   },
+   {
+    "id": "bridge_as",
+    "name": "15-Juli-Märtyrerbrücke, asiatisches Ende",
+    "kind": "bridge_end",
+    "height": 0,
+    "game": [
+     1869.5,
+     2189.5
+    ],
+    "lat": 41.03998,
+    "lon": 29.0401,
+    "verified": true,
+    "source": "Structurae"
+   },
+   {
+    "id": "galata",
+    "name": "Galata-Turm",
+    "kind": "tower",
+    "height": 63,
+    "game": [
+     -291.4,
+     -3148.3
+    ],
+    "lat": 41.02566,
+    "lon": 28.97416,
+    "verified": true,
+    "source": "Wikipedia (41°1′32″N 28°58′27″E)"
+   },
+   {
+    "id": "maidens_tower",
+    "name": "Leanderturm (Kız Kulesi)",
+    "kind": "islet_tower",
+    "height": 23,
+    "game": [
+     1655.3,
+     -1463.0
+    ],
+    "lat": 41.02117,
+    "lon": 29.00425,
+    "verified": true,
+    "source": "Wikipedia (41°01′16″N 29°00′15″E)"
+   },
+   {
+    "id": "sultan_ahmed",
+    "name": "Sultan-Ahmed-Moschee",
+    "kind": "mosque_big",
+    "height": 64,
+    "game": [
+     1626.2,
+     -4357.7
+    ],
+    "lat": 41.00526,
+    "lon": 28.97687,
+    "verified": true,
+    "source": "Pleiades/OSM"
+   },
+   {
+    "id": "hagia_sophia",
+    "name": "Hagia Sophia",
+    "kind": "mosque_big",
+    "height": 55,
+    "game": [
+     1507.3,
+     -3910.0
+    ],
+    "lat": 41.0086,
+    "lon": 28.9802,
+    "verified": false,
+    "source": "Näherung (nicht geprüft)"
+   },
+   {
+    "id": "besiktas_pier",
+    "name": "Beşiktaş-Anleger",
+    "kind": "pier",
+    "height": 0,
+    "game": [
+     15.4,
+     143.2
+    ],
+    "lat": 41.0418,
+    "lon": 29.0073,
+    "verified": false,
+    "source": "Näherung (nicht geprüft)"
+   },
+   {
+    "id": "uskudar_pier",
+    "name": "Üsküdar-Anleger",
+    "kind": "pier",
+    "height": 0,
+    "game": [
+     1729.2,
+     -375.3
+    ],
+    "lat": 41.0267,
+    "lon": 29.015,
+    "verified": false,
+    "source": "Näherung (nicht geprüft)"
+   },
+   {
+    "id": "beylerbeyi",
+    "name": "Beylerbeyi-Palast",
+    "kind": "palace_small",
+    "height": 15,
+    "game": [
+     1608.3,
+     2361.6
+    ],
+    "lat": 41.0428,
+    "lon": 29.0398,
+    "verified": false,
+    "source": "Näherung (nicht geprüft)"
+   },
+   {
+    "id": "ciragan",
+    "name": "Çırağan-Palast",
+    "kind": "palace_small",
+    "height": 15,
+    "game": [
+     308.3,
+     841.3
+    ],
+    "lat": 41.0436,
+    "lon": 29.016,
+    "verified": false,
+    "source": "Näherung (nicht geprüft)"
+   }
+  ],
+  "shoreline_asia": [
+   [
+    2593.5,
+    -1370.3
+   ],
+   [
+    1974.0,
+    -726.4
+   ],
+   [
+    1761.8,
+    -315.6
+   ],
+   [
+    1784.3,
+    647.1
+   ],
+   [
+    1789.5,
+    1282.4
+   ],
+   [
+    1810.9,
+    2118.0
+   ],
+   [
+    1663.2,
+    2467.8
+   ],
+   [
+    1579.1,
+    3258.1
+   ],
+   [
+    1444.0,
+    4162.8
+   ],
+   [
+    979.5,
+    5005.2
+   ]
+  ]
+ }
 }

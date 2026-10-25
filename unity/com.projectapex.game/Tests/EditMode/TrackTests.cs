@@ -88,5 +88,47 @@ namespace Apex.Tests
             Assert.That(o["d"], Is.EqualTo(true));
             Assert.That(o["e"], Is.Null);
         }
+
+        [Test]
+        public void BosphorusGeographyIsConsistent()
+        {
+            var def = TestData.Circuit("bosphorus_gp");
+            var g = TrackGeometry.FromDefinition(def);
+            Assert.That(def.landmarks.Count, Is.GreaterThanOrEqualTo(10));
+            var eu = def.FindLandmark("bridge_eu");
+            var asia = def.FindLandmark("bridge_as");
+            var mosque = def.FindLandmark("ortakoy_mosque");
+            var palace = def.FindLandmark("dolmabahce");
+            float Dist(float ax, float az, float bx, float bz) => (float)Math.Sqrt((ax - bx) * (ax - bx) + (az - bz) * (az - bz));
+            // Real distances are preserved by the rigid placement (scale 1:1).
+            Assert.That(Dist(eu.east, eu.north, asia.east, asia.north), Is.InRange(1500f, 1620f), "bridge length");
+            Assert.That(Dist(eu.east, eu.north, mosque.east, mosque.north), Is.InRange(380f, 520f), "mosque just south of the bridge");
+            Assert.That(mosque.verified && eu.verified && palace.verified, Is.True);
+            // Track keeps clear of the water and of the big landmarks.
+            float ShoreX(float z)
+            {
+                var sh = def.shoreline;
+                if (z <= sh[0].north) return sh[0].east;
+                for (int i = 0; i < sh.Count - 1; i++)
+                    if (z <= sh[i + 1].north)
+                        return sh[i].east + (sh[i + 1].east - sh[i].east) * (z - sh[i].north) / (sh[i + 1].north - sh[i].north);
+                return sh[sh.Count - 1].east;
+            }
+            float minPalace = float.MaxValue, minMosque = float.MaxValue;
+            for (int i = 0; i < g.Count; i++)
+            {
+                var p = g.Positions[i];
+                Assert.That(p.X, Is.LessThan(ShoreX(p.Z) - 10f), $"track in the water at {i}");
+                minPalace = Math.Min(minPalace, Dist(p.X, p.Z, palace.east, palace.north));
+                minMosque = Math.Min(minMosque, Dist(p.X, p.Z, mosque.east, mosque.north));
+            }
+            Assert.That(minPalace, Is.GreaterThan(150f));
+            Assert.That(minMosque, Is.InRange(200f, 900f), "mosque visible but not on the circuit");
+            // The Asian shore is across the water, east of the European one.
+            Assert.That(def.farShoreline.Count, Is.GreaterThan(3));
+            foreach (var (east, north) in def.farShoreline)
+                if (north > def.shoreline[0].north && north < def.shoreline[def.shoreline.Count - 1].north)
+                    Assert.That(east, Is.GreaterThan(ShoreX(north) + 600f));
+        }
     }
 }

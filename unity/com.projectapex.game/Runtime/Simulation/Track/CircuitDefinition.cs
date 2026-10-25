@@ -51,6 +51,24 @@ namespace Apex.Tracks
         /// <summary>Optional shoreline polyline (east, north), water lies to the east.</summary>
         public readonly List<(float east, float north)> shoreline = new List<(float, float)>();
 
+        /// <summary>A real-world landmark placed in game coordinates (see tools/bosphorus_geo.py).</summary>
+        public sealed class Landmark
+        {
+            public string id = "";
+            public string name = "";
+            public string kind = "";
+            public float east, north, height;
+            public bool verified;
+        }
+
+        public readonly List<Landmark> landmarks = new List<Landmark>();
+        /// <summary>Opposite (Asian) shoreline, water lies to the west of it.</summary>
+        public readonly List<(float east, float north)> farShoreline = new List<(float, float)>();
+        /// <summary>Bearing of true north in the game frame (deg, 0 = +z); NaN without geo data.</summary>
+        public float trueNorthBearing = float.NaN;
+
+        public Landmark FindLandmark(string landmarkId) => landmarks.Find(l => l.id == landmarkId);
+
         public static CircuitDefinition FromJson(string json)
         {
             if (!(MiniJson.Parse(json) is Dictionary<string, object> root))
@@ -96,6 +114,30 @@ namespace Apex.Tracks
                 foreach (var row in shl)
                     if (row is List<object> r && r.Count >= 2)
                         def.shoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
+            }
+            if (root.TryGetValue("geo", out var geo) && geo is Dictionary<string, object> gd)
+            {
+                def.trueNorthBearing = Num(gd, "true_north_bearing_deg", float.NaN);
+                if (gd.TryGetValue("landmarks", out var lm) && lm is List<object> lml)
+                    foreach (var o in lml)
+                    {
+                        if (!(o is Dictionary<string, object> ld)) continue;
+                        var pos = ld.TryGetValue("game", out var gp) ? gp as List<object> : null;
+                        def.landmarks.Add(new Landmark
+                        {
+                            id = Str(ld, "id"),
+                            name = Str(ld, "name"),
+                            kind = Str(ld, "kind"),
+                            height = Num(ld, "height", 0f),
+                            east = pos != null && pos.Count > 1 ? Convert.ToSingle(pos[0]) : 0f,
+                            north = pos != null && pos.Count > 1 ? Convert.ToSingle(pos[1]) : 0f,
+                            verified = ld.TryGetValue("verified", out var vf) && vf is bool b && b,
+                        });
+                    }
+                if (gd.TryGetValue("shoreline_asia", out var sa) && sa is List<object> sal)
+                    foreach (var row in sal)
+                        if (row is List<object> r && r.Count >= 2)
+                            def.farShoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
             }
             return def;
         }
