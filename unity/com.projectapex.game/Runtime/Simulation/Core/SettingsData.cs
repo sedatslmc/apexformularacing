@@ -9,6 +9,16 @@ namespace Apex.Core
         Tilt = 2,
     }
 
+    /// <summary>Assist presets. Balanced is the default: realistic grip and inertia, assists
+    /// that help without adding grip or steering the car onto the racing line.</summary>
+    public enum DrivingProfile
+    {
+        Casual = 0,
+        Balanced = 1,
+        Expert = 2,
+        Custom = 3,
+    }
+
     /// <summary>
     /// Persistent player settings. Serialised by the engine layer (JsonUtility);
     /// versioned so old files migrate instead of breaking.
@@ -16,14 +26,19 @@ namespace Apex.Core
     [Serializable]
     public sealed class SettingsData
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
 
         public int version = CurrentVersion;
         public ControlPreset controlPreset = ControlPreset.Keyboard;
-        public bool tractionControl = true;
+        public DrivingProfile drivingProfile = DrivingProfile.Balanced;
+        /// <summary>0 off, 1 low, 2 medium, 3 high.</summary>
+        public int tractionLevel = 2;
         public bool abs = true;
-        public bool steeringAssist = true;
+        /// <summary>0 off, 1 light, 2 full.</summary>
+        public int steeringAssistLevel = 1;
         public bool autoGearbox = true;
+        /// <summary>Front brake bias (share of brake torque on the front axle).</summary>
+        public float brakeBiasFront = 0.57f;
         /// <summary>Pit assist: the car drives itself through the pit lane and stops in its box.</summary>
         public bool pitAssist = true;
         public bool reducedMotion;
@@ -54,6 +69,13 @@ namespace Apex.Core
                 version = 1;
                 changed = true;
             }
+            if (version < 2)
+            {
+                // v1 stored on/off assists; v2 introduces profiles and assist levels.
+                ApplyProfile(DrivingProfile.Balanced);
+                version = 2;
+                changed = true;
+            }
             changed |= ClampField(ref masterVolume, 0f, 1f);
             changed |= ClampField(ref tiltMaxAngleDeg, 15f, 70f);
             changed |= ClampField(ref tiltDeadZoneDeg, 0f, 8f);
@@ -62,12 +84,69 @@ namespace Apex.Core
             changed |= ClampField(ref touchButtonScale, 0.7f, 1.5f);
             changed |= ClampField(ref touchButtonOpacity, 0.1f, 1f);
             changed |= ClampField(ref hudScale, 0.75f, 1.25f);
+            changed |= ClampField(ref brakeBiasFront, 0.5f, 0.65f);
+            changed |= ClampInt(ref tractionLevel, 0, 3);
+            changed |= ClampInt(ref steeringAssistLevel, 0, 2);
+            if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
+            {
+                ApplyProfile(DrivingProfile.Balanced);
+                changed = true;
+            }
             if (!Enum.IsDefined(typeof(ControlPreset), controlPreset))
             {
                 controlPreset = ControlPreset.Keyboard;
                 changed = true;
             }
             return changed;
+        }
+
+        /// <summary>Sets the assists of a preset (Custom keeps the current values).</summary>
+        public void ApplyProfile(DrivingProfile profile)
+        {
+            drivingProfile = profile;
+            switch (profile)
+            {
+                case DrivingProfile.Casual:
+                    tractionLevel = 3;
+                    abs = true;
+                    steeringAssistLevel = 2;
+                    autoGearbox = true;
+                    break;
+                case DrivingProfile.Balanced:
+                    tractionLevel = 2;
+                    abs = true;
+                    steeringAssistLevel = 1;
+                    autoGearbox = true;
+                    break;
+                case DrivingProfile.Expert:
+                    tractionLevel = 0;
+                    abs = false;
+                    steeringAssistLevel = 0;
+                    autoGearbox = false;
+                    break;
+            }
+        }
+
+        /// <summary>Steering assist strength for the simulation (0 off .. 1 full).</summary>
+        public float SteeringAssistStrength => steeringAssistLevel <= 0 ? 0f : steeringAssistLevel == 1 ? 0.5f : 1f;
+
+        public static string ProfileName(DrivingProfile p)
+        {
+            switch (p)
+            {
+                case DrivingProfile.Casual: return "Einsteiger";
+                case DrivingProfile.Balanced: return "Ausgewogen";
+                case DrivingProfile.Expert: return "Profi";
+                default: return "Individuell";
+            }
+        }
+
+        static bool ClampInt(ref int v, int min, int max)
+        {
+            int c = v < min ? min : v > max ? max : v;
+            if (c == v) return false;
+            v = c;
+            return true;
         }
 
         static bool ClampField(ref float v, float min, float max)

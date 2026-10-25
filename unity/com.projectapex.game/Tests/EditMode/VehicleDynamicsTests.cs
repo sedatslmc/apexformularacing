@@ -75,7 +75,7 @@ namespace Apex.Tests
             var rig = NewRig();
             rig.u = 200f / 3.6f;
             foreach (var w in rig.sim.wheels) w.omega = rig.u / w.radius;
-            rig.sim.gearbox.gear = 6;
+            rig.sim.gearbox.gear = 6; rig.sim.SyncEngineToWheels();
             float start = rig.positionXZ.Y;
             float minSlip = 0f;
             int steps = 0;
@@ -100,7 +100,7 @@ namespace Apex.Tests
             var rig = NewRig();
             rig.u = 150f / 3.6f;
             foreach (var w in rig.sim.wheels) w.omega = rig.u / w.radius;
-            rig.sim.gearbox.gear = 5;
+            rig.sim.gearbox.gear = 5; rig.sim.SyncEngineToWheels();
             float lastYaw = 0f;
             for (int i = 0; i < 120 * 8; i++)
             {
@@ -125,7 +125,7 @@ namespace Apex.Tests
             foreach (var w in rig.sim.wheels) w.omega = rig.u / w.radius;
             int g = 1;
             while (g < 8 && rig.u / 0.36f * rig.sim.gearbox.RatioFor(g) * 60f / (2f * MathF.PI) > 11000f) g++;
-            rig.sim.gearbox.gear = g;
+            rig.sim.gearbox.gear = g; rig.sim.SyncEngineToWheels();
             return rig;
         }
 

@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Generates the procedural car geometry outside Unity (with a minimal UnityEngine
+       math shim) and exports OBJ files plus statistics for previews and checks. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Apex.Simulation/Apex.Simulation.csproj" />
+    <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Vehicle/MeshKit.cs" Link="MeshKit.cs" />
+    <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Vehicle/CarGeometry.cs" Link="CarGeometry.cs" />
+  </ItemGroup>
+</Project>

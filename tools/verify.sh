@@ -4,6 +4,7 @@
 #   2. build Apex.Simulation exactly like Unity (netstandard2.1, C# 9, warnings = errors)
 #   3. run all EditMode tests with NUnit on .NET
 #   4. compile-check Apex.Runtime and Apex.Editor against Unity reference assemblies
+#   5. generate the procedural car geometry and check outward-facing normals
 # Opening the project in the Unity 6 editor remains the authoritative check.
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,4 +14,5 @@ dotnet build Apex.Simulation/Apex.Simulation.csproj -nologo -v q
 dotnet test Apex.Simulation.Tests/Apex.Simulation.Tests.csproj -nologo -v q
 dotnet build Apex.Runtime.CompileCheck/Apex.Runtime.CompileCheck.csproj -nologo -v q
 dotnet build Apex.Editor.CompileCheck/Apex.Editor.CompileCheck.csproj -nologo -v q
+dotnet run --project Apex.ModelPreview/Apex.ModelPreview.csproj -c Release -v q -- "${TMPDIR:-/tmp}/apex_model_preview" --check
 echo "verify: OK"

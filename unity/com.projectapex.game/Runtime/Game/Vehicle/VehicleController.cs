@@ -21,6 +21,9 @@ namespace Apex.Game
         public VehicleSimulation Sim { get; private set; }
         public Rigidbody Body { get; private set; }
         public Transform[] WheelVisuals { get; set; } = new Transform[4];
+        /// <summary>Optional spinning child per wheel; when set, the pivot only steers
+        /// (uprights and calipers stay put) and the spinner rotates.</summary>
+        public Transform[] WheelSpinners { get; set; }
         public float ForwardSpeed => Sim?.ForwardSpeed ?? 0f;
 
         readonly RaycastHit[] hits = new RaycastHit[8];
@@ -141,10 +144,19 @@ namespace Apex.Game
                 var vis = WheelVisuals[i];
                 if (vis == null) continue;
                 var w = Sim.wheels[i];
-                float springLen = w.contact ? setup.suspensionTravel - w.compression : setup.suspensionTravel;
+                // Surface texture (kerb ripples) lifts the wheel visibly as well.
+                float springLen = w.contact ? setup.suspensionTravel - w.compression - w.roadOffset : setup.suspensionTravel;
                 var m = w.mount.ToUnity();
                 vis.localPosition = new Vector3(m.x, m.y - springLen, m.z);
-                vis.localRotation = Quaternion.Euler(0f, w.steer * ApexMath.Rad2Deg, 0f) * Quaternion.Euler(w.spinAngle * ApexMath.Rad2Deg, 0f, 0f);
+                var steer = Quaternion.Euler(0f, w.steer * ApexMath.Rad2Deg, 0f);
+                var spin = Quaternion.Euler(w.spinAngle * ApexMath.Rad2Deg, 0f, 0f);
+                var spinner = WheelSpinners != null ? WheelSpinners[i] : null;
+                if (spinner != null)
+                {
+                    vis.localRotation = steer;
+                    spinner.localRotation = spin;
+                }
+                else vis.localRotation = steer * spin;
             }
         }
     }

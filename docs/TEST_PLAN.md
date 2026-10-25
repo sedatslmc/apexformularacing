@@ -9,10 +9,13 @@
 | Strecken | Stetigkeit, gegen den Uhrzeigersinn, Abstände, Bosporus-Designziele, Projektion, JSON | ✅ 9/9 |
 | Rennen/KI/Reifen/Wetter/Karriere | Startampel, Frühstart, Reihenfolge/Abstände/Ziel/Punkte, Live-Abstand, Qualifying, Tracklimit-Strafen, Rennlinie, Reifen heizen/kühlen, Mischungen und Nässe, Regen/Abtrocknen, reproduzierbares Wetter, Boxenzeit, 6-Auto-KI-Rennen auf beiden Strecken, 100 Level, XP-Kurve, Meisterschaft, Roster | ✅ 19/19 |
 | Fahrdynamik (Prüfstand) | Federn tragen das Gewicht, Beschleunigung, Bremsen mit ABS, stationäre Kurve, schneller Einschlag bei 3 Tempi, Wenderadius, Gegenlenk-Assistent, Autopilot-Runden auf beiden Strecken | ✅ 11/11 |
+| Physik-Überarbeitung | Motorträgheit und Leerlaufregelung, Zwischengas beim Runterschalten ohne Blockieren, Hochschalten, Bodeneffekt über Fahrhöhe, Strömungsabriss beim Aufsetzen, Balance beim Eintauchen, Höchsttempo mit Bodeneffekt, Profile und Migration, Lenkhilfe-Stärke, TC-Stufen, Kerb-Anregung, Trail-Braking mit ABS, Blockierreihenfolge je Bremsbalance, Lenkrad folgt der Zahnstange | ✅ 16/16 |
 | Eingabe und Zustände | Neigungswinkel je Ausrichtung, Kalibrierung/Totzone/Begrenzung, flaches Gerät, Glättung, Digitalachse, Touch-Ownership, hängende Touches, Zustandsübergänge, Zurück-Navigation, Einstellungs-Migration | ✅ 12/12 |
 | Kompiliertest | Apex.Simulation (netstandard2.1, Warnungen = Fehler), Apex.Runtime gegen UnityEngine 2021.3 + Input System 1.11.2, Apex.Editor gegen UnityEditor 2021.1 | ✅ |
 
-**Nicht abgedeckt:** Code hinter `#if UNITY_6000_0_OR_NEWER`, Rendering, echtes Rigidbody-Verhalten und Gerätesensoren. Das prüfen Unity-Editor und Gerät.
+Insgesamt 83 Tests. Dazu kommen der Validierungsbericht (`Apex.Tuning validate`, siehe [HANDLING_VALIDATION.md](HANDLING_VALIDATION.md)) und die Geometrie-Vorschau des Fahrzeugs (`build/Apex.ModelPreview` + `tools/render_car_preview.py`: Normalenrichtung, Ansichten, Dreiecksbudget).
+
+**Nicht abgedeckt:** Code hinter `#if UNITY_6000_0_OR_NEWER`, Rendering in Unity (Materialien, LOD-Wechsel, TextMesh-Display), echtes Rigidbody-Verhalten und Gerätesensoren. Das prüfen Unity-Editor und Gerät (Checkliste V1–V9).
 
 ## M1-Abnahme (manuell im Unity-Editor, danach auf dem Gerät)
 Vorbereitung: `docs/UNITY_SETUP.md`, Boot-Szene → Play → „Freies Training – Apex Testoval“.

@@ -18,3 +18,9 @@
 | 2026-10-25 | Haltebremse (`holdBrake`) für Start, Pause und Kalibrierung | das Halten der Bremse im Stand legte den Rückwärtsgang ein; Autos rollten vor dem Start rückwärts | angenommen |
 | 2026-10-25 | Fiktives Teilnehmerfeld: 10 Teams, 20 Fahrer, frei erfundene Namen | keine echten Teams oder Fahrer (Brief) | angenommen |
 | 2026-10-25 | Reifenverschleiß-Multiplikator (Standard 3×) | Strategie soll auch in kurzen Rennen eine Rolle spielen | angenommen |
+| 2026-10-25 | Fahrprofile Einsteiger/**Ausgewogen (Standard)**/Profi/Individuell; TC in 3 Stufen, Lenkhilfe als Stärke 0–1 | Overhaul-Auftrag: Balanced als Standard, nicht arcadehaft, Hilfen ohne zusätzlichen Grip und ohne Zwang auf die Ideallinie | angenommen |
+| 2026-10-25 | Motorträgheit mit Coulomb-Auto-Kupplung statt kinematisch gesetzter Drehzahl | realistisches Hoch- und Runterdrehen, Zwischengas, Kupplungsschlupf beim Start; Grundlage für Sound und Schaltlichter | angenommen |
+| 2026-10-25 | Bodeneffekt als Potenzgesetz über die mittlere Fahrhöhe, Referenz bei ~150 km/h | Fahrhöhen-Empfindlichkeit ohne CFD; Kalibrierung so, dass die Rennlinie (Nenn-ClA) im mittleren Tempo stimmt | angenommen; Näherung |
+| 2026-10-25 | Maximales Bremsmoment 5200 → 4000 N·m | vorher blockierten ohne ABS beide Achsen gleichzeitig; jetzt bestimmt die Bremsbalance, welche Achse zuerst blockiert | angenommen |
+| 2026-10-25 | Fahrzeug als prozeduraler Platzhalter (eigene Geometrie mit LODs), Premium-Modell per Spezifikation extern | keine lizenzierten Assets vorhanden; keine nicht autorisierten Assets; Primitive werden nicht als fotorealistisch bezeichnet | angenommen; externes Modell offen |
+| 2026-10-25 | Geometrie getrennt von GameObjects (`CarGeometry`), Offline-Vorschau mit Unity-Math-Shim | Prüfung ohne Unity-Editor möglich (Normalenrichtung, Ansichten, Dreiecksbudget) | angenommen |

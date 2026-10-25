@@ -379,7 +379,7 @@ namespace Apex.Game
 
         static Font builtinFont;
 
-        static Font BuiltinFont()
+        internal static Font BuiltinFont()
         {
             if (builtinFont != null) return builtinFont;
             foreach (var name in new[] { "LegacyRuntime.ttf", "Arial.ttf" })

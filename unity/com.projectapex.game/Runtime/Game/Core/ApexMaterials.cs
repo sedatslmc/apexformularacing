@@ -35,6 +35,17 @@ namespace Apex.Game
             ["Helmet"] = new Color(0.92f, 0.92f, 0.95f),
             ["Steel"] = new Color(0.2f, 0.22f, 0.25f),
             ["Marker"] = new Color(0.95f, 0.8f, 0.1f),
+            // Vehicle detail materials (procedural placeholder car).
+            ["Titanium"] = new Color(0.42f, 0.43f, 0.46f),
+            ["Mirror"] = new Color(0.85f, 0.88f, 0.92f),
+            ["Interior"] = new Color(0.1f, 0.1f, 0.11f),
+            ["Belt"] = new Color(0.7f, 0.1f, 0.08f),
+            ["Visor"] = new Color(0.03f, 0.03f, 0.05f),
+            ["Glove"] = new Color(0.14f, 0.14f, 0.15f),
+            ["Display"] = new Color(0.02f, 0.02f, 0.025f),
+            ["RainLight"] = new Color(0.25f, 0.02f, 0.02f),
+            ["BrakeDisc"] = new Color(0.16f, 0.16f, 0.17f),
+            ["Compound"] = new Color(0.95f, 0.95f, 0.95f),
         };
 
         static readonly Dictionary<string, (float smoothness, float metallic)> Surface = new Dictionary<string, (float, float)>
@@ -46,7 +57,18 @@ namespace Apex.Game
             ["Steel"] = (0.6f, 0.6f),
             ["Water"] = (0.9f, 0f),
             ["Helmet"] = (0.85f, 0.1f),
+            ["Titanium"] = (0.65f, 0.9f),
+            ["Mirror"] = (0.95f, 1f),
+            ["Visor"] = (0.95f, 0.3f),
+            ["Display"] = (0.8f, 0f),
+            ["Tire"] = (0.15f, 0f),
+            ["BrakeDisc"] = (0.35f, 0.4f),
+            ["Interior"] = (0.15f, 0f),
         };
+
+        /// <summary>Materials whose emission is driven at runtime (rain light, brake glow,
+        /// steering-wheel display); created with emission enabled and black.</summary>
+        public static readonly HashSet<string> Emissive = new HashSet<string> { "RainLight", "BrakeDisc", "Display" };
 
         static readonly Dictionary<string, Material> Cache = new Dictionary<string, Material>();
 
@@ -77,6 +99,12 @@ namespace Apex.Game
             if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", smooth);
             if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", smooth);
             if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", metal);
+            if (Emissive.Contains(key) && mat.HasProperty("_EmissionColor"))
+            {
+                mat.EnableKeyword("_EMISSION");
+                mat.SetColor("_EmissionColor", Color.black);
+                mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            }
             mat.enableInstancing = true;
             return mat;
         }

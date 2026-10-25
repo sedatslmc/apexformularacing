@@ -147,6 +147,7 @@ namespace Apex.Game
 
         static int Wrap(int v, int count) => ((v % count) + count) % count;
         static string OnOff(bool b) => b ? "An" : "Aus";
+        static string TcName(int level) => level <= 0 ? "Aus" : level == 1 ? "Niedrig" : level == 2 ? "Mittel" : "Hoch";
 
         // --- Main menu ----------------------------------------------------------------------
 
@@ -449,10 +450,15 @@ namespace Apex.Game
             {
                 new Row { label = "Steuerung", value = () => s.controlPreset == ControlPreset.Keyboard ? "Tastatur/Gamepad" : s.controlPreset == ControlPreset.TouchButtons ? "Touch-Tasten" : "Neigung (Gyro)",
                     change = d => s.controlPreset = (ControlPreset)Wrap((int)s.controlPreset + (d < 0 ? -1 : 1), 3) },
-                new Row { label = "Traktionskontrolle", value = () => OnOff(s.tractionControl), change = d => s.tractionControl = !s.tractionControl },
-                new Row { label = "ABS", value = () => OnOff(s.abs), change = d => s.abs = !s.abs },
-                new Row { label = "Lenkhilfe", value = () => OnOff(s.steeringAssist), change = d => s.steeringAssist = !s.steeringAssist },
-                new Row { label = "Automatikgetriebe", value = () => OnOff(s.autoGearbox), change = d => s.autoGearbox = !s.autoGearbox },
+                new Row { label = "Fahrprofil", value = () => SettingsData.ProfileName(s.drivingProfile),
+                    change = d => s.ApplyProfile((DrivingProfile)Wrap((int)s.drivingProfile + (d < 0 ? -1 : 1), 3)) },
+                new Row { label = "Traktionskontrolle", value = () => TcName(s.tractionLevel),
+                    change = d => { s.tractionLevel = Wrap(s.tractionLevel + (d < 0 ? -1 : 1), 4); s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "ABS", value = () => OnOff(s.abs), change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "Lenkhilfe", value = () => s.steeringAssistLevel == 0 ? "Aus" : s.steeringAssistLevel == 1 ? "Leicht" : "Voll",
+                    change = d => { s.steeringAssistLevel = Wrap(s.steeringAssistLevel + (d < 0 ? -1 : 1), 3); s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "Automatikgetriebe", value = () => OnOff(s.autoGearbox), change = d => { s.autoGearbox = !s.autoGearbox; s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "Bremsbalance vorne", value = () => $"{s.brakeBiasFront * 100f:0} %", change = d => s.brakeBiasFront += (d == 0 ? 1 : d) * 0.01f },
                 new Row { label = "Boxen-Assistent", value = () => OnOff(s.pitAssist), change = d => s.pitAssist = !s.pitAssist },
                 new Row { label = "Neigung: max. Winkel", value = () => $"{s.tiltMaxAngleDeg:0}°", change = d => s.tiltMaxAngleDeg += d == 0 ? 5 : d * 5 },
                 new Row { label = "Neigung: Empfindlichkeit", value = () => $"{s.tiltSensitivity:0.0}", change = d => s.tiltSensitivity += (d == 0 ? 1 : d) * 0.1f },

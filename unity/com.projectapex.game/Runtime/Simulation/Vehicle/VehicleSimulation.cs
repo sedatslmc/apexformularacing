@@ -30,10 +30,26 @@ namespace Apex.Vehicle
         public float brake;
         /// <summary>-1 full left .. +1 full right.</summary>
         public float steer;
-        public bool assistTraction = true;
+        /// <summary>Traction control level: 0 off, 1 low (more slip allowed), 2 medium, 3 high.</summary>
+        public int tractionLevel = 2;
         public bool assistAbs = true;
-        public bool assistSteering = true;
+        /// <summary>Steering assist strength 0 (off: raw mechanical lock and rack) .. 1 (full).
+        /// The assist never adds grip; it limits lock to what the front can use and adds a
+        /// bounded counter-steer correction.</summary>
+        public float steeringAssist = 1f;
         public bool autoGearbox = true;
+
+        public bool assistTraction
+        {
+            get => tractionLevel > 0;
+            set => tractionLevel = value ? Math.Max(tractionLevel, 2) : 0;
+        }
+
+        public bool assistSteering
+        {
+            get => steeringAssist > 0f;
+            set => steeringAssist = value ? (steeringAssist > 0f ? steeringAssist : 1f) : 0f;
+        }
         /// <summary>Holds the car (grid, pause, calibration): full brakes, no drive and
         /// never engages reverse, unlike holding the brake pedal at a standstill.</summary>
         public bool holdBrake;
@@ -60,10 +76,26 @@ namespace Apex.Vehicle
         public bool AbsActive { get; private set; }
         public float TcCut => tcCut;
         public float SimTime { get; private set; }
+        /// <summary>Clutch is slipping (launch, shift sync, anti-stall).</summary>
+        public bool ClutchSlipping { get; private set; }
+        public bool LimiterActive { get; private set; }
+        /// <summary>Plank-to-ground height front/rear (m) from suspension compression.</summary>
+        public float RideHeightFront { get; private set; }
+        public float RideHeightRear { get; private set; }
+        /// <summary>Floor downforce relative to its nominal share (ground-effect gain).</summary>
+        public float FloorGain { get; private set; } = 1f;
+        public float AeroBalance { get; private set; }
+        /// <summary>The plank touches the ground (sparks).</summary>
+        public bool Bottoming { get; private set; }
+        /// <summary>Cockpit steering-wheel rotation in degrees (+ = clockwise).</summary>
+        public float SteeringWheelAngleDeg => SteerAngle * ApexMath.Rad2Deg * setup.steeringWheelRatio;
 
         public event Action<int> GearChanged;
 
         float tcCut;
+        float engineOmega;
+        bool clutchLocked;
+        float lastRatio;
         float reverseTimer;
         bool shiftUpRequested;
         bool shiftDownRequested;
@@ -92,13 +124,32 @@ namespace Apex.Vehicle
             }
             gearbox.Reset(1);
             EngineRpm = engine.idleRpm;
+            engineOmega = engine.idleRpm * RpmToRad;
+            clutchLocked = false;
+            lastRatio = gearbox.TotalRatio;
+            DownforceFront = DownforceRear = Drag = 0f;
+            FloorGain = 1f;
             tcCut = 0f;
             reverseTimer = 0f;
             SteerAngle = 0f;
             throttle = brake = steer = 0f;
         }
 
+        const float RpmToRad = ApexMath.Tau / 60f;
+
         public TireModel TireFor(WheelState w) => w.front ? tireFront : tireRear;
+
+        /// <summary>Matches engine speed to the driven wheels with the clutch closed
+        /// (for placing a car at speed, e.g. rolling starts and test rigs).</summary>
+        public void SyncEngineToWheels()
+        {
+            float ratio = gearbox.TotalRatio;
+            float w = (wheels[2].omega + wheels[3].omega) * 0.5f * ratio;
+            engineOmega = MathF.Max(w, engine.idleRpm * RpmToRad);
+            EngineRpm = engineOmega / RpmToRad;
+            lastRatio = ratio;
+            clutchLocked = ratio != 0f && w >= engine.idleRpm * RpmToRad;
+        }
 
         /// <summary>Fits a fresh set of tires (pit stop / session start).</summary>
         public void FitTires(TireCompound compound, float startTemp = float.NaN)
@@ -170,16 +221,12 @@ namespace Apex.Vehicle
                 w.slipAngle = ApexMath.Lerp(w.slipAngle, target, k);
             }
 
-            // --- Drivetrain -----------------------------------------------------
+            // --- Drivetrain: engine inertia + auto-clutch ---------------------------
             var rl = wheels[2];
             var rr = wheels[3];
-            float wheelRpm = (rl.omega + rr.omega) * 0.5f * 60f / ApexMath.Tau;
             float ratio = gearbox.TotalRatio;
-            float engagedRpm = MathF.Abs(wheelRpm * ratio);
-            bool clutchSlipping = gearbox.gear == 0 || engagedRpm < engine.idleRpm
-                                  || (throttleIn > 0.05f && engagedRpm < setup.launchRpm);
+            float eff = gearbox.efficiency;
             float effThrottle = throttleIn;
-            if (gearbox.IsShifting) effThrottle = 0f;
             if (ForwardSpeed > speedLimit)
             {
                 // Limiter: cut drive and brake gently back to the limit.
@@ -190,22 +237,47 @@ namespace Apex.Vehicle
             {
                 effThrottle *= ApexMath.Clamp01((speedLimit - ForwardSpeed) / 1.5f);
             }
-            float crankTorque = 0f;
-            if (clutchSlipping)
+            float inputOmega = (rl.omega + rr.omega) * 0.5f * ratio;
+            float inputRpm = inputOmega / RpmToRad;
+            float idleW = engine.idleRpm * RpmToRad;
+            bool shifting = gearbox.IsShifting;
+            // Auto-clutch clutchCap: open in neutral, while shifting and below idle
+            // (anti-stall); a launch clutchCap holds the engine near launch rpm and
+            // closes progressively as the car picks up speed.
+            float clutchCap;
+            bool launching = false;
+            if (gearbox.gear == 0 || shifting) clutchCap = 0f;
+            else if (throttleIn > 0.05f && inputRpm < setup.launchRpm)
             {
-                // Simcade auto-clutch: engine revs to a launch rpm and feeds torque.
-                float target = ApexMath.Lerp(engine.idleRpm, setup.launchRpm, ApexMath.Clamp01(throttleIn * 1.4f));
-                EngineRpm = ApexMath.MoveToward(EngineRpm, MathF.Max(target, engagedRpm), 25000f * dt);
-                if (gearbox.gear != 0 && effThrottle > 0f) crankTorque = engine.Torque(EngineRpm, effThrottle);
+                launching = true;
+                float launchT = engine.peakTorque * engine.CurveAt(setup.launchRpm) * throttleIn;
+                float closing = ApexMath.SmoothStep01(ApexMath.Clamp01((inputRpm - (setup.launchRpm - 2000f)) / 2000f));
+                clutchCap = ApexMath.Lerp(launchT, setup.clutchMaxTorque, closing);
             }
-            else
-            {
-                EngineRpm = MathF.Min(engagedRpm, engine.maxRpm);
-                crankTorque = engine.Torque(engagedRpm, effThrottle);
-            }
-            float axleTorque = crankTorque * ratio * gearbox.efficiency;
-            axleTorque = ApplyTractionControl(axleTorque, throttleIn, dt);
-
+            else if (inputOmega < idleW * 0.95f) clutchCap = 0f;
+            else clutchCap = setup.clutchMaxTorque;
+            // The clutch sticks while it can carry the engine torque; it slips when the
+            // engine overpowers it, when it opens, or right after a ratio change.
+            float engineTorqueNow = MathF.Abs(engine.Torque(engineOmega / RpmToRad, effThrottle));
+            if (ratio != lastRatio || clutchCap <= 0f || engineTorqueNow > clutchCap) clutchLocked = false;
+            lastRatio = ratio;
+            if (!clutchLocked && clutchCap > 0f && engineTorqueNow <= clutchCap && MathF.Abs(engineOmega - inputOmega) < 40f * RpmToRad)
+                clutchLocked = true;
+            ClutchSlipping = !clutchLocked && clutchCap > 0f;
+            // Engine-side target used by the governor when the clutch slips: launch rpm,
+            // idle, or (during a seamless shift) the new gear's input speed.
+            float governTarget = launching
+                ? ApexMath.Lerp(engine.idleRpm, setup.launchRpm, ApexMath.Clamp01(throttleIn * 1.4f)) * RpmToRad
+                : idleW;
+            if (shifting && gearbox.gear != 0) governTarget = MathF.Max(MathF.Abs(inputOmega), idleW);
+            // Traction control limits the torque reaching the axle (ignition cut).
+            float requested = clutchLocked
+                ? engine.Torque(engineOmega / RpmToRad, effThrottle) * ratio * eff
+                : clutchCap * MathF.Abs(ratio) * eff;
+            float limited = ApplyTractionControl(requested, throttleIn, dt);
+            float tcLimit = limited < requested ? limited : float.PositiveInfinity;
+            float engineReflected = engine.inertia * ratio * ratio * 0.5f;
+            LimiterActive = false;
             // --- Brakes with optional ABS ----------------------------------------
             // ABS limits each wheel's brake torque to what its tire can transmit at a
             // slip just below the peak (friction-circle share left after cornering),
@@ -243,8 +315,50 @@ namespace Apex.Vehicle
             float h = dt / subN;
             Span<float> fxSum = stackalloc float[4];
             Span<float> fySum = stackalloc float[4];
+            float engineSum = 0f;
             for (int s = 0; s < subN; s++)
             {
+                float axleTorque;
+                float rpm = engineOmega / RpmToRad;
+                if (clutchLocked)
+                {
+                    float te = engine.Torque(rpm, effThrottle);
+                    LimiterActive |= rpm >= engine.limiterRpm && effThrottle > 0f;
+                    axleTorque = te * ratio * eff;
+                    if (axleTorque > tcLimit) axleTorque = tcLimit;
+                }
+                else
+                {
+                    // Slipping clutch: Coulomb friction between engine and gearbox input.
+                    float wIn = (rl.omega + rr.omega) * 0.5f * ratio;
+                    float slip = engineOmega - wIn;
+                    float tc = clutchCap * MathF.Sign(slip);
+                    if (ratio != 0f && MathF.Abs(tc * ratio * eff) > tcLimit) tc = MathF.Sign(tc) * tcLimit / MathF.Abs(ratio * eff);
+                    axleTorque = tc * ratio * eff;
+                    float drive;
+                    if (shifting)
+                        drive = ApexMath.Clamp(engine.inertia * 400f * (governTarget - engineOmega), -engine.shiftSyncTorque, engine.shiftSyncTorque);
+                    else
+                    {
+                        float te = engine.Torque(rpm, effThrottle);
+                        float govern = tc + engine.inertia * 30f * (governTarget - engineOmega);
+                        // Launch governor / idle control hold the target rpm.
+                        if (launching) drive = MathF.Min(te, govern);
+                        else if (effThrottle < 0.05f) drive = MathF.Max(te, MathF.Min(govern, engine.peakTorque * 0.3f));
+                        else drive = te;
+                        LimiterActive |= rpm >= engine.limiterRpm && effThrottle > 0f;
+                    }
+                    float newEngine = engineOmega + (drive - tc) / engine.inertia * h;
+                    newEngine = ApexMath.Clamp(newEngine, idleW * 0.9f, engine.maxRpm * RpmToRad);
+                    // Lock-up once the slip changes sign and the clutch can hold the engine.
+                    if (clutchCap > 0f && MathF.Sign(newEngine - wIn) != MathF.Sign(slip)
+                        && MathF.Abs(engine.Torque(newEngine / RpmToRad, effThrottle)) <= clutchCap)
+                    {
+                        clutchLocked = true;
+                        newEngine = wIn;
+                    }
+                    engineOmega = newEngine;
+                }
                 // Open-diff split plus a clutch-type locking torque (LSD).
                 float dw = rl.omega - rr.omega;
                 float lockCap = setup.diffPreload + setup.diffLockRatio * MathF.Abs(axleTorque);
@@ -265,16 +379,21 @@ namespace Apex.Vehicle
                     }
                     float rolling = SurfaceProperties.For(w.surface).rollingDrag * w.load * w.radius * MathF.Sign(w.omega);
                     float torque = w.driveTorque - fx * w.radius - rolling;
-                    float newOmega = w.omega + torque / w.inertia * h;
+                    // A locked clutch couples the engine's inertia to the driven wheels.
+                    float inertia = w.inertia + (clutchLocked && !w.front ? engineReflected : 0f);
+                    float newOmega = w.omega + torque / inertia * h;
                     // Brakes oppose rotation but never reverse it.
-                    float brakeDw = w.brakeTorque / w.inertia * h;
+                    float brakeDw = w.brakeTorque / inertia * h;
                     if (MathF.Abs(newOmega) <= brakeDw) newOmega = 0f;
                     else newOmega -= MathF.Sign(newOmega) * brakeDw;
                     w.omega = newOmega;
                     fxSum[i] += fx;
                     fySum[i] += fy;
                 }
+                if (clutchLocked) engineOmega = MathF.Max((rl.omega + rr.omega) * 0.5f * ratio, idleW * 0.9f);
+                engineSum += engineOmega;
             }
+            EngineRpm = MathF.Max(engineSum / subN / RpmToRad, 0f);
             for (int i = 0; i < 4; i++)
             {
                 var w = wheels[i];
@@ -291,12 +410,43 @@ namespace Apex.Vehicle
                 }
             }
 
-            // --- Aerodynamics ---------------------------------------------------------
+            UpdateAero();
+        }
+
+        /// <summary>
+        /// Wings plus a ground-effect floor: floor downforce rises as the mean ride
+        /// height drops (power law around a reference height), stalls when the plank
+        /// nears the ground, and the aero balance moves forward when the car dives
+        /// (rake increase). Ride heights come from the suspension compression.
+        /// </summary>
+        void UpdateAero()
+        {
+            float cf = 0f, cr = 0f;
+            int nf = 0, nr = 0;
+            foreach (var w in wheels)
+            {
+                // An airborne wheel means the corner of the car is high: full extension.
+                float dc = (w.contact ? w.compression + w.roadOffset : 0f) - w.staticCompression;
+                if (w.front) { cf += dc; nf++; } else { cr += dc; nr++; }
+            }
+            RideHeightFront = setup.rideHeightFront - cf / nf;
+            RideHeightRear = setup.rideHeightRear - cr / nr;
+            float hMean = 0.5f * (RideHeightFront + RideHeightRear);
+            float gain = MathF.Pow(setup.floorReferenceHeight / MathF.Max(hMean, 0.004f), setup.groundEffectExponent);
+            gain = MathF.Min(gain, setup.floorMaxGain);
+            if (hMean < setup.floorStallHeight)
+                gain *= 1f - setup.floorStallLoss * ApexMath.Clamp01(1f - MathF.Max(hMean, 0f) / setup.floorStallHeight);
+            FloorGain = gain;
+            Bottoming = MathF.Min(RideHeightFront, RideHeightRear) < 0f;
+            float rakeChange = (RideHeightRear - RideHeightFront) - (setup.rideHeightRear - setup.rideHeightFront);
+            AeroBalance = ApexMath.Clamp(setup.aeroBalanceFront + setup.aeroRakeSensitivity * rakeChange, setup.aeroBalanceFront - 0.06f, setup.aeroBalanceFront + 0.06f);
             float q = 0.5f * setup.airDensity * ForwardSpeed * ForwardSpeed;
-            float downforce = setup.downforceArea * q;
-            DownforceFront = downforce * setup.aeroBalanceFront;
-            DownforceRear = downforce * (1f - setup.aeroBalanceFront);
-            Drag = setup.dragArea * 0.5f * setup.airDensity * Speed * Speed;
+            float cla = setup.downforceArea * (1f - setup.floorShare + setup.floorShare * gain);
+            float downforce = cla * q;
+            DownforceFront = downforce * AeroBalance;
+            DownforceRear = downforce * (1f - AeroBalance);
+            float induced = 1f + setup.inducedDragFactor * MathF.Max(0f, gain - 1f);
+            Drag = setup.dragArea * induced * 0.5f * setup.airDensity * Speed * Speed;
         }
 
         void ComputeLoads(float dt)
@@ -309,9 +459,20 @@ namespace Apex.Vehicle
                 var props = SurfaceProperties.For(w.surface);
                 float tireGrip = simulateTires ? tires[w.index].GripMultiplier(trackWetness) : 1f;
                 w.grip = props.grip * w.conditionGrip * tireGrip;
+                // Surface texture (kerb ripples, grass, gravel) excites the suspension.
+                // Its frequency is capped well below the 120 Hz step to avoid aliasing.
+                if (props.textureAmplitude > 0f && w.contact)
+                {
+                    float freq = MathF.Min(MathF.Abs(w.longitudinalVelocity) / props.textureWavelength, 24f);
+                    w.roadPhase = ApexMath.PosMod(w.roadPhase + freq * ApexMath.Tau * dt, ApexMath.Tau);
+                    float speedFade = ApexMath.Clamp01(MathF.Abs(w.longitudinalVelocity) / 4f);
+                    w.roadOffset = props.textureAmplitude * speedFade * 0.5f * (1f + MathF.Sin(w.roadPhase));
+                }
+                else w.roadOffset = 0f;
                 if (w.loadOverride >= 0f)
                 {
-                    w.load = w.loadOverride;
+                    // Test rigs prescribe the load; the texture still adds spring force.
+                    w.load = MathF.Max(0f, w.loadOverride + w.spring * w.roadOffset);
                     w.prevCompression = w.compression;
                     continue;
                 }
@@ -321,12 +482,13 @@ namespace Apex.Vehicle
                     w.prevCompression = w.compression;
                     continue;
                 }
-                float compVel = (w.compression - w.prevCompression) / dt;
-                w.prevCompression = w.compression;
-                float force = w.spring * w.compression;
+                float comp = w.compression + w.roadOffset;
+                float compVel = (comp - w.prevCompression) / dt;
+                w.prevCompression = comp;
+                float force = w.spring * comp;
                 force += (compVel > 0f ? setup.damperBump : setup.damperRebound) * compVel;
-                if (w.compression > setup.suspensionTravel)
-                    force += setup.bumpStopRate * (w.compression - setup.suspensionTravel);
+                if (comp > setup.suspensionTravel)
+                    force += setup.bumpStopRate * (comp - setup.suspensionTravel);
                 float arb = w.front ? arbFront : arbRear;
                 force += w.left ? arb : -arb;
                 w.load = MathF.Max(0f, force) * MathF.Max(w.normalAlignment, 0f);
@@ -388,7 +550,8 @@ namespace Apex.Vehicle
         public float CurrentMaxLock()
         {
             float maxLock = setup.maxSteerAngleDeg * ApexMath.Deg2Rad;
-            if (!assistSteering) return maxLock;
+            float strength = ApexMath.Clamp01(steeringAssist);
+            if (strength <= 0f) return maxLock;
             float v = MathF.Abs(ForwardSpeed);
             float t = ApexMath.Clamp01(v / setup.steerAssistSpeed);
             float faded = ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
@@ -396,16 +559,21 @@ namespace Apex.Vehicle
             float downforcePerMass = 0.5f * setup.airDensity * v * v * setup.downforceArea / setup.mass;
             float aMax = tireFront.muPeak * 0.9f * (9.81f + downforcePerMass);
             float gripLimit = MathF.Atan(setup.wheelbase * aMax / (v * v)) + tireFront.slipAnglePeak * 0.9f;
-            return MathF.Min(faded, gripLimit);
+            // Lighter assist leaves headroom past the grip limit: the driver can
+            // overdrive the front (understeer) or load up the rear.
+            float headroom = 1f + 0.8f * (1f - strength);
+            return MathF.Min(maxLock, MathF.Min(faded, gripLimit) * headroom);
         }
 
         /// <summary>Rack speed (rad/s): slower at speed with the assist so digital input cannot snap the car.</summary>
         float CurrentRackRate()
         {
             float fast = setup.steerRateDeg * ApexMath.Deg2Rad;
-            if (!assistSteering) return fast;
+            float strength = ApexMath.Clamp01(steeringAssist);
+            if (strength <= 0f) return fast;
             float t = ApexMath.Clamp01(MathF.Abs(ForwardSpeed) / 55f);
-            return ApexMath.Lerp(fast, setup.steerRateHighSpeedDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
+            float slow = ApexMath.Lerp(fast, setup.steerRateHighSpeedDeg * ApexMath.Deg2Rad, strength);
+            return ApexMath.Lerp(fast, slow, ApexMath.SmoothStep01(t));
         }
 
         /// <summary>Counter-steer added by the assist when the rear slides past its limit (rad, + = right).</summary>
@@ -431,7 +599,7 @@ namespace Apex.Vehicle
                 // 100 % only count it when the rear is working harder than the front.
                 bool sliding = MathF.Abs(ar) > tireRear.slipAnglePeak || MathF.Abs(ar) > MathF.Abs(af) * 0.9f;
                 if (excess > 0f && sliding)
-                    cs = MathF.Sign(ar) * MathF.Min(excess * setup.counterSteerGain, setup.maxSteerAngleDeg * ApexMath.Deg2Rad);
+                    cs = MathF.Sign(ar) * MathF.Min(excess * setup.counterSteerGain * ApexMath.Clamp01(steeringAssist), setup.maxSteerAngleDeg * ApexMath.Deg2Rad);
             }
             CounterSteer = ApexMath.MoveToward(CounterSteer, cs, 6f * dt);
             target = ApexMath.Clamp(target + CounterSteer, -setup.maxSteerAngleDeg * ApexMath.Deg2Rad, setup.maxSteerAngleDeg * ApexMath.Deg2Rad);
@@ -455,6 +623,9 @@ namespace Apex.Vehicle
         /// trim if measured slip still exceeds the threshold. Catches launch
         /// wheelspin and mid-corner power oversteer without bang-bang oscillation.
         /// </summary>
+        /// <summary>Allowed combined slip relative to the setup threshold per TC level.</summary>
+        public static float TcLevelScale(int level) => level <= 1 ? 1.15f : level == 2 ? 1f : 0.88f;
+
         float ApplyTractionControl(float axleTorque, float throttleIn, float dt)
         {
             TcActive = false;
@@ -463,7 +634,8 @@ namespace Apex.Vehicle
                 tcCut = ApexMath.MoveToward(tcCut, 0f, 6f * dt);
                 return axleTorque;
             }
-            float target = setup.tcCombinedThreshold * 0.92f;
+            float threshold = setup.tcCombinedThreshold * TcLevelScale(tractionLevel);
+            float target = threshold * 0.92f;
             var tire = tireRear;
             float tanPeak = MathF.Tan(tire.slipAnglePeak);
             float capacity = 0f;
@@ -479,10 +651,14 @@ namespace Apex.Vehicle
             }
             // Feedback trim on top of the feed-forward limit.
             // (Below ~3 m/s slip ratio is ill-defined, so only the feed-forward acts.)
-            if (measured > setup.tcCombinedThreshold && Speed > 3f)
+            if (measured > threshold && Speed > 3f)
                 tcCut = ApexMath.MoveToward(tcCut, 0.6f, 3f * dt);
             else
                 tcCut = ApexMath.MoveToward(tcCut, 0f, 4f * dt);
+            // A wheel already past the peak only transmits the sliding force; limit to
+            // less than that so it spins back down (also works below 3 m/s).
+            if (measured > threshold)
+                capacity *= 0.85f * tire.Curve(measured) / tire.Curve(target);
             float limit = capacity * (1f - tcCut);
             if (axleTorque > limit)
             {

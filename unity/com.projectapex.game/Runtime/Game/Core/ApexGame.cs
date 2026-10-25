@@ -399,9 +399,10 @@ namespace Apex.Game
         {
             if (Race == null) return;
             var sim = Race.Player.Sim;
-            sim.assistTraction = Settings.tractionControl;
+            sim.tractionLevel = Settings.tractionLevel;
             sim.assistAbs = Settings.abs;
-            sim.assistSteering = Settings.steeringAssist;
+            sim.steeringAssist = Settings.SteeringAssistStrength;
+            sim.setup.brakeBiasFront = Settings.brakeBiasFront;
             sim.autoGearbox = Settings.autoGearbox;
             input.manualGears = !sim.autoGearbox;
             Race.PitAssist = Settings.pitAssist;

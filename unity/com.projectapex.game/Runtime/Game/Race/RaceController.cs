@@ -123,6 +123,8 @@ namespace Apex.Game
                 var accent = new Color(team.ar, team.ag, team.ab);
                 rc.car = CarBuilder.Build((rc.isPlayer ? "Player_" : "AI_") + rc.code, new VehicleSetup(), primary, accent);
                 rc.car.transform.SetParent(transform, false);
+                var visuals = rc.car.GetComponent<CarVisuals>();
+                if (visuals != null) visuals.detailed = rc.isPlayer;
                 var pose = circuit.GridPose(slot, rc.car.setup.cogHeight + 0.05f);
                 rc.car.ResetTo(pose.position, pose.rotation);
                 var sim = rc.Sim;

@@ -25,7 +25,12 @@ Input System, UI). Details: `docs/TECHNICAL_DESIGN.md`.
 tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Tests aus, kompiliert Runtime + Editor
 ```
 - Tests einzeln: `cd build/Apex.Simulation.Tests && dotnet test`
-- Fahrdynamik-Diagnose: `cd build/Apex.Tuning && dotnet run -c Release -- launch|brake|lap <track_id> [trace]`
+- Fahrdynamik-Diagnose: `cd build/Apex.Tuning && dotnet run -c Release -- launch|brake|aero|validate|lap <track_id> [trace]`
+  (`validate` erzeugt den Bericht für `docs/HANDLING_VALIDATION.md`).
+- Fahrzeuggeometrie ohne Unity: `cd build/Apex.ModelPreview && dotnet run -c Release -- <out_dir>`, dann
+  `python3 tools/render_car_preview.py <out_dir>/car_lod0.obj <bild.png> 0,0.47,0.02` (mit Cockpit-Ansicht).
+  Unity-Konvention: Vorderseite, wenn `cross(b−a, c−a)` zum Betrachter zeigt.
+- Prozedurale Fahrzeuggeometrie ist Platzhalter-Art und wird nicht als fotorealistisch bezeichnet.
 - In Unity: Window → General → Test Runner → EditMode (das Paket steht in `testables`).
 - Die Kompiliertests laufen gegen UnityEngine-2021.3- und UnityEditor-2021.1-Referenzen. Code hinter
   `#if UNITY_6000_0_OR_NEWER` prüft erst der Unity-6-Editor.
