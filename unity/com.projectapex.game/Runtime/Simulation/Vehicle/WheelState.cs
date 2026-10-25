@@ -47,6 +47,10 @@ namespace Apex.Vehicle
         public float driveTorque;
         public float brakeTorque;
         public float grip = 1f;
+        /// <summary>Extra suspension compression from surface texture (kerb ripple), m.</summary>
+        public float roadOffset;
+        /// <summary>Road-texture phase (rad) advanced by rolling distance.</summary>
+        public float roadPhase;
 
         public float SpringLength(float travel) => travel - compression;
 
@@ -71,6 +75,7 @@ namespace Apex.Vehicle
             slipAngle = 0f;
             fx = 0f;
             fy = 0f;
+            roadOffset = 0f;
             prevCompression = compression;
         }
     }

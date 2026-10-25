@@ -47,19 +47,28 @@ namespace Apex.Vehicle
             sim.Reset();
         }
 
+        /// <summary>Sets a rolling start: forward speed, free-rolling wheels, gear, synced engine.</summary>
+        public void SetSpeed(float forwardSpeed, int gear)
+        {
+            u = forwardSpeed;
+            foreach (var w in sim.wheels) w.omega = forwardSpeed / w.radius;
+            sim.gearbox.gear = gear;
+            sim.SyncEngineToWheels();
+        }
+
         public void Step(float dt)
         {
             var s = sim.setup;
             sim.PreStep(dt, u, Speed);
             float m = s.mass;
             float g = 9.81f;
-            float q = 0.5f * s.airDensity * u * u * s.downforceArea;
             float longTransfer = m * ax * s.cogHeight / s.wheelbase;
             for (int i = 0; i < 4; i++)
             {
                 var w = sim.wheels[i];
                 float axleStatic = m * g * (w.front ? s.weightFront : 1f - s.weightFront) * 0.5f;
-                float aero = q * (w.front ? s.aeroBalanceFront : 1f - s.aeroBalanceFront) * 0.5f;
+                // Aero load from the previous step (ride-height dependent ground effect).
+                float aero = (w.front ? sim.DownforceFront : sim.DownforceRear) * 0.5f;
                 float lt = (w.front ? -longTransfer : longTransfer) * 0.5f;
                 float track = w.front ? s.trackFront : s.trackRear;
                 float share = w.front ? frontRollShare : 1f - frontRollShare;
@@ -67,6 +76,8 @@ namespace Apex.Vehicle
                 float latT = m * ay * s.cogHeight / track * share;
                 w.loadOverride = MathF.Max(0f, axleStatic + aero + lt + (w.left ? latT : -latT));
                 w.contact = true;
+                // Quasi-static ride height: the spring carries the wheel load.
+                w.compression = w.loadOverride / w.spring;
                 float px = w.mount.X, pz = w.mount.Z;
                 float ui = u - yawRate * px;
                 float vi = v + yawRate * pz;

@@ -52,11 +52,13 @@ namespace Apex.Vehicle
         /// <summary>Counter-steer assist gain (rad of wheel angle per rad of excess rear slip).</summary>
         public float counterSteerGain = 1.2f;
         public float ackermann = 0.12f;
+        /// <summary>Steering-wheel rotation per unit of road-wheel angle (cockpit wheel and hands).</summary>
+        public float steeringWheelRatio = 5f;
         public float tireRelaxationLength = 0.35f;
         public int wheelSubsteps = 6;
 
         // Brakes
-        public float maxBrakeTorque = 5200f;
+        public float maxBrakeTorque = 4000f;
         public float brakeBiasFront = 0.57f;
 
         // Aero
@@ -65,11 +67,34 @@ namespace Apex.Vehicle
         public float aeroBalanceFront = 0.43f;
         public float airDensity = 1.225f;
 
+        // Ground effect (approximation, see docs/PHYSICS_MODEL.md)
+        /// <summary>Share of <see cref="downforceArea"/> produced by the floor at the reference ride height.</summary>
+        public float floorShare = 0.5f;
+        /// <summary>Plank-to-ground height at static load, front and rear (rake) in metres.</summary>
+        public float rideHeightFront = 0.035f;
+        public float rideHeightRear = 0.075f;
+        /// <summary>Mean ride height at which the floor delivers its nominal share
+        /// (typical at ~150 km/h, the speed the racing line is planned around); lower is stronger, higher is weaker.</summary>
+        public float floorReferenceHeight = 0.045f;
+        /// <summary>Floor downforce scales with (reference / ride height)^exponent.</summary>
+        public float groundEffectExponent = 0.3f;
+        public float floorMaxGain = 1.6f;
+        /// <summary>Below this mean height the floor flow starts to stall.</summary>
+        public float floorStallHeight = 0.01f;
+        /// <summary>Fraction of floor downforce lost when the plank is on the ground.</summary>
+        public float floorStallLoss = 0.3f;
+        /// <summary>Front aero balance shift per metre of rake change (dive moves it forward).</summary>
+        public float aeroRakeSensitivity = 1.0f;
+        /// <summary>Extra drag per unit of floor gain above nominal (induced drag).</summary>
+        public float inducedDragFactor = 0.05f;
+
         // Drivetrain
         public float diffLockRate = 220f;
         public float diffPreload = 120f;
         public float diffLockRatio = 0.35f;
         public float launchRpm = 7500f;
+        /// <summary>Torque capacity of the fully closed clutch (N·m).</summary>
+        public float clutchMaxTorque = 1400f;
 
         // Assists
         /// <summary>TC acts when a driven tire's combined normalised slip exceeds this (1 = grip peak).</summary>

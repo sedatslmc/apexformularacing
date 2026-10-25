@@ -20,6 +20,11 @@ namespace Apex.Vehicle
         };
         /// <summary>Closed-throttle braking torque at max rpm (N·m).</summary>
         public float engineBrakeTorque = 110f;
+        /// <summary>Rotating inertia of crank, flywheel and clutch (kg·m²).</summary>
+        public float inertia = 0.06f;
+        /// <summary>Torque available to match revs during a seamless shift (ignition cut
+        /// on upshifts, throttle blip on downshifts), N·m.</summary>
+        public float shiftSyncTorque = 450f;
 
         public float CurveAt(float rpm)
         {
