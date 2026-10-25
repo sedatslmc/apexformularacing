@@ -1,0 +1,45 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/gameplay/race_session.gd" id="1_session"]
+[ext_resource type="Script" path="res://scripts/track/circuit.gd" id="2_circuit"]
+[ext_resource type="PackedScene" path="res://scenes/vehicles/formula_car.tscn" id="3_car"]
+[ext_resource type="Script" path="res://scripts/camera/race_camera.gd" id="4_camera"]
+[ext_resource type="Script" path="res://scripts/ui/hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/ui/touch_controls.gd" id="6_touch"]
+[ext_resource type="Script" path="res://scripts/ui/pause_menu.gd" id="7_pause"]
+[ext_resource type="Script" path="res://scripts/audio/car_audio.gd" id="8_audio"]
+
+[node name="RaceSession" type="Node3D"]
+script = ExtResource("1_session")
+
+[node name="Circuit" type="Node3D" parent="."]
+script = ExtResource("2_circuit")
+
+[node name="FormulaCar" parent="." instance=ExtResource("3_car")]
+
+[node name="CarAudio" type="Node" parent="FormulaCar"]
+script = ExtResource("8_audio")
+
+[node name="RaceCamera" type="Camera3D" parent="."]
+current = true
+far = 2500.0
+script = ExtResource("4_camera")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+script = ExtResource("5_hud")
+
+[node name="TouchLayer" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="TouchControls" type="Control" parent="TouchLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("6_touch")
+
+[node name="PauseMenu" type="CanvasLayer" parent="."]
+script = ExtResource("7_pause")

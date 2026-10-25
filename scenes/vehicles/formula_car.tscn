@@ -1,0 +1,43 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/vehicle/formula_car.gd" id="1_car"]
+[ext_resource type="Script" path="res://scripts/vehicle/car_visual.gd" id="2_visual"]
+
+[sub_resource type="PhysicsMaterial" id="PhysicsMaterial_body"]
+friction = 0.3
+bounce = 0.1
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_body"]
+size = Vector3(1.0, 0.5, 5.2)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_wheel"]
+radius = 0.28
+
+[node name="FormulaCar" type="RigidBody3D"]
+collision_layer = 2
+collision_mask = 3
+physics_material_override = SubResource("PhysicsMaterial_body")
+script = ExtResource("1_car")
+
+[node name="BodyShape" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.01, 0)
+shape = SubResource("BoxShape3D_body")
+
+[node name="WheelShapeFL" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.81, 0.06, -1.98)
+shape = SubResource("SphereShape3D_wheel")
+
+[node name="WheelShapeFR" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.81, 0.06, -1.98)
+shape = SubResource("SphereShape3D_wheel")
+
+[node name="WheelShapeRL" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.78, 0.06, 1.62)
+shape = SubResource("SphereShape3D_wheel")
+
+[node name="WheelShapeRR" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.78, 0.06, 1.62)
+shape = SubResource("SphereShape3D_wheel")
+
+[node name="Visual" type="Node3D" parent="."]
+script = ExtResource("2_visual")
