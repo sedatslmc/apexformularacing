@@ -28,12 +28,20 @@ const views = {
   frontwing: { eye: '2.2,0.7,4.6', target: '0,-0.05,2.6', fov: 34 },
   cockpit: { eye: '0,0.47,0.02', target: '0,0.33,6', fov: 70 },
 };
+// Custom views: APEX_VIEWS='name:eye:target:fov:extra;...' (extra = &key=value pairs)
+if (process.env.APEX_VIEWS) {
+  for (const k of Object.keys(views)) delete views[k];
+  for (const spec of process.env.APEX_VIEWS.split(';')) {
+    const [name, eye, target, fov, extra] = spec.split('|');
+    views[name] = { eye, target, fov: +fov, extra: extra || '' };
+  }
+}
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('console', (m) => { if (m.type() === 'error') console.error('page:', m.text()); });
 for (const [name, v] of Object.entries(views)) {
   if (only && !only.split(',').includes(name)) continue;
-  await page.goto(`http://localhost:${port}/render.html?obj=/car.obj&eye=${v.eye}&target=${v.target}&fov=${v.fov}`);
+  await page.goto(`http://localhost:${port}/render.html?obj=/car.obj&eye=${v.eye}&target=${v.target}&fov=${v.fov}${v.extra || ''}`);
   await page.waitForFunction('window.renderDone === true', null, { timeout: 120000 });
   await page.locator('canvas').screenshot({ path: `${outPrefix}_${name}.png` });
   console.log('rendered', name);

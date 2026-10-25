@@ -12,6 +12,56 @@ using UnityEngine;
 // body material has inward-facing triangles overall (negative signed volume) or a LOD
 // exceeds its triangle budget.
 string outDir = args.Length > 0 ? args[0] : ".";
+if (Array.IndexOf(args, "--flag") >= 0)
+{
+    // Writes the flag raster as a binary PPM for visual checks.
+    int h = 400;
+    var px = Apex.Environment.TurkishFlagDesign.Rasterize(h);
+    int w = px.Length / 4 / h;
+    using var fs = File.Create(Path.Combine(outDir, "turkish_flag.ppm"));
+    var header = Encoding.ASCII.GetBytes($"P6 {w} {h} 255\n");
+    fs.Write(header, 0, header.Length);
+    for (int j = h - 1; j >= 0; j--)
+        for (int i = 0; i < w; i++) { int k = (j * w + i) * 4; fs.WriteByte(px[k]); fs.WriteByte(px[k + 1]); fs.WriteByte(px[k + 2]); }
+    return;
+}
+if (Array.IndexOf(args, "--landmarks") >= 0)
+{
+    // One OBJ per landmark, each at the origin, for inspection renders.
+    void Export(string name, System.Action<LandmarkGeometry> build)
+    {
+        var lg = new LandmarkGeometry();
+        build(lg);
+        var sbl = new StringBuilder();
+        int vb = 1, tr = 0;
+        foreach (var kv in lg.parts)
+        {
+            sbl.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+            var mbx = kv.Value;
+            var ns = mbx.ComputeNormals();
+            foreach (var v in mbx.Vertices) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F3} {1:F3} {2:F3}", v.x, v.y, v.z));
+            foreach (var nn in ns) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "vn {0:F3} {1:F3} {2:F3}", nn.x, nn.y, nn.z));
+            var ts = mbx.Triangles;
+            for (int i = 0; i < ts.Count; i += 3) sbl.AppendLine($"f {ts[i] + vb}//{ts[i] + vb} {ts[i + 1] + vb}//{ts[i + 1] + vb} {ts[i + 2] + vb}//{ts[i + 2] + vb}");
+            vb += mbx.VertexCount;
+            tr += ts.Count / 3;
+            float vol = SignedVolumeOf(mbx.ToMesh(kv.Key));
+            Console.WriteLine(string.Format(CultureInfo.InvariantCulture, "  {0,-14} {1,-12} tris {2,6} volume {3,12:F1}", name, kv.Key, ts.Count / 3, vol));
+        }
+        File.WriteAllText(Path.Combine(outDir, name + ".obj"), sbl.ToString());
+        Console.WriteLine($"{name}: {tr} triangles");
+    }
+    Export("bridge", l => l.Bridge(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f));
+    Export("ortakoy", l => l.OrtakoyMosque());
+    Export("dolmabahce", l => { l.Palace(284f, 48f, 18f, true); });
+    Export("galata", l => l.GalataTower(63f));
+    Export("maiden", l => l.MaidensTower());
+    Export("sultanahmet", l => l.ImperialMosque(11.7f, 26f, 6, 64f, LandmarkGeometry.Stone));
+    Export("hagiasophia", l => l.ImperialMosque(15.5f, 34f, 4, 60f, LandmarkGeometry.HagiaPlaster));
+    Export("ferry", l => l.Ferry());
+    Export("freighter", l => l.Freighter());
+    return;
+}
 bool primitivesOnly = Array.IndexOf(args, "--primitives") >= 0;
 bool primitiveFailed = false;
 if (primitivesOnly || Array.IndexOf(args, "--check") >= 0)
@@ -34,6 +84,7 @@ if (primitivesOnly || Array.IndexOf(args, "--check") >= 0)
     Vol("loft-desc", mb => mb.Loft(new[] { new LoftSection(1f, 0f, 0.2f, 0.2f), new LoftSection(0f, 0f, 0.2f, 0.2f) }, 12));
     Vol("loft-asc", mb => mb.Loft(new[] { new LoftSection(0f, 0f, 0.2f, 0.2f), new LoftSection(1f, 0f, 0.2f, 0.2f) }, 12));
     Vol("lathe", mb => mb.Lathe(new[] { new Vector2(-0.1f, 0.001f), new Vector2(-0.1f, 0.3f), new Vector2(0.1f, 0.3f), new Vector2(0.1f, 0.001f) }, 16));
+    Vol("vlathe", mb => LandmarkGeometry.VerticalLathe(mb, Vector3.zero, new[] { new Vector2(0f, 0.001f), new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0.001f) }, 16));
     if (primitivesOnly) return;
 }
 bool check = Array.IndexOf(args, "--check") >= 0;

@@ -970,10 +970,11 @@ namespace Apex.Game
                     display.Box(new Vector3(s * 0.035f + s * (y < -0.03f ? 0.02f : 0f), y, -0.027f), new Vector3(0.016f, 0.016f, 0.008f));
         }
 
-        /// <summary>Rotates the last vertexCount vertices from the lathe's x axis to -z and moves them to position.</summary>
+        /// <summary>Rotates the last vertexCount vertices from the lathe's x axis to z and moves them to position.</summary>
         static void MoveLast(MeshBuilder mb, Vector3 position, int vertexCount)
         {
-            mb.TransformLast(vertexCount, v => position + new Vector3(v.y, v.z, -v.x));
+            // (x, y, z) -> (y, z, x) is a proper rotation (determinant +1), so the faces keep facing out.
+            mb.TransformLast(vertexCount, v => position + new Vector3(v.y, v.z, v.x));
         }
 
         /// <summary>Gloved hand wrapped around a vertical grip (local y along the grip, -z towards the driver).</summary>

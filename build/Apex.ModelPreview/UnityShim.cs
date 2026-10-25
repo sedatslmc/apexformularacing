@@ -54,6 +54,21 @@ namespace UnityEngine
         static Quaternion Axis(Vector3 a, float deg) { float h = deg * MathF.PI / 360f; float s = MathF.Sin(h); return new Quaternion(a.x * s, a.y * s, a.z * s, MathF.Cos(h)); }
         // Unity applies Euler rotations in Z, X, Y order (q = qy * qx * qz).
         public static Quaternion Euler(float ex, float ey, float ez) => Axis(Vector3.up, ey) * Axis(Vector3.right, ex) * Axis(Vector3.forward, ez);
+        /// <summary>Rotation whose +z points along forward with +y near up (Unity semantics).</summary>
+        public static Quaternion LookRotation(Vector3 forward, Vector3 up)
+        {
+            var f = forward.normalized;
+            var r = Vector3.Cross(up, f).normalized;
+            var u = Vector3.Cross(f, r);
+            float m00 = r.x, m01 = u.x, m02 = f.x, m10 = r.y, m11 = u.y, m12 = f.y, m20 = r.z, m21 = u.z, m22 = f.z;
+            float tr = m00 + m11 + m22;
+            if (tr > 0f) { float s = MathF.Sqrt(tr + 1f) * 2f; return new Quaternion((m21 - m12) / s, (m02 - m20) / s, (m10 - m01) / s, 0.25f * s); }
+            if (m00 > m11 && m00 > m22) { float s = MathF.Sqrt(1f + m00 - m11 - m22) * 2f; return new Quaternion(0.25f * s, (m01 + m10) / s, (m02 + m20) / s, (m21 - m12) / s); }
+            if (m11 > m22) { float s = MathF.Sqrt(1f + m11 - m00 - m22) * 2f; return new Quaternion((m01 + m10) / s, 0.25f * s, (m12 + m21) / s, (m02 - m20) / s); }
+            { float s = MathF.Sqrt(1f + m22 - m00 - m11) * 2f; return new Quaternion((m02 + m20) / s, (m12 + m21) / s, 0.25f * s, (m10 - m01) / s); }
+        }
+        public static Quaternion LookRotation(Vector3 forward) => LookRotation(forward, Vector3.up);
+
         public static Quaternion operator *(Quaternion a, Quaternion b) => new Quaternion(
             a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
             a.w * b.y + a.y * b.w + a.z * b.x - a.x * b.z,
