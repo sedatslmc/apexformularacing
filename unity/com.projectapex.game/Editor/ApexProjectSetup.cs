@@ -83,6 +83,21 @@ namespace Apex.EditorTools
                 if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) continue;
                 AssetDatabase.CreateAsset(ApexMaterials.Create(key), path);
             }
+            string rainPath = $"{MaterialFolder}/Rain.mat";
+            if (AssetDatabase.LoadAssetAtPath<Material>(rainPath) == null)
+            {
+                var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+                if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
+                if (shader == null) shader = Shader.Find("Sprites/Default");
+                if (shader != null)
+                {
+                    var rain = new Material(shader);
+                    var c = new Color(0.8f, 0.85f, 0.95f, 0.45f);
+                    if (rain.HasProperty("_BaseColor")) rain.SetColor("_BaseColor", c);
+                    if (rain.HasProperty("_Color")) rain.SetColor("_Color", c);
+                    AssetDatabase.CreateAsset(rain, rainPath);
+                }
+            }
             string skyPath = $"{MaterialFolder}/Sky.mat";
             if (AssetDatabase.LoadAssetAtPath<Material>(skyPath) == null)
             {

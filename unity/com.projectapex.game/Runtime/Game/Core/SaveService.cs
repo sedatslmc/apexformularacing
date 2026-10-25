@@ -54,6 +54,46 @@ namespace Apex.Game
             }
         }
 
+        /// <summary>Generic versioned-JSON load with .bak fallback (career, session config).</summary>
+        public static T Load<T>(string fileName, Func<T> fallback) where T : class
+        {
+            string path = Path.Combine(Dir, fileName);
+            foreach (var p in new[] { path, path + ".bak" })
+            {
+                try
+                {
+                    if (!File.Exists(p)) continue;
+                    var data = JsonUtility.FromJson<T>(File.ReadAllText(p));
+                    if (data != null) return data;
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning($"[Apex] Could not read {p}: {e.Message}");
+                }
+            }
+            return fallback();
+        }
+
+        public static bool Save<T>(string fileName, T data)
+        {
+            string path = Path.Combine(Dir, fileName);
+            try
+            {
+                Directory.CreateDirectory(Dir);
+                string tmp = path + ".tmp";
+                File.WriteAllText(tmp, JsonUtility.ToJson(data, true));
+                if (File.Exists(path)) File.Copy(path, path + ".bak", true);
+                File.Copy(tmp, path, true);
+                File.Delete(tmp);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Apex] Saving {fileName} failed: {e.Message}");
+                return false;
+            }
+        }
+
         [Serializable]
         class BestLapTable
         {

@@ -17,6 +17,7 @@ namespace Apex.Game
         {
             ["Asphalt"] = new Color(0.22f, 0.22f, 0.24f),
             ["Line"] = new Color(0.92f, 0.92f, 0.92f),
+            ["PitLane"] = new Color(0.3f, 0.3f, 0.32f),
             ["KerbRed"] = new Color(0.78f, 0.1f, 0.08f),
             ["KerbWhite"] = new Color(0.94f, 0.94f, 0.94f),
             ["Grass"] = new Color(0.3f, 0.47f, 0.19f),
