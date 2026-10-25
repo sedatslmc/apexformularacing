@@ -1,60 +1,61 @@
-# Bosphorus Grand Prix: Referenz- und Blockout-Plan (Entwurf v0.1)
+# Bosphorus Grand Prix: Referenz- und Blockout-Plan (Layout v0.2)
 
-Status: **Vorschlag**. Alle Maße sind fiktive, abstimmbare Designziele. Nichts ist georeferenziert oder vermessen. Die Strecke ist ein fiktiver, temporär gesperrter Rennkorridor, inspiriert vom europäischen Bosporus-Ufer bei Beşiktaş und Ortaköy. Sie behauptet nicht, dass diese Straßen, Breiten oder Kurven real existieren.
+Status: **Layout v0.2 implementiert und automatisiert getestet; als Graybox fahrbar.** Alle Maße sind fiktive, abstimmbare Designziele. Nichts ist georeferenziert oder vermessen. Die Strecke ist ein fiktiver, temporär gesperrter Rennkorridor, inspiriert vom europäischen Bosporus-Ufer bei Beşiktaş und Ortaköy. Sie behauptet nicht, dass diese Straßen, Breiten oder Kurven real existieren.
 
-Datenquelle: `unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json` · Bericht und Grafik: `python3 tools/circuit_report.py unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json docs/img/bosphorus_schematic_v0.png`
+- Daten: `unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json`
+- Generator: `python3 tools/build_bosphorus_layout.py` (Kurve für Kurve aus Geraden und Bögen; die Schleife wird durch Lösen zweier Geradenlängen geschlossen)
+- Bericht und Grafik: `python3 tools/circuit_report.py <json> docs/img/bosphorus_schematic.png` (Ausgabe in `docs/img/bosphorus_report.txt`)
 
-![Schema](img/bosphorus_schematic_v0.png)
+![Schema](img/bosphorus_schematic.png)
 
-## 1. Kennzahlen des Entwurfs (automatisch gemessen)
+## 1. Kennzahlen (automatisch gemessen)
 
-| Größe | Ziel laut Brief | Entwurf v0.1 |
+| Größe | Ziel laut Brief | Layout v0.2 |
 |---|---|---|
-| Länge | ca. 5,1 km | 5 079 m |
-| Kurven | 19–21 (Ziel 20) | 22 erkannte Richtungswechsel ≥ 12°; zwei davon sind Knicke mit Vollgas und werden zusammengelegt (siehe 3.) |
+| Länge | ca. 5,1 km | 5 108 m |
+| Kurven | 19–21 (Ziel 20) | **20**, alle in der Richtung laut Brief |
+| Fahrtrichtung | (siehe 2.) | gegen den Uhrzeigersinn (freigegeben) |
 | Höhenunterschied | 35–55 m | 43 m (2 → 45 m) |
-| Max. Steigung | – | 7,4 % (Anstieg T5–T6) |
-| Breite | 11–16 m | 12–15 m |
-| Min. Abstand nicht benachbarter Abschnitte | – | 113 m |
-| Sektoren | 3 | S1 0–32 %, S2 32–64 %, S3 64–100 % |
+| Max. Steigung | – | 9,7 % (Ortaköy-Anstieg) |
+| Breite | 11–16 m | 12,5–15 m |
+| Start-Ziel-Gerade | 650–850 m | 740 m (Startlinie 330 m nach T20, ca. 410 m bis T1) |
+| Min. Abstand nicht benachbarter Abschnitte | – | 89 m |
+| Sektoren | 3 | S1 0–22,5 % (Gerade, T1–T5), S2 22,5–44 % (T6–T11, Anstieg/Hügel), S3 44–100 % (T12–T20, Abfahrt/Ufer) |
+| Autopilot-Runde (Prüfstand, eben) | – | 120,7 s, bleibt in den Tracklimits |
 
-## 2. Wichtiger Konflikt in der Vorgabe: Fahrtrichtung
+## 2. Fahrtrichtung
 
-Der Brief verlangt gleichzeitig:
+„Im Uhrzeigersinn“ widerspricht „Wasser rechts“ und den vorgegebenen Kurvenrichtungen. Deshalb ist die Richtung **gegen den Uhrzeigersinn** freigegeben (Entscheidung 2026-10-25).
+Die Gerade läuft nach Norden am Ufer entlang: rechts Tribünen und Bosporus, links Paddock und Boxen.
 
-1. **im Uhrzeigersinn**,
-2. **Wasser rechts** auf der Start-Ziel-Geraden und im Bosporus-Schwung (T3–T5),
-3. die Kurvenrichtungen T1 rechts, T2 links, T6 links, T8 links, T12 linke Haarnadel und T20 linke Schlusskurve, wobei die Aufstiege landeinwärts führen.
+## 3. Kurvenplan v0.2
 
-Diese drei Punkte widersprechen sich. In einer Runde im Uhrzeigersinn liegt rechts immer das Innenfeld. „Wasser rechts“ hieße dann, dass der Bosporus im Inneren der Strecke liegt, die Strecke aber gleichzeitig landeinwärts bergauf führt. Die vorgegebenen Kurvenrichtungen (überwiegend links, linke Haarnadel, linke Schlusskurve) ergeben geometrisch eine Runde **gegen den Uhrzeigersinn**.
+| Kurve | Charakter laut Brief | Layout v0.2 (Richtung, Winkel, kleinster Radius, Höhe) |
+|---|---|---|
+| T1 | schwere Bremsung, Rechts 75–95° | R 89°, r 29 m, 2 m |
+| T2 | kurze Links | L 82°, r 38 m |
+| T3–T5 | Ufer R-L-R, mittelschnell | R 35° · L 34° · R 40° (r 93–120 m) |
+| T6 | Ortaköy-Anstieg, enge Links | L 119°, r 26 m, 6 m |
+| T7 | bergauf Rechts | R 51°, r 43 m, 20 m |
+| T8 | blinde Kuppe, schwungvolle Links | L 40°, r 69 m, 35 m |
+| T9–T11 | Hügel-Esses L-R-L | L 32° · R 77° · L 16° (45 m) |
+| T12 | abschüssige Links-Haarnadel, Überholpunkt 2 | L 153°, r 23 m, 37 m |
+| (Grand Descent) | – | ca. 1,15 km lange Abfahrt nach Süden |
+| T13–T15 | Fährterminal-Fluss | R 30° · L 51° · R 20° |
+| T16–T18 | Steinschikane, Überholpunkt 3 | L 64° · R 54° · L 83° (r 26–32 m) |
+| T19 | schnelle Rechts | R 45°, r 98 m |
+| T20 | langsamere Links auf die Gerade | L 135°, r 28 m |
 
-**Empfehlung A (im Entwurf umgesetzt):** gegen den Uhrzeigersinn fahren. Dabei bleiben „Wasser rechts“ und alle Kurvenrichtungen erhalten. Die Gerade läuft nach Norden am Ufer entlang, rechts Tribünen und Bosporus, links Paddock und Boxen.
-
-**Alternative B:** im Uhrzeigersinn fahren und das Layout spiegeln. Dann liegt das Wasser auf der Geraden links, und T1 wird zur Linkskurve. Das widerspricht anderen Punkten des Briefs.
-
-## 3. Kurvenplan: Vorgabe gegen Entwurf v0.1
-
-| Brief | Charakter laut Brief | Entwurf v0.1 (Richtung, Winkel, Radius) | Abweichung / To-do |
-|---|---|---|---|
-| Start/Ziel | Gerade 650–850 m | ca. 600 m bis zum Bremspunkt T1 | Startlinie ca. 50–100 m zurücksetzen |
-| T1 | schwere Bremsung, Rechts-Haarnadel 75–95° | R 76°, r 30 m | ✓ |
-| T2 | kurze Links | L 107°, r 42 m | Winkel zu groß, entschärfen |
-| T3–T5 | Ufer R-L-R, mittelschnell | R 51° · L 122° · R 102° | T4/T5 sind zu eng: Sie liegen schon am Fuß des Anstiegs. Ufer-Schwung verlängern |
-| T6–T8 | Ortaköy-Anstieg: enge Links, Rechts bergauf, blinde Kuppe links | L 96° · (L 19° Knick) · R 72° · L 72° | Knick ausglätten, Kuppe T8 bei ca. 43 m ✓ |
-| T9–T11 | Hügel-Esses L-R-L, 12–14 m breit | (L 14° Knick) · L 136° · R 98° | Esses fehlen noch als echte Folge. Die Haarnadel liegt zu früh |
-| T12 | abschüssige Links-Haarnadel, Überholpunkt 2 | (L 136° ≈ T11 des Entwurfs) | neu ordnen |
-| T13–T15 | Fährterminal-Fluss, mittelschnell | L 28° · R 35° · L 33° · R 23° | ✓ Charakter. Die vier Biegungen auf drei reduzieren |
-| T16–T18 | Steinschikane (technisch, Überholpunkt 3) | L 60° · R 66° · L 48° | ✓ |
-| T19 | schnelle Rechts | R 29° | ✓ |
-| T20 | langsamere Links auf die Gerade | L 144°, r 17 m | Radius auf ca. 25 m erhöhen |
-
-Fazit: Länge, Höhenprofil, Distrikte, Sichtachsen und die Abfolge der Sektoren stimmen. Die genaue Kurvenfolge in S1 und S2 braucht noch eine Iteration. Danach wird sie im Graybox-Fahrtest (M2) endgültig abgestimmt.
+Offene Punkte für den Graybox-Fahrtest (M2):
+- Die lange Abfahrt nach T12 ist 1,15 km lang. Sie prüfen und gegebenenfalls mit einer flachen Biegung auflockern.
+- T11 (16°) ist mild. Testen, ob er sich als eigene Kurve anfühlt.
+- Die maximale Steigung von 9,7 % liegt im Anstieg T6–T7. Die Fahrbarkeit mit Abtrieb und Kuppe prüfen.
 
 ## 4. Boxengasse
 
-- **Einfahrt:** rechts vor T20, an der Innenseite der Schlusskurve. Die Boxengasse verläuft parallel zur Geraden auf der Landseite (Westen), hinter der Boxenmauer.
-- **Ausfahrt:** nach T1, an der Außenseite der Auslaufzone, Einmündung vor T2. Die Geometrie wird in M2 validiert: keine Kreuzung der Ideallinie und eine sichere Einfädelspur.
-- 20 Garagen, Startaufstellung versetzt mit 8 m Abstand. Der Abstand zwischen Gerade und Boxengasse wird in M2 festgelegt.
+- **Einfahrt:** links (Innenseite) vor T20. Die Boxengasse verläuft parallel zur Geraden auf der Landseite (Westen), hinter der Boxenmauer.
+- **Ausfahrt:** nach T1, an der Außenseite der Auslaufzone. Die Geometrie wird in M2 validiert: keine Kreuzung der Ideallinie und eine sichere Einfädelspur.
+- 20 Garagen, Startaufstellung versetzt mit 8 m Abstand (Pole 12 m hinter der Linie, Platz 20 ca. 164 m dahinter, also vor T20).
 
 ## 5. Distrikte (Produktionszellen)
 
@@ -114,6 +115,6 @@ Pro Zelle: Nahbereich ≤ 120 Draw Calls; der Fernbereich nutzt Impostor und geb
 
 ## 10. Nächste kleine Schritte
 
-1. Fahrtrichtung entscheiden (Empfehlung A).
-2. Kurvenfolge in S1 und S2 nachschärfen, bis der Bericht 20 Kurven in der Reihenfolge des Briefs ausweist.
-3. In M2 als Graybox in Unity umsetzen: Spline-Mesh, Sektoren, Boxengasse, Kurventafeln, Minimap und 10 saubere Runden des Autopiloten als automatischer Test.
+1. ~~Fahrtrichtung entscheiden~~ (erledigt: gegen den Uhrzeigersinn).
+2. ~~Kurvenfolge auf 20 Kurven in Brief-Reihenfolge bringen~~ (erledigt, v0.2).
+3. M2 in Unity: Boxengasse, Kurventafeln T1–T20, Bremsmarken, Minimap, Geometrie im Editor vorbacken, 10 saubere Autopilot-Runden als Play-Mode-Test.

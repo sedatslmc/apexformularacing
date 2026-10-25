@@ -4,7 +4,7 @@ using Apex.Core;
 
 namespace Apex.InputLogic
 {
-    public enum DeviceOrientation
+    public enum PhoneOrientation
     {
         Portrait,
         PortraitUpsideDown,
@@ -41,22 +41,22 @@ namespace Apex.InputLogic
         /// gravity vector in device coordinates (Unity convention: x right, y up in
         /// natural portrait, z out of the screen; upright portrait gravity = (0,-1,0)).
         /// </summary>
-        public static float ScreenRollDeg(Vector3 gravityDevice, DeviceOrientation orientation)
+        public static float ScreenRollDeg(Vector3 gravityDevice, PhoneOrientation orientation)
         {
             float gx, gy;
             switch (orientation)
             {
-                case DeviceOrientation.LandscapeLeft:
+                case PhoneOrientation.LandscapeLeft:
                     // Device rotated 90° CCW: screen right = -device y, screen up = device x.
                     gx = -gravityDevice.Y;
                     gy = gravityDevice.X;
                     break;
-                case DeviceOrientation.LandscapeRight:
+                case PhoneOrientation.LandscapeRight:
                     // Device rotated 90° CW: screen right = device y, screen up = -device x.
                     gx = gravityDevice.Y;
                     gy = -gravityDevice.X;
                     break;
-                case DeviceOrientation.PortraitUpsideDown:
+                case PhoneOrientation.PortraitUpsideDown:
                     gx = -gravityDevice.X;
                     gy = -gravityDevice.Y;
                     break;

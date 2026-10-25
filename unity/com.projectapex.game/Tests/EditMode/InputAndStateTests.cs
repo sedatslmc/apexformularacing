@@ -7,23 +7,23 @@ namespace Apex.Tests
 {
     public class InputAndStateTests
     {
-        static Vector3 GravityForRoll(float rollDeg, DeviceOrientation o)
+        static Vector3 GravityForRoll(float rollDeg, PhoneOrientation o)
         {
             // Screen-space gravity for a phone rotated clockwise by roll, then mapped back to device axes.
             float r = rollDeg * ApexMath.Deg2Rad;
             float sx = System.MathF.Sin(r), sy = -System.MathF.Cos(r);
             switch (o)
             {
-                case DeviceOrientation.LandscapeLeft: return new Vector3(sy, -sx, -0.3f);
-                case DeviceOrientation.LandscapeRight: return new Vector3(-sy, sx, -0.3f);
+                case PhoneOrientation.LandscapeLeft: return new Vector3(sy, -sx, -0.3f);
+                case PhoneOrientation.LandscapeRight: return new Vector3(-sy, sx, -0.3f);
                 default: return new Vector3(sx, sy, -0.3f);
             }
         }
 
-        [TestCase(DeviceOrientation.LandscapeLeft)]
-        [TestCase(DeviceOrientation.LandscapeRight)]
-        [TestCase(DeviceOrientation.Portrait)]
-        public void ScreenRollMatchesPhysicalRotation(DeviceOrientation o)
+        [TestCase(PhoneOrientation.LandscapeLeft)]
+        [TestCase(PhoneOrientation.LandscapeRight)]
+        [TestCase(PhoneOrientation.Portrait)]
+        public void ScreenRollMatchesPhysicalRotation(PhoneOrientation o)
         {
             foreach (float roll in new[] { -40f, -10f, 0f, 15f, 45f })
                 Assert.That(TiltSteering.ScreenRollDeg(GravityForRoll(roll, o), o), Is.EqualTo(roll).Within(0.01f), $"{o} {roll}");

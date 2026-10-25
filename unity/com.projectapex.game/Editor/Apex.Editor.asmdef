@@ -1,0 +1,19 @@
+{
+    "name": "Apex.Editor",
+    "rootNamespace": "Apex.EditorTools",
+    "references": [
+        "Apex.Simulation",
+        "Apex.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

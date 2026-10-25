@@ -1,6 +1,6 @@
 # Project Apex: Repository-Audit und Unity-Migrationsplan
 
-Stand: 2026-10-25 · Status: **Vorschlag, wartet auf Freigabe** · Sprache: Deutsch
+Stand: 2026-10-25 · Status: **freigegeben und umgesetzt** (M0/M1 implementiert; Abnahme im Unity-Editor ausstehend) · Sprache: Deutsch
 
 ## 1. Produktarchitektur in Kürze
 
@@ -68,9 +68,12 @@ In diesem Cloud-Container sind **weder Unity noch .NET installiert**. Ein Unity-
 
 **M1 (Fahr-Vertical-Slice):** ein originales Auto auf einer flachen Teststrecke. Tastatur, Touch-Tasten und Gyro mit Kalibrierung. Kamera, einfache Telemetrie. `Apex.Simulation` mit Unit-Tests, die hier geprüft werden. Abnahme in deinem Unity-Editor: keine hängenden Eingaben, kein Ruckeln, Lenken, Bremsen und Beschleunigen sind vorhersehbar.
 
-## 6. Offene Entscheidungen
+## 6. Umsetzung (Stand 2026-10-25)
 
-- Freigabe für den Engine-Wechsel zu Unity
-- Darf ich das .NET SDK in diesem Container installieren, um die Simulationsbibliothek zu testen?
-- GitHub-Repository verbinden, damit die Arbeit nicht verloren geht (empfohlen, siehe Sitzungseinstellungen)
-- Fahrtrichtung der Istanbul-Strecke (siehe `ISTANBUL_BLOCKOUT_PLAN.md`, Abschnitt 2)
+- Freigabe für Unity, .NET und die Fahrtrichtung gegen den Uhrzeigersinn: erteilt.
+- Umgesetzt im Branch `unity-migration`:
+  - Godot nach `legacy/godot` verschoben
+  - Paket `unity/com.projectapex.game` mit `Apex.Simulation`, `Apex.Runtime`, `Apex.Editor` und Tests
+  - Prüf-Pipeline `tools/verify.sh`
+- Abweichung vom Plan: Das Unity-Projekt liegt nicht als fertige Projektdateien im Repository. Du legst es per Hub-Vorlage an (`UNITY_SETUP.md`), weil handgeschriebene ProjectSettings fehleranfällig wären und die Vorlage die URP-Paketversionen richtig setzt.
+- Offen: GitHub-Repository verbinden, damit die Arbeit nicht mit dem Cloud-Container verloren geht.

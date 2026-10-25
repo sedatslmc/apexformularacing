@@ -20,6 +20,8 @@ namespace Apex.Tracks
         public float[] sectorFractions = { 0f, 1f / 3f, 2f / 3f };
         /// <summary>Control points: x = east, y = north, z = elevation, w = width.</summary>
         public readonly List<(float east, float north, float elevation, float width)> points = new List<(float, float, float, float)>();
+        /// <summary>Optional shoreline polyline (east, north), water lies to the east.</summary>
+        public readonly List<(float east, float north)> shoreline = new List<(float, float)>();
 
         public static CircuitDefinition FromJson(string json)
         {
@@ -46,6 +48,12 @@ namespace Apex.Tracks
                 if (!(row is List<object> r) || r.Count < 3) throw new FormatException("Bad control point row");
                 float w = r.Count > 3 ? Convert.ToSingle(r[3]) : def.defaultWidth;
                 def.points.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1]), Convert.ToSingle(r[2]), w));
+            }
+            if (root.TryGetValue("shoreline", out var sh) && sh is List<object> shl)
+            {
+                foreach (var row in shl)
+                    if (row is List<object> r && r.Count >= 2)
+                        def.shoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
             }
             return def;
         }

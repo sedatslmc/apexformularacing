@@ -31,6 +31,8 @@ namespace Apex.Core
         public float tiltDeadZoneDeg = 2f;
         public float tiltSensitivity = 1f;
         public float tiltSmoothing = 0.05f;
+        /// <summary>Safety switch in case a device reports mirrored sensor axes.</summary>
+        public bool invertTilt;
         public float touchButtonScale = 1f;
         public float touchButtonOpacity = 0.35f;
         public bool leftHanded;
