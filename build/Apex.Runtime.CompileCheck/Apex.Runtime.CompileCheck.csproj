@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compile-checks Apex.Runtime against UnityEngine 2021.3 reference assemblies
+       and the Input System sources (see tools/fetch_unity_refs.sh). Unity-6-only
+       branches (#if UNITY_6000_0_OR_NEWER) are not covered by this check. -->
+  <Import Project="../UnityRefs.props" />
+  <PropertyGroup>
+    <AssemblyName>Apex.Runtime</AssemblyName>
+    <DefineConstants>$(UnityVersionDefines)</DefineConstants>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/com.projectapex.game/Runtime/Game/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Apex.Simulation/Apex.Simulation.csproj" />
+    <ProjectReference Include="../InputSystemRef/InputSystemRef.csproj" />
+  </ItemGroup>
+</Project>

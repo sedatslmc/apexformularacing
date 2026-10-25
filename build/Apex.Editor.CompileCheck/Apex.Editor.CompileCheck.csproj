@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compile-checks the editor tooling against UnityEditor 2021.1 reference
+       assemblies (NuGet "Unity3D.SDK"). APIs newer than 2021.1 sit behind
+       version defines and are not covered here. -->
+  <Import Project="../UnityRefs.props" />
+  <PropertyGroup>
+    <AssemblyName>Apex.Editor</AssemblyName>
+    <DefineConstants>UNITY_5_3_OR_NEWER;UNITY_2019_4_OR_NEWER;UNITY_2020_3_OR_NEWER;UNITY_2021_1_OR_NEWER;UNITY_EDITOR</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/com.projectapex.game/Editor/**/*.cs" />
+    <Reference Include="$(ApexRefs)sdk/lib/UnityEditor.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Apex.Simulation/Apex.Simulation.csproj" />
+    <ProjectReference Include="../Apex.Runtime.CompileCheck/Apex.Runtime.CompileCheck.csproj" />
+  </ItemGroup>
+</Project>

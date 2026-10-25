@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compiles the Input System package runtime sources into Unity.InputSystem.dll
+       so Apex runtime code can be compile-checked outside Unity. -->
+  <Import Project="../UnityRefs.props" />
+  <PropertyGroup>
+    <AssemblyName>Unity.InputSystem</AssemblyName>
+    <DefineConstants>$(UnityVersionDefines);UNITY_DISABLE_DEFAULT_INPUT_PLUGIN_INITIALIZATION</DefineConstants>
+    <NoWarn>$(NoWarn);CS0618;CS0649;CS0414;CS0169;CS0067;CS1591;CS0108;CS0162;CS0219;CS0168</NoWarn>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(ApexRefs)InputSystem/Packages/com.unity.inputsystem/InputSystem/**/*.cs"
+             Exclude="$(ApexRefs)InputSystem/Packages/com.unity.inputsystem/InputSystem/**/Editor/**/*.cs;$(ApexRefs)InputSystem/Packages/com.unity.inputsystem/InputSystem/Plugins/UI/**/*.cs;$(ApexRefs)InputSystem/Packages/com.unity.inputsystem/InputSystem/Plugins/PlayerInput/**/*.cs" />
+  </ItemGroup>
+</Project>

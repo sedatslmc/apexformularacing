@@ -1,9 +1,26 @@
-.godot/
-/android/
-*.import.tmp
-export/
+# Unity project (created locally via Unity Hub in unity/ProjectApex)
+unity/ProjectApex/[Ll]ibrary/
+unity/ProjectApex/[Tt]emp/
+unity/ProjectApex/[Oo]bj/
+unity/ProjectApex/[Bb]uild/
+unity/ProjectApex/[Bb]uilds/
+unity/ProjectApex/[Ll]ogs/
+unity/ProjectApex/[Uu]ser[Ss]ettings/
+unity/ProjectApex/*.csproj
+unity/ProjectApex/*.sln
+unity/ProjectApex/.vs/
+unity/ProjectApex/.idea/
+# .NET verification builds
+build/**/bin/
+build/**/obj/
+# Godot legacy
+legacy/godot/.godot/
+# General
 *.apk
 *.aab
 *.keystore
 .DS_Store
 Thumbs.db
+__pycache__/
+build/refs/
+export/

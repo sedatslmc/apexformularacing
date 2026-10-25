@@ -1,0 +1,16 @@
+<Project>
+  <!-- Shared settings for compile-checking Unity code with the .NET SDK. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <ApexRefs>$(MSBuildThisFileDirectory)refs/</ApexRefs>
+    <UnityVersionDefines>UNITY_5_3_OR_NEWER;UNITY_2017_1_OR_NEWER;UNITY_2018_1_OR_NEWER;UNITY_2019_1_OR_NEWER;UNITY_2019_2_OR_NEWER;UNITY_2019_3_OR_NEWER;UNITY_2019_4_OR_NEWER;UNITY_2020_1_OR_NEWER;UNITY_2020_2_OR_NEWER;UNITY_2020_3_OR_NEWER;UNITY_2021_1_OR_NEWER;UNITY_2021_2_OR_NEWER;UNITY_2021_3_OR_NEWER;UNITY_2021_3;ENABLE_MONO;NET_STANDARD_2_0;NET_STANDARD;ENABLE_INPUT_SYSTEM</UnityVersionDefines>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="$(ApexRefs)UnityEngine/*.dll" Private="false" />
+  </ItemGroup>
+</Project>

@@ -3,7 +3,7 @@
 curvature), handedness, sectors, clearance, elevation profile and a schematic
 plot with districts and landmark sightlines.
 
-Usage: python3 tools/circuit_report.py data/tracks/bosphorus_gp.json docs/img/out.png
+Usage: python3 tools/circuit_report.py unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json docs/img/out.png
 """
 import json
 import math
@@ -132,8 +132,12 @@ def main():
         ax.annotate("", xy=(x0 + 260 * math.sin(b), y0 + 260 * math.cos(b)), xytext=(x0, y0),
                     arrowprops=dict(arrowstyle="->", color="teal", lw=1.2, ls="--"))
         ax.text(x0 + 280 * math.sin(b), y0 + 280 * math.cos(b), s["label"], fontsize=8, color="teal")
-    ax.axvspan(200, 900, color="#9cc3e6", alpha=0.25)
-    ax.text(420, -300, "BOSPORUS\n(schematisch)", color="#2a6aa0", fontsize=14, ha="center")
+    shore = data.get("shoreline")
+    if shore:
+        sx = [p[0] for p in shore] + [900, 900]
+        sy = [p[1] for p in shore] + [shore[-1][1], shore[0][1]]
+        ax.fill(sx, sy, color="#9cc3e6", alpha=0.35)
+        ax.text(600, 300, "BOSPORUS\n(schematisch)", color="#2a6aa0", fontsize=14, ha="center")
     ax.set_aspect("equal")
     ax.set_xlim(-800, 700)
     ax.legend(loc="lower left")
