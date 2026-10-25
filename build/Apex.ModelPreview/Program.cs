@@ -12,15 +12,40 @@ using UnityEngine;
 // body material has inward-facing triangles overall (negative signed volume) or a LOD
 // exceeds its triangle budget.
 string outDir = args.Length > 0 ? args[0] : ".";
+bool primitivesOnly = Array.IndexOf(args, "--primitives") >= 0;
+bool primitiveFailed = false;
+if (primitivesOnly || Array.IndexOf(args, "--check") >= 0)
+{
+    // Each primitive must be closed and outward-facing on its own (positive volume).
+    void Vol(string name, System.Action<MeshBuilder> f)
+    {
+        var mb = new MeshBuilder();
+        f(mb);
+        float v = SignedVolumeOf(mb.ToMesh(name));
+        Console.WriteLine($"primitive {name,-12} {v:F6}");
+        if (v <= 0f) primitiveFailed = true;
+    }
+    Vol("box", mb => mb.Box(Vector3.zero, Vector3.one));
+    Vol("plateYZ+x", mb => mb.PlateYZ(new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) }, 1f, 0.1f));
+    Vol("plateYZ-rev", mb => mb.PlateYZ(new[] { new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0), new Vector2(0, 0) }, -1f, 0.1f));
+    Vol("plateXZ", mb => mb.PlateXZ(new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(1, 1), new Vector2(0, 1) }, 0f, 0.1f));
+    Vol("airfoil", mb => mb.Airfoil(Vector3.zero, 1f, 0.3f, 0.1f, -0.05f, 5f, 8));
+    Vol("tube", mb => mb.Tube(Vector3.zero, Vector3.forward, 0.1f, 8));
+    Vol("loft-desc", mb => mb.Loft(new[] { new LoftSection(1f, 0f, 0.2f, 0.2f), new LoftSection(0f, 0f, 0.2f, 0.2f) }, 12));
+    Vol("loft-asc", mb => mb.Loft(new[] { new LoftSection(0f, 0f, 0.2f, 0.2f), new LoftSection(1f, 0f, 0.2f, 0.2f) }, 12));
+    Vol("lathe", mb => mb.Lathe(new[] { new Vector2(-0.1f, 0.001f), new Vector2(-0.1f, 0.3f), new Vector2(0.1f, 0.3f), new Vector2(0.1f, 0.001f) }, 16));
+    if (primitivesOnly) return;
+}
 bool check = Array.IndexOf(args, "--check") >= 0;
 int[] budget = { 20000, 8000, 4000 };
-bool failed = false;
+bool failed = primitiveFailed;
 Directory.CreateDirectory(outDir);
 var setup = new VehicleSetup();
 var geo = new CarGeometry(setup).BuildBody();
 var inv = CultureInfo.InvariantCulture;
 
-float SignedVolume(Mesh m)
+float SignedVolume(Mesh m) => SignedVolumeOf(m);
+static float SignedVolumeOf(Mesh m)
 {
     double v = 0;
     for (int i = 0; i < m.triangles.Count; i += 3)
@@ -34,7 +59,8 @@ float SignedVolume(Mesh m)
 for (int lod = 0; lod < CarGeometry.LodCount; lod++)
 {
     var parts = new List<(string mat, Mesh mesh)>();
-    foreach (var kv in geo.body[lod]) parts.Add((kv.Key, kv.Value.ToMesh(kv.Key)));
+    foreach (var group in new[] { geo.body, geo.frontWing, geo.rearWing })
+        foreach (var kv in group[lod]) parts.Add((kv.Key, kv.Value.ToMesh(kv.Key)));
     // Wheels at static ride height.
     for (int i = 0; i < 4; i++)
     {
@@ -103,7 +129,8 @@ for (int lod = 0; lod < CarGeometry.LodCount; lod++)
     File.WriteAllText(Path.Combine(outDir, $"car_lod{lod}.obj"), sb.ToString());
     Console.WriteLine($"LOD{lod}: {tris} triangles, {vBase - 1} vertices, {parts.Count} parts (budget {budget[lod]})");
     if (tris > budget[lod]) failed = true;
-    foreach (var kv in geo.body[lod])
+    foreach (var group in new[] { geo.body, geo.frontWing, geo.rearWing })
+    foreach (var kv in group[lod])
         if (SignedVolume(kv.Value.ToMesh(kv.Key)) <= 0f)
         {
             Console.WriteLine($"  inward-facing body mesh: LOD{lod} {kv.Key}");

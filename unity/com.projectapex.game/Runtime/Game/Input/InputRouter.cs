@@ -156,6 +156,7 @@ namespace Apex.Game
                 else if (kb.digit4Key.wasPressedThisFrame) NumberPressed = 4;
                 else if (kb.digit5Key.wasPressedThisFrame) NumberPressed = 5;
                 else if (kb.digit6Key.wasPressedThisFrame) NumberPressed = 6;
+                else if (kb.digit7Key.wasPressedThisFrame) NumberPressed = 7;
             }
 
             // Keyboard and gamepad.
@@ -194,7 +195,7 @@ namespace Apex.Game
             if (TouchTapped(TouchLayout.Recenter)) CalibrateTilt();
             if (TouchTapped(TouchLayout.Pause)) PausePressed = true;
             if (TouchTapped(TouchLayout.Radio)) RadioPressed = true;
-            for (int k = 0; k < 6; k++)
+            for (int k = 0; k < TouchLayout.RadioLabels.Length; k++)
                 if (TouchTapped(TouchLayout.RadioEntry0 + k)) NumberPressed = k + 1;
 
             // Tilt.

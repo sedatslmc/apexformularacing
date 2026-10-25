@@ -268,28 +268,35 @@ namespace Apex.Game
             Vector2 centroid = Vector2.zero;
             foreach (var p in poly) centroid += p;
             centroid /= n;
-            // Orientation of the polygon decides the winding of the faces.
-            float area = 0f;
-            for (int i = 0; i < n; i++) area += poly[i].x * poly[(i + 1) % n].y - poly[(i + 1) % n].x * poly[i].y;
-            bool ccw = area > 0f;
-            Vector3 normalMapped = Vector3.Cross(map(new Vector2(1, 0)) - map(Vector2.zero), map(new Vector2(0, 1)) - map(Vector2.zero));
-            bool flipBase = Vector3.Dot(normalMapped, halfExtrude) < 0f;
+            Vector3 c3 = map(centroid);
+            // Every face is oriented against its known outward direction, so the
+            // polygon's winding and the mapping's handedness do not matter.
             for (int side = 0; side < 2; side++)
             {
                 Vector3 off = side == 0 ? halfExtrude : -halfExtrude;
-                int c = V(map(centroid) + off, new Vector2(0.5f, 0.5f));
+                int c = V(c3 + off, new Vector2(0.5f, 0.5f));
                 int first = verts.Count;
                 for (int i = 0; i < n; i++) V(map(poly[i]) + off, poly[i]);
                 for (int i = 0; i < n; i++)
-                    Tri(c, first + i, first + (i + 1) % n, (side == 0) == (ccw ^ flipBase));
+                    TriFacing(c, first + i, first + (i + 1) % n, off);
             }
             for (int i = 0; i < n; i++)
             {
                 Vector3 a = map(poly[i]), b = map(poly[(i + 1) % n]);
+                Vector3 outward = Vector3.ProjectOnPlane((a + b) * 0.5f - c3, halfExtrude);
                 int v0 = V(a + halfExtrude, Vector2.zero), v1 = V(b + halfExtrude, Vector2.right);
                 int v2 = V(b - halfExtrude, Vector2.one), v3 = V(a - halfExtrude, Vector2.up);
-                Quad(v0, v1, v2, v3, ccw ^ flipBase);
+                TriFacing(v0, v1, v2, outward);
+                TriFacing(v0, v2, v3, outward);
             }
+        }
+
+        /// <summary>Adds a triangle whose front face (Unity convention) points along outward.</summary>
+        void TriFacing(int a, int b, int c, Vector3 outward)
+        {
+            Vector3 normal = Vector3.Cross(verts[b] - verts[a], verts[c] - verts[a]);
+            if (Vector3.Dot(normal, outward) >= 0f) { tris.Add(a); tris.Add(b); tris.Add(c); }
+            else { tris.Add(a); tris.Add(c); tris.Add(b); }
         }
 
         public Mesh ToMesh(string name)

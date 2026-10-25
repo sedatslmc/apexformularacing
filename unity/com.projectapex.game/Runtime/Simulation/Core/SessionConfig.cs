@@ -32,6 +32,8 @@ namespace Apex.Core
         public bool mandatoryPitStop;
         /// <summary>Race control may neutralise the race with a (virtual) safety car.</summary>
         public bool safetyCar = true;
+        /// <summary>Damage from contact (wings, floor, suspension, punctures).</summary>
+        public bool damage = true;
         /// <summary>Technical failures of AI cars: 0 off (default), 1 rare, 2 frequent.</summary>
         public int failures;
         public TireCompound startCompound = TireCompound.Medium;

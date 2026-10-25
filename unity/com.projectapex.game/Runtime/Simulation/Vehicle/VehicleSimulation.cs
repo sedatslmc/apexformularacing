@@ -66,6 +66,9 @@ namespace Apex.Vehicle
         public float speedLimit = float.PositiveInfinity;
 
         // Conditions
+        /// <summary>Damage from impacts; only has effects when <see cref="damageEnabled"/>.</summary>
+        public readonly DamageState damage = new DamageState();
+        public bool damageEnabled;
         public readonly TireState[] tires = new TireState[4];
         /// <summary>Simulate tire temperature, wear and compound grip.</summary>
         public bool simulateTires = true;
@@ -390,6 +393,7 @@ namespace Apex.Vehicle
                         TireFor(w).Compute(w.load, w.slipRatio, w.slipAngle, w.grip, out fx, out fy);
                     }
                     float rolling = SurfaceProperties.For(w.surface).rollingDrag * w.load * w.radius * MathF.Sign(w.omega);
+                    if (damageEnabled && damage.puncture[i]) rolling *= 6f;
                     float torque = w.driveTorque - fx * w.radius - rolling;
                     // A locked clutch couples the engine's inertia to the driven wheels.
                     float inertia = w.inertia + (clutchLocked && !w.front ? engineReflected : 0f);
@@ -453,12 +457,14 @@ namespace Apex.Vehicle
             float rakeChange = (RideHeightRear - RideHeightFront) - (setup.rideHeightRear - setup.rideHeightFront);
             AeroBalance = ApexMath.Clamp(setup.aeroBalanceFront + setup.aeroRakeSensitivity * rakeChange, setup.aeroBalanceFront - 0.06f, setup.aeroBalanceFront + 0.06f);
             float q = 0.5f * setup.airDensity * ForwardSpeed * ForwardSpeed;
-            float cla = setup.downforceArea * (1f - setup.floorShare + setup.floorShare * gain);
+            bool dmg = damageEnabled;
+            float floorPart = setup.floorShare * gain * (dmg ? damage.FloorFactor : 1f);
+            float cla = setup.downforceArea * (1f - setup.floorShare + floorPart);
             float downforce = cla * q;
-            DownforceFront = downforce * AeroBalance;
-            DownforceRear = downforce * (1f - AeroBalance);
+            DownforceFront = downforce * AeroBalance * (dmg ? damage.FrontAeroFactor : 1f);
+            DownforceRear = downforce * (1f - AeroBalance) * (dmg ? damage.RearAeroFactor : 1f);
             float induced = 1f + setup.inducedDragFactor * MathF.Max(0f, gain - 1f);
-            Drag = setup.dragArea * induced * 0.5f * setup.airDensity * Speed * Speed;
+            Drag = setup.dragArea * induced * (dmg ? damage.DragFactor : 1f) * 0.5f * setup.airDensity * Speed * Speed;
         }
 
         void ComputeLoads(float dt)
@@ -471,6 +477,7 @@ namespace Apex.Vehicle
                 var props = SurfaceProperties.For(w.surface);
                 float tireGrip = simulateTires ? tires[w.index].GripMultiplier(trackWetness) : 1f;
                 w.grip = props.grip * w.conditionGrip * tireGrip;
+                if (damageEnabled && damage.puncture[w.index]) w.grip *= 0.3f;
                 // Surface texture (kerb ripples, grass, gravel) excites the suspension.
                 // Its frequency is capped well below the 120 Hz step to avoid aliasing.
                 if (props.textureAmplitude > 0f && w.contact)
@@ -632,6 +639,8 @@ namespace Apex.Vehicle
             }
             wheels[2].steer = 0f;
             wheels[3].steer = 0f;
+            if (damageEnabled)
+                for (int i = 0; i < 4; i++) wheels[i].steer += damage.toe[i];
         }
 
         /// <summary>

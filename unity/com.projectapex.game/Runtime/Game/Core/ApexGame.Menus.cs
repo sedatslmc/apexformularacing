@@ -218,6 +218,7 @@ namespace Apex.Game
                 rows.Add(new Row { label = "Tracklimit-Strafen", value = () => OnOff(c.trackLimitPenalties), change = d => c.trackLimitPenalties = !c.trackLimitPenalties });
                 rows.Add(new Row { label = "Pflicht-Boxenstopp", value = () => OnOff(c.mandatoryPitStop), change = d => c.mandatoryPitStop = !c.mandatoryPitStop });
                 rows.Add(new Row { label = "Safety Car / VSC", value = () => OnOff(c.safetyCar), change = d => c.safetyCar = !c.safetyCar });
+                rows.Add(new Row { label = "Schäden", value = () => OnOff(c.damage), change = d => c.damage = !c.damage });
                 rows.Add(new Row { label = "Technische Defekte (KI)", value = () => c.failures == 0 ? "Aus" : c.failures == 1 ? "Selten" : "Häufig",
                     change = d => c.failures = Wrap(c.failures + (d < 0 ? -1 : 1), 3) });
             }

@@ -146,6 +146,9 @@ namespace Apex.Game
                 rc.car.ResetTo(pose.position, pose.rotation);
                 var sim = rc.Sim;
                 sim.FitTires(compound);
+                sim.damageEnabled = config.damage;
+                var damaged = rc;
+                rc.car.Damaged += hit => OnDamaged(damaged, hit);
                 sim.TireWearMultiplier = config.tireWear;
                 sim.holdBrake = true;
                 if (!rc.isPlayer)
@@ -207,6 +210,15 @@ namespace Apex.Game
                 rc.failureAt = 20.0 + rng.NextDouble() * Mathf.Max(30f, raceSeconds - 40f);
                 rc.failureOnTrack = rng.NextDouble() < 0.35;
             }
+        }
+
+        void OnDamaged(RaceCar rc, string hit)
+        {
+            if (rc.isPlayer) Message?.Invoke("Schaden: " + hit, ApexStyle.Urgent, 2);
+            var d = rc.Sim.damage;
+            bool needsStop = d.NeedsNewNose || d.puncture[0] || d.puncture[1] || d.puncture[2] || d.puncture[3];
+            if (!rc.isPlayer && needsStop && rc.pit.stage == PitState.Stage.None && Type == SessionType.Race && !rc.entry.finished)
+                rc.pit.Request(rc.Sim.tires[0].compound);
         }
 
         void OnTrackStatus(TrackStatus status, string message)
@@ -597,6 +609,9 @@ namespace Apex.Game
                         if (inBox && Mathf.Abs(sim.ForwardSpeed) < 0.8f)
                         {
                             var (time, mistake) = crew.ServiceTime(ps.changeTires);
+                            // A new nose / rear wing takes the crew a few extra seconds.
+                            var dmg = sim.damage;
+                            if (sim.damageEnabled && (dmg.NeedsNewNose || dmg.rearWing > 0.3f)) time += 4.5f;
                             ps.serviceTotal = time;
                             ps.serviceRemaining = time;
                             ps.lastMistake = mistake;
@@ -625,6 +640,7 @@ namespace Apex.Game
                     if (ps.serviceRemaining <= 0f)
                     {
                         if (ps.changeTires) sim.FitTires(ps.nextCompound);
+                        sim.damage.Repair(ps.changeTires);
                         rc.entry.pitStops++;
                         rc.mandatoryStopDone = true;
                         rc.lastStopTime = ps.serviceTotal;

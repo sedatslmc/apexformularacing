@@ -28,7 +28,7 @@ namespace Apex.Game
         TireCompound radioCompound = TireCompound.Medium;
         readonly List<(string name, Rect rect)> hudZones = new List<(string, Rect)>();
 
-        static readonly string[] RadioItems = { "Box diese Runde", "Reifen wählen", "Wetter", "Abstand", "Strategie", "Schließen" };
+        static readonly string[] RadioItems = { "Box diese Runde", "Reifen wählen", "Wetter", "Abstand", "Strategie", "Schaden", "Schließen" };
 
         // --- Radio ------------------------------------------------------------------------
 
@@ -117,10 +117,34 @@ namespace Apex.Game
                     CloseRadio();
                     break;
                 }
+                case 5:
+                {
+                    ShowMessage("Funk: " + DamageReport(p.Sim), Color.white, 4f, true);
+                    CloseRadio();
+                    break;
+                }
                 default:
                     CloseRadio();
                     break;
             }
+        }
+
+        static string DamageReport(VehicleSimulation sim)
+        {
+            if (!sim.damageEnabled) return "Schadensmodell ist aus.";
+            var d = sim.damage;
+            if (!d.Any) return "Keine Schäden, Auto in Ordnung.";
+            var parts = new List<string>();
+            if (d.frontWing > 0.02f) parts.Add($"Frontflügel {d.frontWing * 100f:0} %");
+            if (d.rearWing > 0.02f) parts.Add($"Heckflügel {d.rearWing * 100f:0} %");
+            if (d.floor > 0.02f) parts.Add($"Unterboden {d.floor * 100f:0} %");
+            string[] names = { "VL", "VR", "HL", "HR" };
+            for (int i = 0; i < 4; i++)
+            {
+                if (d.puncture[i]) parts.Add($"Reifenschaden {names[i]}");
+                else if (Mathf.Abs(d.toe[i]) > 0.001f) parts.Add($"Spur {names[i]} {d.toe[i] * Mathf.Rad2Deg:+0.0;-0.0}°");
+            }
+            return string.Join(", ", parts) + (d.NeedsNewNose || d.puncture[0] || d.puncture[1] || d.puncture[2] || d.puncture[3] ? " – Box empfohlen" : "");
         }
 
         // --- HUD --------------------------------------------------------------------------

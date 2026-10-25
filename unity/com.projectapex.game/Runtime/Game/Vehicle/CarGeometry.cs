@@ -41,12 +41,22 @@ namespace Apex.Game
         readonly float g;
         /// <summary>Body meshes: [lod][material].</summary>
         public readonly Dictionary<string, MeshBuilder>[] body = new Dictionary<string, MeshBuilder>[LodCount];
+        /// <summary>Front and rear wing as separate meshes so damage can droop or remove them.</summary>
+        public readonly Dictionary<string, MeshBuilder>[] frontWing = new Dictionary<string, MeshBuilder>[LodCount];
+        public readonly Dictionary<string, MeshBuilder>[] rearWing = new Dictionary<string, MeshBuilder>[LodCount];
+        Dictionary<string, MeshBuilder>[] target;
 
         public CarGeometry(VehicleSetup setup)
         {
             this.setup = setup;
             g = -setup.cogHeight;
-            for (int i = 0; i < LodCount; i++) body[i] = new Dictionary<string, MeshBuilder>();
+            for (int i = 0; i < LodCount; i++)
+            {
+                body[i] = new Dictionary<string, MeshBuilder>();
+                frontWing[i] = new Dictionary<string, MeshBuilder>();
+                rearWing[i] = new Dictionary<string, MeshBuilder>();
+            }
+            target = body;
         }
 
         public float FrontZ => setup.FrontAxleZ;
@@ -56,7 +66,7 @@ namespace Apex.Game
 
         MeshBuilder B(int lod, string mat)
         {
-            if (!body[lod].TryGetValue(mat, out var mb)) body[lod][mat] = mb = new MeshBuilder();
+            if (!target[lod].TryGetValue(mat, out var mb)) target[lod][mat] = mb = new MeshBuilder();
             return mb;
         }
 
@@ -72,8 +82,11 @@ namespace Apex.Game
             Monocoque();
             EngineCover();
             Sidepods();
+            target = frontWing;
             FrontWing();
+            target = rearWing;
             RearWing();
+            target = body;
             Halo();
             Mirrors();
             CockpitInterior();

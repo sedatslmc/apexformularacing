@@ -135,24 +135,44 @@ namespace Apex.Game
             var lodRenderers = new List<Renderer>[CarGeometry.LodCount];
             for (int i = 0; i < CarGeometry.LodCount; i++) lodRenderers[i] = new List<Renderer>();
 
-            // Body: one mesh per material and LOD.
+            // Body and the two wings: one mesh per material and LOD. The wings hang off
+            // pivots near their mounts so damage can droop or remove them.
             CarGeometry geo = null;
-            for (int lod = 0; lod < CarGeometry.LodCount; lod++)
+            float g0 = -setup.cogHeight;
+            var groups = new (string name, System.Func<CarGeometry, Dictionary<string, MeshBuilder>[]> select, Vector3 pivot)[]
             {
-                var lodRoot = new GameObject("BodyLOD" + lod).transform;
-                lodRoot.SetParent(visual, false);
-                foreach (var matKey in BodyMaterials)
+                ("Body", c => c.body, Vector3.zero),
+                ("FrontWing", c => c.frontWing, new Vector3(0f, g0 + 0.15f, setup.FrontAxleZ + 1.05f)),
+                ("RearWing", c => c.rearWing, new Vector3(0f, g0 + 0.5f, setup.RearAxleZ - 0.5f)),
+            };
+            foreach (var grp in groups)
+            {
+                var pivot = new GameObject(grp.name).transform;
+                pivot.SetParent(visual, false);
+                pivot.localPosition = grp.pivot;
+                var groupRenderers = new List<Renderer>();
+                for (int lod = 0; lod < CarGeometry.LodCount; lod++)
                 {
-                    string meshKey = $"body_{key}_{lod}_{matKey}";
-                    if (!MeshCache.TryGetValue(meshKey, out var mesh) || mesh == null)
+                    var lodRoot = new GameObject(grp.name + "LOD" + lod).transform;
+                    lodRoot.SetParent(pivot, false);
+                    lodRoot.localPosition = -grp.pivot;
+                    foreach (var matKey in BodyMaterials)
                     {
-                        if (geo == null) geo = new CarGeometry(setup).BuildBody();
-                        if (!geo.body[lod].TryGetValue(matKey, out var mb)) continue;
-                        mesh = mb.ToMesh(meshKey);
-                        MeshCache[meshKey] = mesh;
+                        string meshKey = $"{grp.name}_{key}_{lod}_{matKey}";
+                        if (!MeshCache.TryGetValue(meshKey, out var mesh) || mesh == null)
+                        {
+                            if (geo == null) geo = new CarGeometry(setup).BuildBody();
+                            if (!grp.select(geo)[lod].TryGetValue(matKey, out var mb)) continue;
+                            mesh = mb.ToMesh(meshKey);
+                            MeshCache[meshKey] = mesh;
+                        }
+                        var r = AddMesh(lodRoot, matKey, mesh, Mat(matKey, paint, accent));
+                        lodRenderers[lod].Add(r);
+                        groupRenderers.Add(r);
                     }
-                    lodRenderers[lod].Add(AddMesh(lodRoot, matKey, mesh, Mat(matKey, paint, accent)));
                 }
+                if (grp.name == "FrontWing") { vis.frontWing = pivot; vis.frontWingRenderers = groupRenderers.ToArray(); }
+                if (grp.name == "RearWing") { vis.rearWing = pivot; vis.rearWingRenderers = groupRenderers.ToArray(); }
             }
 
             // Wheels: pivot (position + steering) -> spinner (tire, rim, disc) + upright (static).

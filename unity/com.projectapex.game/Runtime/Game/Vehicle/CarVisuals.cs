@@ -38,6 +38,10 @@ namespace Apex.Game
         public Renderer[] compoundBands = new Renderer[0];
         public int[] compoundBandWheel = new int[0];
         public Renderer[] shiftLights = new Renderer[0];
+        public Transform frontWing;
+        public Renderer[] frontWingRenderers = new Renderer[0];
+        public Transform rearWing;
+        public Renderer[] rearWingRenderers = new Renderer[0];
         public TextMesh gearText;
         public TextMesh speedText;
 
@@ -103,6 +107,36 @@ namespace Apex.Game
             UpdateCockpit(sim, dt);
             UpdateLights(sim, dt);
             UpdateCompound(sim);
+            UpdateDamage(sim);
+        }
+
+        float shownFront = -1f, shownRear = -1f;
+
+        /// <summary>Damaged wings droop, destroyed ones are gone; a puncture drops the wheel.</summary>
+        void UpdateDamage(VehicleSimulation sim)
+        {
+            var d = sim.damage;
+            float front = sim.damageEnabled ? d.frontWing : 0f;
+            float rear = sim.damageEnabled ? d.rearWing : 0f;
+            if (frontWing != null && front != shownFront)
+            {
+                shownFront = front;
+                bool lost = front >= 0.99f;
+                foreach (var r in frontWingRenderers) if (r != null) r.enabled = !lost;
+                frontWing.localRotation = Quaternion.Euler(Mathf.Clamp01(front * 1.5f) * 9f, 0f, front * 4f);
+            }
+            if (rearWing != null && rear != shownRear)
+            {
+                shownRear = rear;
+                foreach (var r in rearWingRenderers) if (r != null) r.enabled = rear < 0.99f;
+                rearWing.localRotation = Quaternion.Euler(-rear * 12f, 0f, 0f);
+            }
+            if (!sim.damageEnabled) return;
+            for (int i = 0; i < 4; i++)
+            {
+                var pivot = vehicle.WheelVisuals[i];
+                if (pivot != null && d.puncture[i]) pivot.localPosition += Vector3.down * 0.04f;
+            }
         }
 
         void UpdateLinks()
