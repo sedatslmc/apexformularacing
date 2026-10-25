@@ -25,3 +25,4 @@ __pycache__/
 build/refs/
 export/
 unity/Logs-Setup/
+tools/carrender/node_modules/

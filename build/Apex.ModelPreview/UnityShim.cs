@@ -15,6 +15,9 @@ namespace UnityEngine
         public static Vector2 up => new Vector2(0, 1);
         public static Vector2 operator +(Vector2 a, Vector2 b) => new Vector2(a.x + b.x, a.y + b.y);
         public static Vector2 operator /(Vector2 a, float d) => new Vector2(a.x / d, a.y / d);
+        public static Vector2 operator -(Vector2 a, Vector2 b) => new Vector2(a.x - b.x, a.y - b.y);
+        public static Vector2 operator *(Vector2 a, float d) => new Vector2(a.x * d, a.y * d);
+        public static Vector2 operator *(float d, Vector2 a) => new Vector2(a.x * d, a.y * d);
     }
 
     public struct Vector3
@@ -75,6 +78,10 @@ namespace UnityEngine
     {
         public const float PI = MathF.PI;
         public const float Deg2Rad = MathF.PI / 180f;
+        public const float Rad2Deg = 180f / MathF.PI;
+        public static float Lerp(float a, float b, float t) { t = t < 0f ? 0f : t > 1f ? 1f : t; return a + (b - a) * t; }
+        public static float Max(float a, float b) => MathF.Max(a, b);
+        public static int Min(int a, int b) => Math.Min(a, b);
         public static float Sin(float a) => MathF.Sin(a);
         public static float Cos(float a) => MathF.Cos(a);
         public static float Sqrt(float a) => MathF.Sqrt(a);

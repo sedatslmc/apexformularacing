@@ -172,7 +172,7 @@ namespace Apex.Game
             // Same order as the colour rewards in Progression.
             Color[] table =
             {
-                new Color(0.05f, 0.33f, 0.62f), new Color(0.75f, 0.1f, 0.12f), new Color(0.93f, 0.93f, 0.95f), new Color(0.85f, 0.78f, 0.64f),
+                new Color(0.047f, 0.12f, 0.28f), new Color(0.75f, 0.1f, 0.12f), new Color(0.93f, 0.93f, 0.95f), new Color(0.85f, 0.78f, 0.64f),
                 new Color(0.12f, 0.38f, 0.22f), new Color(0.9f, 0.68f, 0.2f), new Color(0.16f, 0.17f, 0.19f), new Color(0.1f, 0.85f, 0.95f),
                 new Color(0.95f, 0.5f, 0.1f), new Color(0.58f, 0.6f, 0.63f), new Color(0.85f, 0.15f, 0.3f), new Color(0.35f, 0.15f, 0.55f),
                 new Color(0.75f, 0.88f, 0.95f), new Color(0.95f, 0.3f, 0.65f), new Color(0.82f, 0.7f, 0.48f), new Color(0.2f, 0.55f, 0.25f),

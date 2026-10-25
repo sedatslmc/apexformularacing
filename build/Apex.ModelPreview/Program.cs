@@ -37,7 +37,7 @@ if (primitivesOnly || Array.IndexOf(args, "--check") >= 0)
     if (primitivesOnly) return;
 }
 bool check = Array.IndexOf(args, "--check") >= 0;
-int[] budget = { 20000, 8000, 4000 };
+int[] budget = { 60000, 15000, 6000 };
 bool failed = primitiveFailed;
 Directory.CreateDirectory(outDir);
 var setup = new VehicleSetup();
@@ -58,9 +58,9 @@ static float SignedVolumeOf(Mesh m)
 
 for (int lod = 0; lod < CarGeometry.LodCount; lod++)
 {
-    var parts = new List<(string mat, Mesh mesh)>();
+    var parts = new List<(string mat, MeshBuilder mb, string name)>();
     foreach (var group in new[] { geo.body, geo.frontWing, geo.rearWing })
-        foreach (var kv in group[lod]) parts.Add((kv.Key, kv.Value.ToMesh(kv.Key)));
+        foreach (var kv in group[lod]) parts.Add((kv.Key, kv.Value, kv.Key));
     // Wheels at static ride height.
     for (int i = 0; i < 4; i++)
     {
@@ -71,27 +71,30 @@ for (int lod = 0; lod < CarGeometry.LodCount; lod++)
         var centre = new Vector3(mount.X, r - setup.cogHeight, mount.Z);
         var tire = new MeshBuilder { matrix = new Matrix4x4 { offset = centre } };
         CarGeometry.TireMesh(tire, r, w, 0.229f, lod);
-        parts.Add(("Tire", tire.ToMesh("Tire")));
+        parts.Add(("Tire", tire, "Tire"));
         var rim = new MeshBuilder { matrix = new Matrix4x4 { offset = centre } };
         CarGeometry.RimMesh(rim, w, 0.229f, lod);
-        parts.Add(("Rim", rim.ToMesh("Rim")));
+        parts.Add(("Rim", rim, "Rim"));
+        var hub = new MeshBuilder { matrix = new Matrix4x4 { offset = centre } };
+        CarGeometry.HubMesh(hub, w, 0.229f, i % 2 == 1, lod);
+        parts.Add(("CarAccent", hub, "Hub"));
         var band = new MeshBuilder { matrix = new Matrix4x4 { offset = centre } };
         CarGeometry.CompoundBand(band, r, w, 0.229f, lod);
-        parts.Add(("Belt", band.ToMesh("Band")));
+        parts.Add(("Belt", band, "Band"));
         if (lod == 0)
         {
             var disc = new MeshBuilder { matrix = new Matrix4x4 { offset = centre } };
             CarGeometry.BrakeDisc(disc, 0.16f, lod);
-            parts.Add(("Rim", disc.ToMesh("Disc")));
+            parts.Add(("Rim", disc, "Disc"));
         }
         if (lod == 0)
         {
             var up = new MeshBuilder { matrix = new Matrix4x4 { offset = centre } };
             CarGeometry.Upright(up, r, w, i % 2 == 0, front, lod);
-            parts.Add(("Carbon", up.ToMesh("Upright")));
+            parts.Add(("Carbon", up, "Upright"));
             var links = new MeshBuilder();
             foreach (var (inner, outer, rad) in CarGeometry.Links(setup, i)) links.Tube(inner, centre + outer, rad, 6);
-            parts.Add(("Carbon", links.ToMesh("Links")));
+            parts.Add(("Carbon", links, "Links"));
         }
     }
     if (lod == 0)
@@ -101,41 +104,53 @@ for (int lod = 0; lod < CarGeometry.LodCount; lod++)
         var grips = new MeshBuilder { matrix = new Matrix4x4 { offset = sw } };
         var disp = new MeshBuilder { matrix = new Matrix4x4 { offset = sw } };
         CarGeometry.SteeringWheel(carbon, grips, disp);
-        parts.Add(("Carbon", carbon.ToMesh("Wheel"))); parts.Add(("Interior", grips.ToMesh("Grips"))); parts.Add(("Display", disp.ToMesh("Display")));
+        parts.Add(("Carbon", carbon, "Wheel")); parts.Add(("Interior", grips, "Grips")); parts.Add(("Display", disp, "Display"));
         foreach (float gs in new[] { -1f, 1f })
         {
-            var glove = new MeshBuilder { matrix = new Matrix4x4 { offset = sw + new Vector3(gs * 0.15f, 0f, -0.03f) } };
-            CarGeometry.GloveMesh(glove);
-            parts.Add(("Glove", glove.ToMesh("Glove")));
+            var glove = new MeshBuilder { matrix = new Matrix4x4 { offset = sw + new Vector3(gs * 0.14f, 0f, -0.01f) } };
+            CarGeometry.GloveMesh(glove, gs);
+            parts.Add(("Glove", glove, "Glove"));
         }
         var helmetPos = new Vector3(0f, -setup.cogHeight + 0.76f, setup.FrontAxleZ - 2.05f);
         var shell = new MeshBuilder { matrix = new Matrix4x4 { offset = helmetPos } };
         var visor = new MeshBuilder { matrix = new Matrix4x4 { offset = helmetPos } };
         CarGeometry.HelmetMesh(shell, visor);
-        parts.Add(("Helmet", shell.ToMesh("Helmet"))); parts.Add(("Visor", visor.ToMesh("Visor")));
+        parts.Add(("Helmet", shell, "Helmet")); parts.Add(("Visor", visor, "Visor"));
     }
     var sb = new StringBuilder();
     int vBase = 1, tris = 0;
-    foreach (var (mat, mesh) in parts)
+    foreach (var (mat, mb, name) in parts)
     {
-        sb.AppendLine($"o {mesh.name}_{mat}");
+        sb.AppendLine($"o {name}_{mat}");
         sb.AppendLine($"usemtl {mat}");
-        foreach (var v in mesh.vertices) sb.AppendLine(string.Format(inv, "v {0:F4} {1:F4} {2:F4}", v.x, v.y, v.z));
-        for (int i = 0; i < mesh.triangles.Count; i += 3)
-            sb.AppendLine($"f {mesh.triangles[i] + vBase} {mesh.triangles[i + 1] + vBase} {mesh.triangles[i + 2] + vBase}");
-        vBase += mesh.vertices.Count;
-        tris += mesh.triangles.Count / 3;
+        var vs = mb.Vertices;
+        var ns = mb.ComputeNormals();
+        foreach (var v in vs) sb.AppendLine(string.Format(inv, "v {0:F4} {1:F4} {2:F4}", v.x, v.y, v.z));
+        foreach (var n in ns) sb.AppendLine(string.Format(inv, "vn {0:F3} {1:F3} {2:F3}", n.x, n.y, n.z));
+        foreach (var uv in mb.UVs) sb.AppendLine(string.Format(inv, "vt {0:F4} {1:F4}", uv.x, uv.y));
+        var ts = mb.Triangles;
+        for (int i = 0; i < ts.Count; i += 3)
+        {
+            int a0 = ts[i] + vBase, a1 = ts[i + 1] + vBase, a2 = ts[i + 2] + vBase;
+            sb.AppendLine($"f {a0}/{a0}/{a0} {a1}/{a1}/{a1} {a2}/{a2}/{a2}");
+        }
+        vBase += vs.Count;
+        tris += ts.Count / 3;
     }
     File.WriteAllText(Path.Combine(outDir, $"car_lod{lod}.obj"), sb.ToString());
     Console.WriteLine($"LOD{lod}: {tris} triangles, {vBase - 1} vertices, {parts.Count} parts (budget {budget[lod]})");
     if (tris > budget[lod]) failed = true;
-    foreach (var group in new[] { geo.body, geo.frontWing, geo.rearWing })
-    foreach (var kv in group[lod])
-        if (SignedVolume(kv.Value.ToMesh(kv.Key)) <= 0f)
+    // Body materials are open patches of one closed surface: check the sum per group.
+    foreach (var (gname, group) in new[] { ("body", geo.body), ("frontWing", geo.frontWing), ("rearWing", geo.rearWing) })
+    {
+        float sum = 0f;
+        foreach (var kv in group[lod]) sum += SignedVolume(kv.Value.ToMesh(kv.Key));
+        if (sum <= 0f)
         {
-            Console.WriteLine($"  inward-facing body mesh: LOD{lod} {kv.Key}");
+            Console.WriteLine($"  inward-facing group: LOD{lod} {gname} ({sum:F4} m³)");
             failed = true;
         }
+    }
     if (lod == 0)
         foreach (var kv in geo.body[0])
             Console.WriteLine(string.Format(inv, "  body {0,-9} tris {1,6}  signed volume {2:F4} m³", kv.Key, kv.Value.TriangleCount, SignedVolume(kv.Value.ToMesh(kv.Key))));

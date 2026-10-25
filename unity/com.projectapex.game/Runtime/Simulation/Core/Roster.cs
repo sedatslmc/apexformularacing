@@ -47,7 +47,7 @@ namespace Apex.Core
     {
         public static readonly TeamInfo[] Teams =
         {
-            new TeamInfo("Meridian Racing", 0.05f, 0.33f, 0.62f, 0.10f, 0.85f, 0.95f),
+            new TeamInfo("Meridian Racing", 0.047f, 0.12f, 0.28f, 0.0f, 0.83f, 1f),
             new TeamInfo("Kestrel Motorsport", 0.80f, 0.12f, 0.10f, 0.95f, 0.95f, 0.95f),
             new TeamInfo("Nova Velocity", 0.10f, 0.10f, 0.12f, 0.95f, 0.75f, 0.10f),
             new TeamInfo("Bosporus Racing Team", 0.70f, 0.05f, 0.15f, 0.95f, 0.85f, 0.55f),
