@@ -41,12 +41,16 @@ namespace Apex.Vehicle
         public float wheelRadiusRear = 0.36f;
         public float wheelInertiaFront = 1.1f;
         public float wheelInertiaRear = 1.6f;
-        public float maxSteerAngleDeg = 19f;
+        public float maxSteerAngleDeg = 22f;
         /// <summary>Lock retained at high speed when the steering assist is on.</summary>
         public float highSpeedSteerDeg = 4.5f;
         public float steerAssistSpeed = 75f;
-        /// <summary>Steering rack speed limit (deg/s at the wheels).</summary>
-        public float steerRateDeg = 120f;
+        /// <summary>Steering rack speed limit at standstill (deg/s at the wheels).</summary>
+        public float steerRateDeg = 140f;
+        /// <summary>Rack speed limit at high speed when the steering assist is on (deg/s).</summary>
+        public float steerRateHighSpeedDeg = 35f;
+        /// <summary>Counter-steer assist gain (rad of wheel angle per rad of excess rear slip).</summary>
+        public float counterSteerGain = 1.2f;
         public float ackermann = 0.12f;
         public float tireRelaxationLength = 0.35f;
         public int wheelSubsteps = 6;
@@ -72,7 +76,12 @@ namespace Apex.Vehicle
         public float tcCombinedThreshold = 1.0f;
         public float absSlipThreshold = 0.12f;
 
-        public TireModel tire = new TireModel();
+        /// <summary>Front tires (narrower).</summary>
+        public TireModel tireFront = new TireModel { nominalLoad = 2800f };
+        /// <summary>Rear tires: wider, so a higher nominal load and slightly more grip.
+        /// This keeps the rear from being the weaker axle despite carrying 55 % of the
+        /// weight, which is what makes real open-wheelers stable on turn-in.</summary>
+        public TireModel tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f };
         public EngineModel engine = new EngineModel();
         public Gearbox gearbox = new Gearbox();
 

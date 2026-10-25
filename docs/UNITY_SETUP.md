@@ -58,7 +58,7 @@ Die folgenden Abschnitte beschreiben den manuellen Weg mit URP-Vorlage.
 - Neigung (Gyro) lässt sich nur auf einem echten Gerät testen.
 
 ## 5. Tests in Unity
-*Window → General → Test Runner → EditMode → Run All*. Erwartet: alle Tests grün (dieselben 43 Tests wie `tools/verify.sh`).
+*Window → General → Test Runner → EditMode → Run All*. Erwartet: alle Tests grün (dieselben Tests wie `tools/verify.sh`).
 
 ## 6. Android-Testbuild
 1. *File → Build Profiles* (bzw. *Build Settings*) → **Android** → *Switch Platform*.

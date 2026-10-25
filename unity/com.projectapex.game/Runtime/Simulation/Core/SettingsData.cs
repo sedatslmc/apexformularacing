@@ -24,7 +24,8 @@ namespace Apex.Core
         public bool abs = true;
         public bool steeringAssist = true;
         public bool autoGearbox = true;
-        public int cameraMode;
+        /// <summary>0 cockpit, 1 T-cam (default, preferred in playtests), 2 chase, 3 far chase.</summary>
+        public int cameraMode = 1;
         public bool showTelemetry;
         public float masterVolume = 0.8f;
         public float tiltMaxAngleDeg = 35f;

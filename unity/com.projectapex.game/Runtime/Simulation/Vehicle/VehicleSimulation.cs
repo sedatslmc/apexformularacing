@@ -20,7 +20,8 @@ namespace Apex.Vehicle
     {
         public readonly VehicleSetup setup;
         public readonly WheelState[] wheels = new WheelState[4];
-        public readonly TireModel tire;
+        public readonly TireModel tireFront;
+        public readonly TireModel tireRear;
         public readonly EngineModel engine;
         public readonly Gearbox gearbox;
 
@@ -57,7 +58,8 @@ namespace Apex.Vehicle
         public VehicleSimulation(VehicleSetup setup)
         {
             this.setup = setup;
-            tire = setup.tire;
+            tireFront = setup.tireFront;
+            tireRear = setup.tireRear;
             engine = setup.engine;
             gearbox = setup.gearbox;
             for (int i = 0; i < 4; i++) wheels[i] = new WheelState(i, setup);
@@ -78,6 +80,8 @@ namespace Apex.Vehicle
             SteerAngle = 0f;
             throttle = brake = steer = 0f;
         }
+
+        public TireModel TireFor(WheelState w) => w.front ? tireFront : tireRear;
 
         public void RequestShiftUp() => shiftUpRequested = true;
         public void RequestShiftDown() => shiftDownRequested = true;
@@ -157,9 +161,10 @@ namespace Apex.Vehicle
             // slip just below the peak (friction-circle share left after cornering),
             // and backs off further if the wheel still starts to lock.
             AbsActive = false;
-            float tanPeakAbs = MathF.Tan(tire.slipAnglePeak);
             foreach (var w in wheels)
             {
+                var tire = TireFor(w);
+                float tanPeakAbs = MathF.Tan(tire.slipAnglePeak);
                 float share = w.front ? setup.brakeBiasFront : 1f - setup.brakeBiasFront;
                 float tb = brakeIn * setup.maxBrakeTorque * share * 2f;
                 if (assistAbs && brakeIn > 0.05f && Speed > 3f && w.contact)
@@ -206,7 +211,7 @@ namespace Apex.Vehicle
                     if (w.contact && w.load > 0f)
                     {
                         w.slipRatio = (w.omega * w.radius - vx) / MathF.Max(MathF.Abs(vx), 3f);
-                        tire.Compute(w.load, w.slipRatio, w.slipAngle, w.grip, out fx, out fy);
+                        TireFor(w).Compute(w.load, w.slipRatio, w.slipAngle, w.grip, out fx, out fy);
                     }
                     float rolling = SurfaceProperties.For(w.surface).rollingDrag * w.load * w.radius * MathF.Sign(w.omega);
                     float torque = w.driveTorque - fx * w.radius - rolling;
@@ -309,20 +314,65 @@ namespace Apex.Vehicle
             if (shifted) GearChanged?.Invoke(gearbox.gear);
         }
 
-        /// <summary>Maximum steering lock (rad) at the current speed.</summary>
+        /// <summary>
+        /// Maximum steering lock (rad) at the current speed. Without assist this is the
+        /// mechanical lock. With the steering assist it is the smaller of a speed-faded
+        /// lock and a grip-based limit: the kinematic angle for the car's maximum
+        /// lateral acceleration (incl. downforce) plus the front tire's peak slip angle.
+        /// Beyond that the front can only scrub or provoke the rear.
+        /// </summary>
         public float CurrentMaxLock()
         {
             float maxLock = setup.maxSteerAngleDeg * ApexMath.Deg2Rad;
             if (!assistSteering) return maxLock;
-            float t = ApexMath.Clamp01(MathF.Abs(ForwardSpeed) / setup.steerAssistSpeed);
-            return ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
+            float v = MathF.Abs(ForwardSpeed);
+            float t = ApexMath.Clamp01(v / setup.steerAssistSpeed);
+            float faded = ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
+            if (v < 5f) return faded;
+            float downforcePerMass = 0.5f * setup.airDensity * v * v * setup.downforceArea / setup.mass;
+            float aMax = tireFront.muPeak * 0.9f * (9.81f + downforcePerMass);
+            float gripLimit = MathF.Atan(setup.wheelbase * aMax / (v * v)) + tireFront.slipAnglePeak * 0.9f;
+            return MathF.Min(faded, gripLimit);
         }
+
+        /// <summary>Rack speed (rad/s): slower at speed with the assist so digital input cannot snap the car.</summary>
+        float CurrentRackRate()
+        {
+            float fast = setup.steerRateDeg * ApexMath.Deg2Rad;
+            if (!assistSteering) return fast;
+            float t = ApexMath.Clamp01(MathF.Abs(ForwardSpeed) / 55f);
+            return ApexMath.Lerp(fast, setup.steerRateHighSpeedDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
+        }
+
+        /// <summary>Counter-steer added by the assist when the rear slides past its limit (rad, + = right).</summary>
+        public float CounterSteer { get; private set; }
 
         void UpdateSteering(float dt)
         {
-            float target = ApexMath.Clamp(steer, -1f, 1f) * CurrentMaxLock();
+            float maxLock = CurrentMaxLock();
+            float target = ApexMath.Clamp(steer, -1f, 1f) * maxLock;
+            // Stability assist: when the rear slip angle exceeds ~75 % of its peak and
+            // is larger than the front's (oversteer), steer into the slide. The rear
+            // slip angle has the sign of the needed correction (right turn -> rear
+            // slides left -> negative slip -> steer left). The driver can still
+            // override with more lock; the assist only adds a bounded correction.
+            float cs = 0f;
+            if (assistSteering && Speed > 8f)
+            {
+                float ar = 0.5f * (wheels[2].slipAngle + wheels[3].slipAngle);
+                float af = 0.5f * (wheels[0].slipAngle + wheels[1].slipAngle);
+                float threshold = tireRear.slipAnglePeak * 0.75f;
+                float excess = MathF.Abs(ar) - threshold;
+                // Rear beyond its peak is a slide regardless of the front; between 75 % and
+                // 100 % only count it when the rear is working harder than the front.
+                bool sliding = MathF.Abs(ar) > tireRear.slipAnglePeak || MathF.Abs(ar) > MathF.Abs(af) * 0.9f;
+                if (excess > 0f && sliding)
+                    cs = MathF.Sign(ar) * MathF.Min(excess * setup.counterSteerGain, setup.maxSteerAngleDeg * ApexMath.Deg2Rad);
+            }
+            CounterSteer = ApexMath.MoveToward(CounterSteer, cs, 6f * dt);
+            target = ApexMath.Clamp(target + CounterSteer, -setup.maxSteerAngleDeg * ApexMath.Deg2Rad, setup.maxSteerAngleDeg * ApexMath.Deg2Rad);
             // Rack speed limit keeps the front from snapping on digital input.
-            SteerAngle = ApexMath.MoveToward(SteerAngle, target, setup.steerRateDeg * ApexMath.Deg2Rad * dt);
+            SteerAngle = ApexMath.MoveToward(SteerAngle, target, CurrentRackRate() * dt);
             float ack = setup.ackermann * SteerAngle;
             for (int i = 0; i < 2; i++)
             {
@@ -350,6 +400,7 @@ namespace Apex.Vehicle
                 return axleTorque;
             }
             float target = setup.tcCombinedThreshold * 0.92f;
+            var tire = tireRear;
             float tanPeak = MathF.Tan(tire.slipAnglePeak);
             float capacity = 0f;
             float measured = 0f;

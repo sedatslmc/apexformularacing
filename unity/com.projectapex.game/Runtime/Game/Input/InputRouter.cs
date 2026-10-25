@@ -18,6 +18,8 @@ namespace Apex.Game
     {
         public SettingsData settings = new SettingsData();
         public bool manualGears;
+        /// <summary>Car speed (m/s), set by the game; makes digital steering more progressive at speed.</summary>
+        public float vehicleSpeed;
 
         public float Throttle { get; private set; }
         public float Brake { get; private set; }
@@ -170,7 +172,15 @@ namespace Apex.Game
             float digitalSteer = Mathf.Clamp(kSteer + tSteer, -1f, 1f);
             if (analogSteer) Steer = padSteer;
             else if (tiltMode && TiltAvailable && digitalSteer == 0f) Steer = tiltSteer;
-            else Steer = steerAxis.Update(digitalSteer, dt);
+            else
+            {
+                // Hands move the wheel more gently at speed: full digital lock takes
+                // ~0.3 s when slow and ~0.6 s at high speed.
+                float k = Mathf.Clamp01(vehicleSpeed / 60f);
+                steerAxis.pressRate = Mathf.Lerp(3.4f, 1.7f, k);
+                steerAxis.releaseRate = Mathf.Lerp(5f, 3.5f, k);
+                Steer = steerAxis.Update(digitalSteer, dt);
+            }
             Throttle = Mathf.Max(throttleAxis.Update(Mathf.Max(kThrottle, tThrottle), dt), padThrottle);
             Brake = Mathf.Max(brakeAxis.Update(Mathf.Max(kBrake, tBrake), dt), padBrake);
         }

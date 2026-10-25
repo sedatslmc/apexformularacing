@@ -12,3 +12,4 @@
 | 2026-10-25 | Übergangs-UI mit IMGUI für M0/M1 | ohne Assets und Prefabs lauffähig und testbar; wird in M4 ersetzt | vorläufig |
 | 2026-10-25 | Spielcode als lokales UPM-Paket `com.projectapex.game`; Unity-Projekt wird lokal per Hub-Vorlage erzeugt | handgeschriebene ProjectSettings/YAML wären fehleranfällig; die Hub-Vorlage setzt URP-Versionen korrekt | angenommen |
 | 2026-10-25 | Kompiliertests gegen UnityEngine 2021.3 / UnityEditor 2021.1 aus NuGet | Unity-Downloads sind in der Cloud-Umgebung gesperrt; Unity-6-Zweige über `#if` gekapselt | Übergang, bis Unity-6-Referenzen verfügbar sind |
+| 2026-10-25 | Spielertest 1: getrennte Reifen vorne und hinten (Hinterreifen breiter), Lenkhilfe mit Grip-Limit, langsamerer Zahnstange bei Tempo und Gegenlenk-Assistent; 22° Einschlag; T-Cam als Standardkamera | Feedback: Heck bricht bei schnellem Einlenken aus, bei niedrigem Tempo kaum Lenkung; T-Cam bevorzugt | angenommen; Bestätigung im Editor ausstehend |

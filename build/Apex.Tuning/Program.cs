@@ -50,6 +50,63 @@ else if (mode == "brake")
             Console.WriteLine($"t={rig.time:F2} v={rig.u * 3.6f:F0} g={rig.sim.gearbox.gear} rpm={rig.sim.EngineRpm:F0} srF={ws[0].slipRatio:F2} srR={ws[2].slipRatio:F2} TbF={ws[0].brakeTorque:F0} TbR={ws[2].brakeTorque:F0} TdR={ws[2].driveTorque:F0} FzF={ws[0].load:F0} FzR={ws[2].load:F0} abs={rig.sim.AbsActive}");
     }
 }
+else if (mode == "steer")
+{
+    // Keyboard-style full-lock step steer at constant speed (digital ramp like InputRouter).
+    foreach (float kmh in new[] { 20f, 40f, 70f, 100f, 150f, 200f, 250f })
+    {
+        var rig = NewRig(true);
+        rig.sim.assistSteering = true;
+        rig.u = kmh / 3.6f;
+        foreach (var w in rig.sim.wheels) w.omega = rig.u / w.radius;
+        int g = 1; while (g < 8 && rig.u / 0.36f * rig.sim.gearbox.RatioFor(g) * 60f / 6.2832f > 11000f) g++;
+        rig.sim.gearbox.gear = g;
+        var axis = new Apex.InputLogic.DigitalAxis(3.2f, 5f, 7f);
+        axis.pressRate = 3.4f + (1.7f - 3.4f) * Math.Clamp(kmh / 3.6f / 60f, 0f, 1f);
+        float maxBeta = 0, maxRear = 0, maxFront = 0, yawEnd = 0, latEnd = 0, maxLock = 0; bool spun = false;
+        for (int i = 0; i < 120 * 3; i++)
+        {
+            float target = kmh / 3.6f;
+            rig.sim.throttle = Math.Clamp((target - rig.u) * 0.4f + 0.25f, 0f, 1f);
+            rig.sim.brake = 0f;
+            rig.sim.steer = axis.Update(1f, Dt);
+            rig.Step(Dt);
+            float beta = MathF.Atan2(rig.v, rig.u);
+            maxBeta = Math.Max(maxBeta, Math.Abs(beta));
+            maxRear = Math.Max(maxRear, Math.Abs(rig.sim.wheels[2].slipAngle));
+            maxFront = Math.Max(maxFront, Math.Abs(rig.sim.wheels[0].slipAngle));
+            maxLock = Math.Max(maxLock, Math.Abs(rig.sim.SteerAngle));
+            if (Math.Abs(beta) > 0.25f) spun = true;
+            yawEnd = rig.yawRate; latEnd = rig.u * rig.yawRate / 9.81f;
+        }
+        float radius = Math.Abs(rig.u / Math.Max(Math.Abs(yawEnd), 1e-3f));
+        Console.WriteLine($"{kmh,4} km/h lock {maxLock * 57.3f,5:F1}° maxBeta {maxBeta * 57.3f,5:F1}° rearSA {maxRear * 57.3f,5:F1}° frontSA {maxFront * 57.3f,5:F1}° lat {latEnd,5:F2} g radius {radius,6:F1} m v_end {rig.u * 3.6f,4:F0} {(spun ? "SPIN" : "")}");
+    }
+}
+else if (mode == "slide")
+{
+    // Power oversteer: steady right turn at 90 km/h, then full throttle with TC off.
+    foreach (var (assist, tc) in new[] { (false, false), (true, false), (false, true), (true, true) })
+    {
+        var rig = NewRig(tc);
+        rig.sim.assistSteering = assist;
+        rig.u = 25f;
+        foreach (var w in rig.sim.wheels) w.omega = rig.u / w.radius;
+        rig.sim.gearbox.gear = 3;
+        float maxBeta = 0f; bool spun = false;
+        for (int i = 0; i < 120 * 4; i++)
+        {
+            bool power = i > 120;
+            rig.sim.steer = assist ? 0.55f : 0.45f;
+            rig.sim.throttle = power ? 1f : Math.Clamp((25f - rig.u) * 0.4f + 0.25f, 0f, 1f);
+            rig.Step(Dt);
+            float beta = MathF.Atan2(rig.v, rig.u);
+            maxBeta = Math.Max(maxBeta, Math.Abs(beta));
+            if (Math.Abs(beta) > 0.35f) spun = true;
+        }
+        Console.WriteLine($"assist={assist} tc={tc}: max sideslip {maxBeta * 57.3f:F1}°, counter-steer {rig.sim.CounterSteer * 57.3f:F1}° {(spun ? "SPIN" : "caught")}");
+    }
+}
 else if (mode == "lap")
 {
     string id = args.Length > 1 ? args[1] : "test_loop";

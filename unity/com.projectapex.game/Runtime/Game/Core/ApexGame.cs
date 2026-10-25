@@ -336,6 +336,7 @@ namespace Apex.Game
                     }
                     break;
             }
+            if (Session != null) input.vehicleSpeed = Mathf.Abs(Session.Car.Sim.ForwardSpeed);
             if (Session != null)
                 Session.InputEnabled = (sm.Current == GameState.Driving || sm.Current == GameState.RadioOverlay) && !calibrating;
         }

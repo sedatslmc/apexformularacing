@@ -117,6 +117,77 @@ namespace Apex.Tests
             Assert.That(rig.u * 3.6f, Is.InRange(130f, 170f));
         }
 
+        static FlatGroundRig RigAtSpeed(float kmh, bool tc, bool steeringAssist)
+        {
+            var rig = NewRig(tc);
+            rig.sim.assistSteering = steeringAssist;
+            rig.u = kmh / 3.6f;
+            foreach (var w in rig.sim.wheels) w.omega = rig.u / w.radius;
+            int g = 1;
+            while (g < 8 && rig.u / 0.36f * rig.sim.gearbox.RatioFor(g) * 60f / (2f * MathF.PI) > 11000f) g++;
+            rig.sim.gearbox.gear = g;
+            return rig;
+        }
+
+        [TestCase(100f)]
+        [TestCase(150f)]
+        [TestCase(250f)]
+        public void QuickKeyboardSteerWithAssistKeepsRearBelowLimit(float kmh)
+        {
+            var rig = RigAtSpeed(kmh, true, true);
+            var axis = new Apex.InputLogic.DigitalAxis(1.7f, 3.5f, 7f);
+            float maxRear = 0f, maxBeta = 0f;
+            for (int i = 0; i < 120 * 3; i++)
+            {
+                rig.sim.throttle = Math.Clamp((kmh / 3.6f - rig.u) * 0.4f + 0.25f, 0f, 1f);
+                rig.sim.steer = axis.Update(1f, Dt);
+                rig.Step(Dt);
+                maxRear = Math.Max(maxRear, Math.Abs(rig.sim.wheels[2].slipAngle));
+                maxBeta = Math.Max(maxBeta, Math.Abs(MathF.Atan2(rig.v, rig.u)));
+            }
+            TestContext.WriteLine($"{kmh} km/h: rear slip {maxRear * 57.3f:F1}°, sideslip {maxBeta * 57.3f:F1}°");
+            Assert.That(maxRear, Is.LessThan(rig.sim.tireRear.slipAnglePeak), "rear stays below its grip peak");
+            Assert.That(maxBeta, Is.LessThan(0.1f), "no snap oversteer");
+        }
+
+        [Test]
+        public void LowSpeedTurningRadiusIsTight()
+        {
+            var rig = RigAtSpeed(20f, true, true);
+            for (int i = 0; i < 120 * 3; i++)
+            {
+                rig.sim.throttle = Math.Clamp((20f / 3.6f - rig.u) * 0.4f + 0.2f, 0f, 1f);
+                rig.sim.steer = 1f;
+                rig.Step(Dt);
+            }
+            float radius = rig.u / Math.Abs(rig.yawRate);
+            TestContext.WriteLine($"radius at 20 km/h: {radius:F1} m");
+            Assert.That(radius, Is.LessThan(9.5f));
+        }
+
+        [Test]
+        public void CounterSteerAssistCatchesPowerOversteer()
+        {
+            // 90 km/h right turn, then full throttle with TC off.
+            float Run(bool assist)
+            {
+                var rig = RigAtSpeed(90f, false, assist);
+                float maxBeta = 0f;
+                for (int i = 0; i < 120 * 4; i++)
+                {
+                    rig.sim.steer = assist ? 0.55f : 0.45f;
+                    rig.sim.throttle = i > 120 ? 1f : Math.Clamp((25f - rig.u) * 0.4f + 0.25f, 0f, 1f);
+                    rig.Step(Dt);
+                    maxBeta = Math.Max(maxBeta, Math.Abs(MathF.Atan2(rig.v, rig.u)));
+                }
+                return maxBeta;
+            }
+            float without = Run(false), with = Run(true);
+            TestContext.WriteLine($"max sideslip without assist {without * 57.3f:F0}°, with {with * 57.3f:F0}°");
+            Assert.That(without, Is.GreaterThan(0.5f), "scenario really provokes a spin");
+            Assert.That(with, Is.LessThan(0.45f), "assist holds the slide below ~26°");
+        }
+
         [TestCase("test_loop", 40.0, 75.0)]
         [TestCase("bosphorus_gp", 85.0, 140.0)]
         public void AutopilotCompletesValidLap(string trackId, double minLap, double maxLap)

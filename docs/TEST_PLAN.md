@@ -7,7 +7,7 @@
 | Antrieb | Motorkurve und Begrenzer, Getriebe, Übersetzungen und Höchsttempo, Automatik ohne Gangpendeln | ✅ 4/4 |
 | Zeitnahme | Interpolation unterhalb eines Ticks, Abkürzung, Rückwärtsfahren über die Linie, ungültige Runde, Live-Delta, Teleport | ✅ 6/6 |
 | Strecken | Stetigkeit, gegen den Uhrzeigersinn, Abstände, Bosporus-Designziele, Projektion, JSON | ✅ 9/9 |
-| Fahrdynamik (Prüfstand) | Federn tragen das Gewicht, Beschleunigung, Bremsen mit ABS, stationäre Kurve, Autopilot-Runden auf beiden Strecken | ✅ 6/6 |
+| Fahrdynamik (Prüfstand) | Federn tragen das Gewicht, Beschleunigung, Bremsen mit ABS, stationäre Kurve, schneller Einschlag bei 3 Tempi, Wenderadius, Gegenlenk-Assistent, Autopilot-Runden auf beiden Strecken | ✅ 11/11 |
 | Eingabe und Zustände | Neigungswinkel je Ausrichtung, Kalibrierung/Totzone/Begrenzung, flaches Gerät, Glättung, Digitalachse, Touch-Ownership, hängende Touches, Zustandsübergänge, Zurück-Navigation, Einstellungs-Migration | ✅ 12/12 |
 | Kompiliertest | Apex.Simulation (netstandard2.1, Warnungen = Fehler), Apex.Runtime gegen UnityEngine 2021.3 + Input System 1.11.2, Apex.Editor gegen UnityEditor 2021.1 | ✅ |
 
@@ -21,7 +21,7 @@ Vorbereitung: `docs/UNITY_SETUP.md`, Boot-Szene → Play → „Freies Training 
 | 1 | 10 s stehen lassen | Auto steht ruhig, kein Zittern, Telemetrie (F3): Federweg vorne ca. 13 mm, hinten ca. 17 mm | ☐ |
 | 2 | Vollgas aus dem Stand (TC an) | zügiger Start ohne Dreher, TC-Anzeige flackert kurz, Gänge schalten hoch, ca. 300 km/h auf der Geraden | ☐ |
 | 3 | Vollbremsung aus Höchsttempo (ABS an) | gerade Bremsung, ABS-Anzeige, kein Blockieren | ☐ |
-| 4 | Kurven mit Tastatur | vorhersehbares Einlenken, kein „Schienen“-Gefühl, Untersteuern bei Übertreibung | ☐ |
+| 4 | Kurven mit Tastatur | vorhersehbares Einlenken, kein „Schienen“-Gefühl, Untersteuern bei Übertreibung. Spielertest 1: Heck brach bei schnellem Einlenken aus, langsam kaum Lenkung → überarbeitet, bitte erneut prüfen | ☐ |
 | 5 | TC aus, früh Gas in der Haarnadel | Power-Oversteer möglich und abfangbar | ☐ |
 | 6 | Über Randsteine fahren | spürbare Federung, kein absurdes Springen | ☐ |
 | 7 | Komplette Runde | Rundenzeit und Sektoren erscheinen; Sektorfarben lila/grün/gelb | ☐ |
