@@ -148,10 +148,10 @@ namespace Apex.Tests
             Assert.That(s.tractionLevel, Is.EqualTo(2));
             Assert.That(s.SteeringAssistStrength, Is.EqualTo(0.5f));
             s.ApplyProfile(DrivingProfile.Expert);
-            Assert.That(s.tractionLevel, Is.EqualTo(0));
-            Assert.That(s.abs, Is.False);
+            Assert.That(s.tractionLevel, Is.EqualTo(1));
+            Assert.That(s.abs, Is.True, "digital pedals need ABS (keyboard lap test)");
             Assert.That(s.SteeringAssistStrength, Is.EqualTo(0f));
-            Assert.That(s.autoGearbox, Is.False);
+            Assert.That(s.speedSensitiveSteering, Is.True);
             s.ApplyProfile(DrivingProfile.Casual);
             Assert.That(s.tractionLevel, Is.EqualTo(3));
             Assert.That(s.SteeringAssistStrength, Is.EqualTo(1f));
@@ -308,6 +308,22 @@ namespace Apex.Tests
         {
             var (front, rear) = FirstLock(0.5f);
             Assert.That(rear, Is.LessThan(front));
+        }
+
+        [Test]
+        public void SpeedSensitiveSteeringLimitsLockWithoutAssist()
+        {
+            var rig = Rig(200f, 6);
+            rig.sim.steeringAssist = 0f;
+            rig.sim.PreStep(Dt, rig.u, rig.u);
+            float limited = rig.sim.CurrentMaxLock();
+            rig.sim.speedSensitiveSteering = false;
+            float raw = rig.sim.CurrentMaxLock();
+            rig.sim.steeringAssist = 1f;
+            float assisted = rig.sim.CurrentMaxLock();
+            Assert.That(raw, Is.EqualTo(rig.sim.setup.maxSteerAngleDeg * ApexMath.Deg2Rad).Within(1e-4f));
+            Assert.That(limited, Is.LessThan(raw * 0.6f));
+            Assert.That(limited, Is.GreaterThan(assisted), "more lock than the assist: the front can be overdriven");
         }
 
         [Test]

@@ -402,6 +402,7 @@ namespace Apex.Game
             sim.tractionLevel = Settings.tractionLevel;
             sim.assistAbs = Settings.abs;
             sim.steeringAssist = Settings.SteeringAssistStrength;
+            sim.speedSensitiveSteering = Settings.speedSensitiveSteering;
             sim.setup.brakeBiasFront = Settings.brakeBiasFront;
             sim.autoGearbox = Settings.autoGearbox;
             input.manualGears = !sim.autoGearbox;

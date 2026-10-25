@@ -270,7 +270,7 @@ namespace Apex.Game
                 foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;
                 rc.ai.gripFactor = grip;
                 rc.ai.wet = sim.trackWetness > 0.25f;
-                rc.ai.maxSteerRad = rc.isPlayer && !sim.assistSteering ? sim.setup.maxSteerAngleDeg * ApexMath.Deg2Rad : sim.CurrentMaxLock();
+                rc.ai.maxSteerRad = sim.CurrentMaxLock();
                 rc.ai.frontSlipUsage = Mathf.Max(Mathf.Abs(sim.wheels[0].slipAngle), Mathf.Abs(sim.wheels[1].slipAngle)) / sim.tireFront.slipAnglePeak;
                 // After the flag AI cars cruise back.
                 if (rc.entry.finished && !rc.isPlayer) rc.ai.speedCap = Mathf.Min(rc.ai.speedCap, 45f);

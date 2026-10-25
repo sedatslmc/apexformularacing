@@ -216,11 +216,12 @@ namespace Apex.Game
             else if (tiltMode && TiltAvailable && digitalSteer == 0f) Steer = tiltSteer;
             else
             {
-                // Hands move the wheel more gently at speed: full digital lock takes
-                // ~0.3 s when slow and ~0.6 s at high speed.
+                // Direct but progressive: full digital input takes ~0.18 s when slow and
+                // ~0.33 s at high speed (the lock itself is limited by the simulation).
                 float k = Mathf.Clamp01(vehicleSpeed / 60f);
-                steerAxis.pressRate = Mathf.Lerp(3.4f, 1.7f, k);
-                steerAxis.releaseRate = Mathf.Lerp(5f, 3.5f, k);
+                steerAxis.pressRate = InputTuning.SteerPressRate(k);
+                steerAxis.releaseRate = InputTuning.SteerReleaseRate(k);
+                steerAxis.reverseRate = InputTuning.SteerReverseRate;
                 Steer = steerAxis.Update(digitalSteer, dt);
             }
             Throttle = Mathf.Max(throttleAxis.Update(Mathf.Max(kThrottle, tThrottle), dt), padThrottle);

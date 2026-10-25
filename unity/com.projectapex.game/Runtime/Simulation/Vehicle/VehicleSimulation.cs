@@ -38,6 +38,15 @@ namespace Apex.Vehicle
         /// bounded counter-steer correction.</summary>
         public float steeringAssist = 1f;
         public bool autoGearbox = true;
+        /// <summary>
+        /// Speed-sensitive steering (an input filter, not a driving aid): limits the lock
+        /// to a margin above what the front tires can use at the current speed, so full
+        /// digital input at 250 km/h does not mean 22° of lock. No counter-steer, no grip.
+        /// Off = raw mechanical lock (for analogue wheels / pads).
+        /// </summary>
+        public bool speedSensitiveSteering = true;
+        /// <summary>Lock margin above the grip limit with speed-sensitive steering and no assist.</summary>
+        public float speedSensitiveHeadroom = 1.35f;
 
         public bool assistTraction
         {
@@ -300,6 +309,9 @@ namespace Apex.Vehicle
                     // Wheel starting to lock: release pressure so it can spin back up
                     // (past the peak the tire transmits only the sliding floor).
                     if (w.slipRatio < -setup.absSlipThreshold) capacity *= 0.4f;
+                    // Cornering brake control: a rear tire already past its lateral peak
+                    // gets no brake pressure, so braking cannot pull the rear round.
+                    if (!w.front && sy > 0.95f) capacity *= ApexMath.Clamp01((1.25f - sy) / 0.3f);
                     capacity = MathF.Max(capacity, 0f);
                     if (tb > capacity)
                     {
@@ -551,19 +563,23 @@ namespace Apex.Vehicle
         {
             float maxLock = setup.maxSteerAngleDeg * ApexMath.Deg2Rad;
             float strength = ApexMath.Clamp01(steeringAssist);
-            if (strength <= 0f) return maxLock;
+            if (strength <= 0f && !speedSensitiveSteering) return maxLock;
             float v = MathF.Abs(ForwardSpeed);
             float t = ApexMath.Clamp01(v / setup.steerAssistSpeed);
-            float faded = ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
+            float faded = strength > 0f ? ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t)) : maxLock;
             if (v < 5f) return faded;
             float downforcePerMass = 0.5f * setup.airDensity * v * v * setup.downforceArea / setup.mass;
             float aMax = tireFront.muPeak * 0.9f * (9.81f + downforcePerMass);
             float gripLimit = MathF.Atan(setup.wheelbase * aMax / (v * v)) + tireFront.slipAnglePeak * 0.9f;
             // Lighter assist leaves headroom past the grip limit: the driver can
             // overdrive the front (understeer) or load up the rear.
-            float headroom = 1f + 0.8f * (1f - strength);
+            if (strength <= 0f) return MathF.Min(maxLock, gripLimit * speedSensitiveHeadroom);
+            float headroom = 1f + AssistHeadroom * (1f - strength);
             return MathF.Min(maxLock, MathF.Min(faded, gripLimit) * headroom);
         }
+
+        /// <summary>Extra lock above the grip limit per unit of missing assist strength.</summary>
+        public const float AssistHeadroom = 0.5f;
 
         /// <summary>Rack speed (rad/s): slower at speed with the assist so digital input cannot snap the car.</summary>
         float CurrentRackRate()
@@ -589,7 +605,9 @@ namespace Apex.Vehicle
             // slides left -> negative slip -> steer left). The driver can still
             // override with more lock; the assist only adds a bounded correction.
             float cs = 0f;
-            if (assistSteering && Speed > 8f)
+            // Only for power oversteer (on throttle, off the brake). Reacting to rear slip
+            // while trail braking fought the driver and caused spins (keyboard lap test).
+            if (assistSteering && Speed > 8f && throttle > 0.2f && brake < 0.05f)
             {
                 float ar = 0.5f * (wheels[2].slipAngle + wheels[3].slipAngle);
                 float af = 0.5f * (wheels[0].slipAngle + wheels[1].slipAngle);

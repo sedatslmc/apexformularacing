@@ -26,7 +26,7 @@ namespace Apex.Core
     [Serializable]
     public sealed class SettingsData
     {
-        public const int CurrentVersion = 2;
+        public const int CurrentVersion = 3;
 
         public int version = CurrentVersion;
         public ControlPreset controlPreset = ControlPreset.Keyboard;
@@ -37,6 +37,8 @@ namespace Apex.Core
         /// <summary>0 off, 1 light, 2 full.</summary>
         public int steeringAssistLevel = 1;
         public bool autoGearbox = true;
+        /// <summary>Speed-sensitive steering: input filter limiting lock at speed (not a grip aid).</summary>
+        public bool speedSensitiveSteering = true;
         /// <summary>Front brake bias (share of brake torque on the front axle).</summary>
         public float brakeBiasFront = 0.57f;
         /// <summary>Pit assist: the car drives itself through the pit lane and stops in its box.</summary>
@@ -76,6 +78,14 @@ namespace Apex.Core
                 version = 2;
                 changed = true;
             }
+            if (version < 3)
+            {
+                // v3: revised Expert preset and speed-sensitive steering; re-apply presets.
+                if (drivingProfile != DrivingProfile.Custom) ApplyProfile(drivingProfile);
+                speedSensitiveSteering = true;
+                version = 3;
+                changed = true;
+            }
             changed |= ClampField(ref masterVolume, 0f, 1f);
             changed |= ClampField(ref tiltMaxAngleDeg, 15f, 70f);
             changed |= ClampField(ref tiltDeadZoneDeg, 0f, 8f);
@@ -111,18 +121,24 @@ namespace Apex.Core
                     abs = true;
                     steeringAssistLevel = 2;
                     autoGearbox = true;
+                    speedSensitiveSteering = true;
                     break;
                 case DrivingProfile.Balanced:
                     tractionLevel = 2;
                     abs = true;
                     steeringAssistLevel = 1;
                     autoGearbox = true;
+                    speedSensitiveSteering = true;
                     break;
                 case DrivingProfile.Expert:
-                    tractionLevel = 0;
-                    abs = false;
+                    // Keys and touch buttons give 0/100 % pedals: without ABS and TC the
+                    // car is not drivable with them (keyboard lap test), so Expert keeps
+                    // ABS and low TC. "Custom" can switch everything off.
+                    tractionLevel = 1;
+                    abs = true;
                     steeringAssistLevel = 0;
-                    autoGearbox = false;
+                    autoGearbox = true;
+                    speedSensitiveSteering = true;
                     break;
             }
         }
