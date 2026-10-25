@@ -30,6 +30,10 @@ namespace Apex.Core
         public bool falseStarts = true;
         public bool trackLimitPenalties = true;
         public bool mandatoryPitStop;
+        /// <summary>Race control may neutralise the race with a (virtual) safety car.</summary>
+        public bool safetyCar = true;
+        /// <summary>Technical failures of AI cars: 0 off (default), 1 rare, 2 frequent.</summary>
+        public int failures;
         public TireCompound startCompound = TireCompound.Medium;
         public int playerTeam;
         public int seed = 1;
@@ -51,6 +55,7 @@ namespace Apex.Core
             difficulty = Math.Max(0f, Math.Min(1f, difficulty));
             qualifyingMinutes = Math.Max(3f, Math.Min(30f, qualifyingMinutes));
             tireWear = Math.Max(0f, Math.Min(10f, tireWear));
+            failures = Math.Max(0, Math.Min(2, failures));
             playerTeam = Math.Max(0, Math.Min(Roster.Teams.Length - 1, playerTeam));
         }
     }

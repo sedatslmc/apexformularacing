@@ -35,6 +35,13 @@ namespace Apex.Game
         public bool mandatoryStopDone;
         public float startHold;
         public float lastStopTime;
+        /// <summary>Sim time of a technical failure (AI only, if enabled); infinity = none.</summary>
+        public double failureAt = double.PositiveInfinity;
+        public bool failed;
+        /// <summary>A failed car stops on the racing line instead of pulling off.</summary>
+        public bool failureOnTrack;
+        /// <summary>Removed by the marshals (retired, inactive).</summary>
+        public bool removed;
 
         public VehicleSimulation Sim => car.Sim;
         public bool AutoDriven => !isPlayer || pitAssistActive;
@@ -58,6 +65,9 @@ namespace Apex.Game
         public RaceDirector Director { get; private set; }
         public WeatherModel Weather { get; private set; }
         public RacingLine Line { get; private set; }
+        public RaceControl Control { get; private set; }
+        /// <summary>Safety car vehicle while deployed, else null.</summary>
+        public VehicleController SafetyCar { get; private set; }
         public readonly List<RaceCar> Cars = new List<RaceCar>();
         public RaceCar Player { get; private set; }
         public InputRouter Input { get; set; }
@@ -75,6 +85,12 @@ namespace Apex.Game
         PitCrew crew;
         readonly List<CarState> states = new List<CarState>();
         double playerFinishedAt = -1;
+        AIDriver safetyCarDriver;
+        int safetyCarHint = -1;
+        bool safetyCarLeaving;
+        int leaderLapsSeen;
+        readonly List<CarReport> reports = new List<CarReport>();
+        public const int SafetyCarId = 1000;
         bool completeRaised;
         float strategyTimer;
         float flagTimer;
@@ -95,6 +111,7 @@ namespace Apex.Game
             Director.Warning += (e, r) => { if (e.isPlayer) Message?.Invoke(r, ApexStyle.Caution, 2); };
             Director.FastestLapSet += (e, t) => Message?.Invoke($"Schnellste Runde: {e.code} {ApexStyle.FormatTime(t)}", ApexStyle.Best, 1);
             Director.EntryFinished += OnEntryFinished;
+            SetupRaceControl(config);
 
             var compound = CompoundForConditions(Weather.TrackWetness, config.startCompound);
             int slot = 0;
@@ -150,6 +167,208 @@ namespace Apex.Game
                 slot++;
             }
             ApplyConditions();
+            ScheduleFailures(config);
+        }
+
+        void SetupRaceControl(SessionConfig config)
+        {
+            var rules = new RaceControlRules
+            {
+                safetyCar = config.safetyCar && Type == SessionType.Race,
+                virtualSafetyCar = config.safetyCar && Type == SessionType.Race,
+            };
+            Control = new RaceControl(rules, Circuit.Geometry.Length);
+            Control.StatusChanged += OnTrackStatus;
+            Control.CarRecovered += OnCarRecovered;
+            Control.GiveBackRequested += (a, b) =>
+            {
+                var passer = Cars.Find(c => c.index == a);
+                var victim = Cars.Find(c => c.index == b);
+                if (passer != null && passer.isPlayer && victim != null)
+                    Message?.Invoke($"Position an {victim.code} zurückgeben ({Control.rules.giveBackTime:0} s)", ApexStyle.Caution, 2);
+            };
+            Control.PenaltyIssued += (id, sec, reason) =>
+            {
+                var rc = Cars.Find(c => c.index == id);
+                if (rc != null) Director.AddPenalty(rc.entry, sec, reason);
+            };
+        }
+
+        /// <summary>Technical failures (AI only): off by default, configurable in the race setup.</summary>
+        void ScheduleFailures(SessionConfig config)
+        {
+            if (Type != SessionType.Race || config.failures <= 0) return;
+            var rng = new System.Random(config.seed * 31 + 7);
+            float chance = config.failures == 1 ? 0.06f : 0.18f;
+            float raceSeconds = config.laps * 95f;
+            foreach (var rc in Cars)
+            {
+                if (rc.isPlayer || rng.NextDouble() > chance) continue;
+                rc.failureAt = 20.0 + rng.NextDouble() * Mathf.Max(30f, raceSeconds - 40f);
+                rc.failureOnTrack = rng.NextDouble() < 0.35;
+            }
+        }
+
+        void OnTrackStatus(TrackStatus status, string message)
+        {
+            Color c = status == TrackStatus.Green ? ApexStyle.Faster : status == TrackStatus.Yellow ? ApexStyle.Caution : new Color(1f, 0.6f, 0.1f);
+            if (status != TrackStatus.Yellow) Message?.Invoke(message, c, 2);
+            if (status == TrackStatus.SafetyCar) DeploySafetyCar();
+            if (status == TrackStatus.SafetyCarIn) safetyCarLeaving = true;
+            if (status == TrackStatus.Green) RemoveSafetyCar();
+        }
+
+        void OnCarRecovered(int id)
+        {
+            var rc = Cars.Find(c => c.index == id);
+            if (rc == null) return;
+            if (rc.isPlayer)
+            {
+                // The player is put back on track by the marshals (time lost), not retired.
+                var proj = Circuit.Geometry.Project(rc.car.transform.position.ToNum(), rc.hint);
+                var pose = Circuit.PoseAt(proj.distance, Circuit.Geometry.WidthAt(proj.distance) * 0.3f, rc.car.setup.cogHeight + 0.08f);
+                rc.car.ResetTo(pose.position, pose.rotation);
+                rc.entry.timer.ResetPosition();
+                rc.hint = -1;
+                Message?.Invoke("Streckenposten haben dich zurück auf die Strecke gesetzt", Color.white, 2);
+                return;
+            }
+            rc.removed = true;
+            Director.Retire(rc.entry);
+            rc.car.gameObject.SetActive(false);
+        }
+
+        void DeploySafetyCar()
+        {
+            if (SafetyCar != null || Director.Leader == null) return;
+            var leader = Cars.Find(c => c.entry == Director.Leader);
+            if (leader == null) return;
+            float d = leader.raw + 220f;
+            // Original placeholder livery: graphite with orange (no real-world safety car branding).
+            SafetyCar = CarBuilder.Build("SafetyCar", new VehicleSetup(), new Color(0.12f, 0.12f, 0.13f), new Color(1f, 0.55f, 0.05f));
+            SafetyCar.transform.SetParent(transform, false);
+            var pose = Circuit.PoseAt(d, 0f, SafetyCar.setup.cogHeight + 0.05f);
+            SafetyCar.ResetTo(pose.position, pose.rotation);
+            var sim = SafetyCar.Sim;
+            sim.assistSteering = true;
+            sim.assistTraction = true;
+            sim.assistAbs = true;
+            sim.FitTires(TireCompound.Medium);
+            // Rolling start at the safety car's pace.
+            var body = SafetyCar.Body;
+            RigidbodyCompat.SetVelocity(body, SafetyCar.transform.forward * Line.SpeedAt(d) * 0.55f);
+            foreach (var w in sim.wheels) w.omega = Line.SpeedAt(d) * 0.55f / w.radius;
+            sim.gearbox.gear = 4;
+            sim.SyncEngineToWheels();
+            safetyCarDriver = new AIDriver(Line, AIPersonality.Make(1f, 0f, 1f, 1f, 1f), 99) { noOvertaking = true };
+            safetyCarHint = -1;
+            safetyCarLeaving = false;
+        }
+
+        void RemoveSafetyCar()
+        {
+            if (SafetyCar == null) return;
+            Destroy(SafetyCar.gameObject);
+            SafetyCar = null;
+            safetyCarDriver = null;
+        }
+
+        void DriveSafetyCar(float dt)
+        {
+            if (SafetyCar == null) return;
+            var g = Circuit.Geometry;
+            var pos = SafetyCar.transform.position;
+            var proj = g.Project(pos.ToNum(), safetyCarHint);
+            safetyCarHint = proj.index;
+            var sim = SafetyCar.Sim;
+            var st = new CarState { id = SafetyCarId, distance = proj.distance, lateral = proj.lateral, speed = sim.ForwardSpeed, position = pos.ToNum(), forward = SafetyCar.transform.forward.ToNum() };
+            states.Add(st);
+            // "In this lap": the safety car peels off at the pit entry and disappears.
+            if (safetyCarLeaving && Circuit.Pit != null && ApexMath.PosMod(proj.distance - Circuit.Pit.entry, g.Length) < 15f)
+            {
+                RemoveSafetyCar();
+                return;
+            }
+            safetyCarDriver.controlSpeedCap = Line.SpeedAt(proj.distance) * 0.55f + 4f;
+            safetyCarDriver.maxSteerRad = sim.CurrentMaxLock();
+            sim.holdBrake = false;
+            var c = safetyCarDriver.Drive(st, states, dt);
+            sim.throttle = c.throttle;
+            sim.brake = c.brake;
+            sim.steer = c.steer;
+        }
+
+        void UpdateRaceControl(float dt)
+        {
+            if (Type != SessionType.Race || !Started || Director.CurrentPhase != RaceDirector.Phase.Racing) return;
+            var g = Circuit.Geometry;
+            reports.Clear();
+            foreach (var rc in Cars)
+            {
+                bool moving = SimTime >= rc.startHold + 2f;
+                reports.Add(new CarReport
+                {
+                    id = rc.index,
+                    distance = rc.raw,
+                    progress = rc.entry.Progress(g.Length),
+                    speed = rc.Sim.Speed,
+                    onRacingSurface = Mathf.Abs(rc.lateral) < g.WidthAt(rc.raw) * 0.5f + 0.5f,
+                    inPit = rc.pit.InPitLane || rc.pit.stage == PitState.Stage.Stopped,
+                    ignore = rc.removed || rc.entry.finished || rc.entry.retired || !moving,
+                });
+            }
+            int leaderLaps = Director.Leader != null ? Director.Leader.LapsCompleted : 0;
+            if (leaderLaps != leaderLapsSeen)
+            {
+                leaderLapsSeen = leaderLaps;
+                Control.LeaderCrossedLine(SimTime);
+            }
+            Control.Update(SimTime, reports, leaderLaps);
+        }
+
+        /// <summary>Applies race-control limits to one car before it drives.</summary>
+        void ApplyRaceControl(RaceCar rc)
+        {
+            var sim = rc.Sim;
+            bool inPit = rc.pit.InPitLane || rc.pit.stage == PitState.Stage.Stopped;
+            rc.ai.controlSpeedCap = float.PositiveInfinity;
+            rc.ai.noOvertaking = false;
+            rc.ai.followGap = 10f;
+            if (Control == null || inPit) return;
+            var status = Control.Status;
+            float lineSpeed = Line.SpeedAt(rc.raw);
+            if (Control.VscActive)
+            {
+                // VSC: everybody at the delta speed (automatic limiter, also for the player).
+                sim.speedLimit = Mathf.Max(18f, lineSpeed * Control.rules.vscSpeedFactor);
+                rc.ai.noOvertaking = true;
+            }
+            else
+            {
+                if (!float.IsInfinity(sim.speedLimit) && rc.pit.stage == PitState.Stage.None) sim.speedLimit = float.PositiveInfinity;
+                if (Control.SafetyCarOut)
+                {
+                    rc.ai.noOvertaking = true;
+                    rc.ai.followGap = 22f;
+                }
+                else if (Control.IsYellowAt(rc.raw))
+                {
+                    rc.ai.noOvertaking = true;
+                    rc.ai.controlSpeedCap = lineSpeed * 0.85f;
+                }
+            }
+        }
+
+        /// <summary>A failed AI car rolls to a stop: off the track or (rarely) on the racing line.</summary>
+        void ApplyFailure(RaceCar rc)
+        {
+            if (rc.failed || SimTime < rc.failureAt || rc.isPlayer || rc.pit.stage != PitState.Stage.None) return;
+            rc.failed = true;
+            float side = rc.lateral >= 0f ? 1f : -1f;
+            float edge = Circuit.Geometry.WidthAt(rc.raw) * 0.5f;
+            rc.ai.forcedLateral = rc.failureOnTrack ? rc.lateral : side * (edge + 5f);
+            if (Mathf.Abs(rc.lateral) < edge + 20f && rc.entry.position <= 20)
+                Message?.Invoke($"{rc.code} wird langsamer – technischer Defekt", ApexStyle.Caution, 1);
         }
 
         /// <summary>Starts lights (race) or the session clock.</summary>
@@ -221,6 +440,7 @@ namespace Apex.Game
             states.Clear();
             foreach (var rc in Cars)
             {
+                if (rc.removed) continue;
                 var pos = rc.car.transform.position;
                 var proj = g.Project(pos.ToNum(), rc.hint);
                 rc.hint = proj.index;
@@ -239,11 +459,16 @@ namespace Apex.Game
                 states.Add(rc.state);
             }
 
+            DriveSafetyCar(dt);
+            UpdateRaceControl(dt);
             foreach (var rc in Cars)
             {
+                if (rc.removed) continue;
                 if (Started) Director.UpdateEntry(rc.entry, Circuit.LapDistance(rc.raw), SimTime);
                 CheckTrackLimits(rc, dt);
                 UpdatePit(rc, dt);
+                ApplyRaceControl(rc);
+                ApplyFailure(rc);
                 DriveCar(rc, dt);
             }
             if (Started) Director.Tick(SimTime);
@@ -275,6 +500,12 @@ namespace Apex.Game
                 // After the flag AI cars cruise back.
                 if (rc.entry.finished && !rc.isPlayer) rc.ai.speedCap = Mathf.Min(rc.ai.speedCap, 45f);
                 var c = rc.ai.Drive(rc.state, states, dt);
+                if (rc.failed)
+                {
+                    // Lost drive: coast and brake to a halt.
+                    c.throttle = 0f;
+                    c.brake = rc.Sim.Speed > 3f ? 0.35f : 1f;
+                }
                 sim.throttle = c.throttle;
                 sim.brake = c.brake;
                 sim.steer = c.steer;
@@ -415,7 +646,7 @@ namespace Apex.Game
             float wet = Weather.TrackWetness;
             foreach (var rc in Cars)
             {
-                if (rc.isPlayer || rc.pit.stage != PitState.Stage.None || rc.entry.finished) continue;
+                if (rc.isPlayer || rc.removed || rc.failed || rc.pit.stage != PitState.Stage.None || rc.entry.finished) continue;
                 int lapsLeft = Director.rules.laps - rc.entry.LapsCompleted;
                 if (lapsLeft <= 1) continue;
                 var current = rc.Sim.tires[0].compound;
@@ -435,12 +666,18 @@ namespace Apex.Game
             flagTimer -= dt;
             if (flagTimer > 0f) return;
             var g = Circuit.Geometry;
+            if (Type == SessionType.Race && Control != null && Control.Status == TrackStatus.Yellow && Control.IsYellowAt(Player.raw))
+            {
+                Message?.Invoke("Gelbe Flagge – nicht überholen", ApexStyle.Caution, 2);
+                flagTimer = 4f;
+                return;
+            }
             foreach (var rc in Cars)
             {
-                if (rc == Player || rc.pit.InPitLane || rc.entry.finished) continue;
+                if (rc == Player || rc.removed || rc.pit.InPitLane || rc.entry.finished) continue;
                 float ahead = ApexMath.PosMod(rc.raw - Player.raw, g.Length);
                 bool stoppedOrOff = (rc.Sim.Speed < 8f && SimTime > rc.startHold + 10f) || Mathf.Abs(rc.lateral) > g.WidthAt(rc.raw) * 0.5f + 3f;
-                if (stoppedOrOff && ahead < 350f)
+                if (stoppedOrOff && ahead < 350f && Type != SessionType.Race)
                 {
                     Message?.Invoke("Gelbe Flagge – Vorsicht", ApexStyle.Caution, 2);
                     flagTimer = 4f;
