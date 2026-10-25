@@ -1,0 +1,22 @@
+Länge: 5108 m | Richtung: gegen Uhrzeigersinn (Gesamtdrehung +360°)
+Kurven: 20 | Höhe 2–45 m (Δ 43 m) | max. Steigung 9.7 % | min. Abstand nicht benachbarter Abschnitte 89 m
+  T1  R     89°  r_min     29 m  bei   412 m  Höhe  2.0 m
+  T2  L     82°  r_min     38 m  bei   578 m  Höhe  2.0 m
+  T3  R     35°  r_min    120 m  bei   764 m  Höhe  2.8 m
+  T4  L     34°  r_min    117 m  bei   918 m  Höhe  3.0 m
+  T5  R     40°  r_min     93 m  bei  1060 m  Höhe  3.8 m
+  T6  L    119°  r_min     26 m  bei  1220 m  Höhe  6.1 m
+  T7  R     51°  r_min     43 m  bei  1530 m  Höhe 20.0 m
+  T8  L     40°  r_min     69 m  bei  1720 m  Höhe 35.0 m
+  T9  L     32°  r_min     49 m  bei  1982 m  Höhe 45.0 m
+  T10 R     77°  r_min     41 m  bei  2062 m  Höhe 44.2 m
+  T11 L     16°  r_min     61 m  bei  2136 m  Höhe 43.2 m
+  T12 L    153°  r_min     23 m  bei  2312 m  Höhe 36.5 m
+  T13 R     30°  r_min     97 m  bei  3530 m  Höhe 22.5 m
+  T14 L     51°  r_min     74 m  bei  3772 m  Höhe 15.5 m
+  T15 R     20°  r_min    115 m  bei  4006 m  Höhe  8.9 m
+  T16 L     64°  r_min     26 m  bei  4198 m  Höhe  3.5 m
+  T17 R     54°  r_min     32 m  bei  4268 m  Höhe  3.0 m
+  T18 L     83°  r_min     29 m  bei  4346 m  Höhe  3.0 m
+  T19 R     45°  r_min     98 m  bei  4552 m  Höhe  2.2 m
+  T20 L    135°  r_min     28 m  bei  4704 m  Höhe  2.0 m

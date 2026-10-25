@@ -1,0 +1,25 @@
+{
+  "id": "test_loop",
+  "name": "Apex Testoval (flach)",
+  "description": "Flache Teststrecke für Meilenstein 1: lange Gerade, eine schnelle, eine mittlere und eine langsame Kurve, Schikane. Keine Höhenunterschiede.",
+  "direction": "counter_clockwise",
+  "default_width": 16.0,
+  "sector_fractions": [0.0, 0.33, 0.66],
+  "start_line_distance": 200.0,
+  "points": [
+    [0, -300, 0, 16],
+    [0, 300, 0, 16],
+    [0, 520, 0, 16],
+    [-60, 640, 0, 16],
+    [-200, 680, 0, 16],
+    [-330, 620, 0, 16],
+    [-380, 480, 0, 16],
+    [-330, 380, 0, 16],
+    [-380, 300, 0, 16],
+    [-420, 100, 0, 16],
+    [-430, -200, 0, 16],
+    [-390, -400, 0, 16],
+    [-260, -500, 0, 16],
+    [-100, -480, 0, 16]
+  ]
+}

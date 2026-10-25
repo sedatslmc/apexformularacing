@@ -1,0 +1,14 @@
+{
+  "name": "com.projectapex.game",
+  "version": "0.1.0",
+  "displayName": "Project Apex",
+  "description": "Project Apex game code: engine-independent simulation (Apex.Simulation), Unity runtime layer (Apex.Runtime), editor tooling and tests.",
+  "unity": "6000.0",
+  "dependencies": {
+    "com.unity.inputsystem": "1.11.2",
+    "com.unity.test-framework": "1.1.33"
+  },
+  "author": {
+    "name": "Project Apex"
+  }
+}

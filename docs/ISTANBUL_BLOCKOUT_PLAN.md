@@ -2,7 +2,7 @@
 
 Status: **Vorschlag**. Alle Maße sind fiktive, abstimmbare Designziele. Nichts ist georeferenziert oder vermessen. Die Strecke ist ein fiktiver, temporär gesperrter Rennkorridor, inspiriert vom europäischen Bosporus-Ufer bei Beşiktaş und Ortaköy. Sie behauptet nicht, dass diese Straßen, Breiten oder Kurven real existieren.
 
-Datenquelle: `data/tracks/bosphorus_gp.json` · Bericht und Grafik: `python3 tools/circuit_report.py data/tracks/bosphorus_gp.json docs/img/bosphorus_schematic_v0.png`
+Datenquelle: `unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json` · Bericht und Grafik: `python3 tools/circuit_report.py unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json docs/img/bosphorus_schematic_v0.png`
 
 ![Schema](img/bosphorus_schematic_v0.png)
 
