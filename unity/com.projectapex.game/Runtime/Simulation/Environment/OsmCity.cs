@@ -466,6 +466,17 @@ namespace Apex.Environment
             return best;
         }
 
+        /// <summary>True when (x, z) lies inside a building footprint or within `pad` of its bounding box edge.</summary>
+        public bool InsideBuilding(float x, float z, float pad)
+        {
+            if (!NearBuilding(x, z, pad)) return false;
+            if (pad > 0f) return true;
+            if (bins.TryGetValue(((int)MathF.Floor(x / BinSize), (int)MathF.Floor(z / BinSize)), out var list))
+                foreach (int i in list)
+                    if (Polygon.Contains(buildings[i].outline, x, z)) return true;
+            return false;
+        }
+
         bool NearBuilding(float x, float z, float pad)
         {
             for (int bz = (int)MathF.Floor((z - pad) / BinSize); bz <= (int)MathF.Floor((z + pad) / BinSize); bz++)

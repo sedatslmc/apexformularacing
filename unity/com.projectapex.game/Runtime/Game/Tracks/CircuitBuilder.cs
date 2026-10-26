@@ -210,7 +210,7 @@ namespace Apex.Game
         }
 
         /// <summary>Unity mesh (visual) and MeshCollider (when the surface has a physical type) from a SurfaceMesh, vertex for vertex.</summary>
-        static GameObject AddSurface(Transform parent, SurfaceMesh sm, params string[] materials)
+        internal static GameObject AddSurface(Transform parent, SurfaceMesh sm, params string[] materials)
         {
             var m = new Mesh { name = sm.name, indexFormat = IndexFormat.UInt32 };
             var v = new List<Vector3>(sm.vertices.Count);

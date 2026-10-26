@@ -303,6 +303,111 @@ namespace Apex.Game
             skin.Box(new Vector3(0.16f, 0.62f, 0.02f), new Vector3(0.06f, 0.3f, 0.07f));
         }
 
+        // --- City life: street furniture, vehicles, pedestrians (local frame: +z forward, y up, base at 0) ---
+
+        public const string Wood = "Bark", DarkSteel = "KitDark", Glass = "Glass", Tyre = "Tire";
+
+        /// <summary>Street furniture by <see cref="CityLife.Prop"/>; +z faces the street.</summary>
+        public static void StreetProp(Parts B, CityLife.Prop kind)
+        {
+            switch (kind)
+            {
+                case CityLife.Prop.Bench:
+                    for (int k = 0; k < 4; k++) B(Wood).Box(new Vector3(0f, 0.45f, -0.18f + k * 0.12f), new Vector3(1.8f, 0.04f, 0.1f));
+                    for (int k = 0; k < 3; k++) B(Wood).Box(new Vector3(0f, 0.62f + k * 0.13f, -0.3f), new Vector3(1.8f, 0.1f, 0.03f), Quaternion.Euler(-12f, 0f, 0f));
+                    foreach (float x in new[] { -0.75f, 0.75f })
+                    {
+                        B(DarkSteel).Box(new Vector3(x, 0.22f, 0f), new Vector3(0.06f, 0.44f, 0.5f));
+                        B(DarkSteel).Box(new Vector3(x, 0.7f, -0.3f), new Vector3(0.05f, 0.5f, 0.05f));
+                    }
+                    break;
+                case CityLife.Prop.Bin:
+                    B(DarkSteel).Tube(new Vector3(0f, 0f, 0f), new Vector3(0f, 0.9f, 0f), 0.24f, 10, true);
+                    B(DarkSteel).Tube(new Vector3(0f, 0.9f, 0f), new Vector3(0f, 0.96f, 0f), 0.27f, 10, true);
+                    break;
+                case CityLife.Prop.Bollard:
+                    B(DarkSteel).Tube(new Vector3(0f, 0f, 0f), new Vector3(0f, 0.85f, 0f), 0.07f, 8, true);
+                    B(DarkSteel).Tube(new Vector3(0f, 0.85f, 0f), new Vector3(0f, 0.92f, 0f), 0.09f, 8, true);
+                    break;
+                case CityLife.Prop.Planter:
+                    B(Concrete).Box(new Vector3(0f, 0.3f, 0f), new Vector3(1.2f, 0.6f, 1.2f));
+                    B(Foliage).Box(new Vector3(0f, 0.85f, 0f), new Vector3(1.0f, 0.55f, 1.0f), Quaternion.Euler(0f, 45f, 0f));
+                    break;
+                case CityLife.Prop.BusShelter:
+                    B(DarkSteel).Box(new Vector3(0f, 2.55f, 0f), new Vector3(4.2f, 0.12f, 1.8f));
+                    foreach (float x in new[] { -2f, 2f }) B(DarkSteel).Box(new Vector3(x, 1.25f, -0.75f), new Vector3(0.08f, 2.5f, 0.08f));
+                    B(Glass).Box(new Vector3(0f, 1.35f, -0.8f), new Vector3(4f, 2.1f, 0.03f));
+                    B(Glass).Box(new Vector3(-2f, 1.35f, -0.1f), new Vector3(0.03f, 2.1f, 1.3f));
+                    for (int k = 0; k < 3; k++) B(Wood).Box(new Vector3(-0.6f + k * 0.12f, 0.46f, -0.5f + k * 0.12f), new Vector3(2.2f, 0.04f, 0.1f));
+                    B(Seat).Box(new Vector3(1.4f, 1.6f, -0.76f), new Vector3(1.0f, 1.4f, 0.04f));   // timetable / city map panel
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// A city vehicle by <see cref="CityLife.Vehicle"/>, body material `body`. Sedan 4.5 m, van 5 m,
+        /// İETT-style bus 12 m, scooter 1.9 m. Low-poly, with glass, wheels and lights.
+        /// </summary>
+        public static void CityVehicle(Parts B, CityLife.Vehicle kind, string body)
+        {
+            void Wheels(float track, float[] zs, float r)
+            {
+                foreach (float z in zs)
+                    foreach (float x in new[] { -track, track })
+                        B(Tyre).Tube(new Vector3(x - 0.1f * Mathf.Sign(x), r, z), new Vector3(x + 0.1f * Mathf.Sign(x), r, z), r, 10, true);
+            }
+            switch (kind)
+            {
+                case CityLife.Vehicle.Bus:
+                    B(body).Box(new Vector3(0f, 1.0f, 0f), new Vector3(2.5f, 1.3f, 12f));
+                    B(Glass).Box(new Vector3(0f, 2.1f, 0f), new Vector3(2.52f, 0.9f, 11.6f));
+                    B(body).Box(new Vector3(0f, 2.75f, 0f), new Vector3(2.5f, 0.4f, 12f));
+                    Wheels(1.05f, new[] { -3.8f, 3.6f }, 0.5f);
+                    break;
+                case CityLife.Vehicle.Van:
+                    B(body).Box(new Vector3(0f, 0.95f, -0.3f), new Vector3(1.95f, 1.5f, 4.2f));
+                    B(body).Box(new Vector3(0f, 0.75f, 2.0f), new Vector3(1.9f, 1.0f, 0.9f));
+                    B(Glass).Box(new Vector3(0f, 1.4f, 1.62f), new Vector3(1.8f, 0.6f, 0.4f), Quaternion.Euler(-25f, 0f, 0f));
+                    Wheels(0.85f, new[] { -1.5f, 1.7f }, 0.36f);
+                    break;
+                case CityLife.Vehicle.Scooter:
+                    B(body).Box(new Vector3(0f, 0.55f, 0f), new Vector3(0.45f, 0.5f, 1.3f));
+                    B(DarkSteel).Box(new Vector3(0f, 1.0f, 0.55f), new Vector3(0.6f, 0.06f, 0.06f));
+                    B(Skin).Box(new Vector3(0f, 1.15f, -0.1f), new Vector3(0.36f, 0.6f, 0.3f));   // rider
+                    B(DarkSteel).Box(new Vector3(0f, 1.55f, -0.1f), new Vector3(0.24f, 0.26f, 0.26f));   // helmet
+                    foreach (float z in new[] { -0.65f, 0.65f }) B(Tyre).Tube(new Vector3(-0.05f, 0.25f, z), new Vector3(0.05f, 0.25f, z), 0.25f, 10, true);
+                    break;
+                default:   // sedan (cars and taxis)
+                    B(body).Box(new Vector3(0f, 0.6f, 0f), new Vector3(1.8f, 0.6f, 4.5f));
+                    B(body).Box(new Vector3(0f, 1.1f, -0.2f), new Vector3(1.6f, 0.45f, 2.1f));
+                    B(Glass).Box(new Vector3(0f, 1.12f, 0.95f), new Vector3(1.58f, 0.42f, 0.35f), Quaternion.Euler(-35f, 0f, 0f));
+                    B(Glass).Box(new Vector3(0f, 1.12f, -1.35f), new Vector3(1.58f, 0.4f, 0.3f), Quaternion.Euler(35f, 0f, 0f));
+                    B(Glass).Box(new Vector3(0f, 1.12f, -0.2f), new Vector3(1.62f, 0.34f, 1.8f));
+                    if (body == "CityTaxi") B(DarkSteel).Box(new Vector3(0f, 1.42f, -0.2f), new Vector3(0.5f, 0.14f, 0.2f));   // TAKSİ roof sign
+                    Wheels(0.82f, new[] { -1.4f, 1.4f }, 0.32f);
+                    break;
+            }
+        }
+
+        /// <summary>Pedestrian, 1.72 m, two walking poses (stride 0/1) so instanced crowds can alternate them; shirt material `shirt`.</summary>
+        public static void Pedestrian(Parts B, string shirt, string trousers, int stride)
+        {
+            float s = stride == 0 ? 1f : -1f;
+            // Legs (trousers), swinging opposite each other.
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var hip = new Vector3(0.1f * side, 0.86f, 0f);
+                var foot = new Vector3(0.1f * side, 0.04f, 0.22f * s * side);
+                B(trousers).Tube(foot, hip, 0.075f, 6, true);
+                B(Tyre).Box(foot + new Vector3(0f, 0f, 0.06f), new Vector3(0.1f, 0.08f, 0.26f));   // shoe
+            }
+            B(shirt).Box(new Vector3(0f, 1.18f, 0f), new Vector3(0.36f, 0.62f, 0.22f));
+            foreach (float side in new[] { -1f, 1f })
+                B(shirt).Tube(new Vector3(0.22f * side, 1.46f, 0f), new Vector3(0.24f * side, 0.9f, -0.16f * s * side), 0.05f, 5, true);
+            B(Skin).Box(new Vector3(0f, 1.6f, 0.01f), new Vector3(0.18f, 0.22f, 0.2f));
+            B(DarkSteel).Box(new Vector3(0f, 1.72f, -0.01f), new Vector3(0.19f, 0.06f, 0.21f));   // hair
+        }
+
         /// <summary>Gull, 1 m wingspan at the origin heading +z; wings form a shallow V (flap by scaling y).</summary>
         public static void GullMesh(MeshBuilder mb)
         {

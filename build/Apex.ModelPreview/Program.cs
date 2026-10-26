@@ -87,6 +87,44 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     Export("freighter", l => l.Freighter());
     return;
 }
+if (Array.IndexOf(args, "--citylife") >= 0)
+{
+    // City life lineup (vehicles, props, both pedestrian strides) in one OBJ for inspection renders.
+    var parts = new Dictionary<string, MeshBuilder>();
+    var at = Matrix4x4.identity;
+    MeshBuilder B(string m) { if (!parts.TryGetValue(m, out var mb)) parts[m] = mb = new MeshBuilder(); mb.matrix = at; return mb; }
+    float x = 0f;
+    void Put(float width, Action<EnvironmentGeometry.Parts> build, float z = 0f)
+    {
+        at = new Matrix4x4 { offset = new Vector3(x + width * 0.5f, 0f, z) };
+        build(B);
+        x += width + 1f;
+    }
+    Put(2.5f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Car, "CityCar0"));
+    Put(2.5f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Taxi, "CityTaxi"));
+    Put(2.8f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Van, "CityCar4"));
+    Put(1.2f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Scooter, "CityCar5"));
+    Put(4f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Bus, "CityBus"));
+    x = 0f;
+    foreach (Apex.Environment.CityLife.Prop k in Enum.GetValues(typeof(Apex.Environment.CityLife.Prop)))
+        Put(k == Apex.Environment.CityLife.Prop.BusShelter ? 4.5f : 1.8f, b => EnvironmentGeometry.StreetProp(b, k), 9f);
+    for (int i = 0; i < 4; i++) { int st = i & 1; Put(0.6f, b => EnvironmentGeometry.Pedestrian(b, "CityShirt" + (i / 2), "CityTrousers0", st), 9f); }
+    var sbl = new StringBuilder();
+    int vb = 1, tr = 0;
+    foreach (var kv in parts)
+    {
+        sbl.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+        var mbx = kv.Value;
+        foreach (var v in mbx.Vertices) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F3} {1:F3} {2:F3}", v.x, v.y, v.z));
+        var ts = mbx.Triangles;
+        for (int i = 0; i < ts.Count; i += 3) sbl.AppendLine($"f {ts[i] + vb} {ts[i + 1] + vb} {ts[i + 2] + vb}");
+        vb += mbx.VertexCount;
+        tr += ts.Count / 3;
+    }
+    File.WriteAllText(Path.Combine(outDir, "citylife.obj"), sbl.ToString());
+    Console.WriteLine($"citylife: {tr} triangles");
+    return;
+}
 if (Array.IndexOf(args, "--monument") >= 0)
 {
     // Monumental flag at its bosphorus_a site: flag_site.obj (installation LOD0, cloth at 6 m/s wind, terrain patch,

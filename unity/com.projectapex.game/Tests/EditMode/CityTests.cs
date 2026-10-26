@@ -30,6 +30,53 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void SideStreetsEndAtTheBarriersAndStayOnLand()
+        {
+            var (_, field, clear, data, _) = World();
+            var net = new StreetNetwork(data, field, clear, 1);
+            TestContext.WriteLine($"{net.roadLength / 1000f:F1} km roads, {net.footLength / 1000f:F1} km footways, {net.steps} steps, {net.chunks.Count} chunks, {net.TriangleCount} triangles");
+            Assert.That(net.roadLength, Is.GreaterThan(30000f), "the side-street network around the circuit");
+            Assert.That(net.footLength, Is.GreaterThan(10000f));
+            Assert.That(net.steps, Is.GreaterThan(100), "Istanbul's stairs (merdiven)");
+            int checkedVerts = 0;
+            foreach (var c in net.chunks.Values)
+                for (int i = 0; i < c.vertices.Count; i += 7)
+                {
+                    var v = c.vertices[i];
+                    Assert.That(clear.Margin(v.X, v.Z), Is.GreaterThan(0.5f), $"street vertex at {v.X:F0},{v.Z:F0} inside the racing envelope");
+                    checkedVerts++;
+                }
+            Assert.That(checkedVerts, Is.GreaterThan(10000));
+        }
+
+        [Test]
+        public void CityLifeStaysOffTheRacingSurfaceAndMoves()
+        {
+            var (_, field, clear, data, city) = World();
+            var life = new CityLife(data, field, clear, city, 1, 600, 220);
+            TestContext.WriteLine($"{life.props.Count} props, {life.parked.Count} parked cars, {life.pedestrians.Count} pedestrians, {life.vehicles.Count} vehicles");
+            Assert.That(life.props.Count, Is.GreaterThan(500));
+            Assert.That(life.parked.Count, Is.GreaterThan(300));
+            Assert.That(life.pedestrians.Count, Is.InRange(400, 700));
+            Assert.That(life.vehicles.Count, Is.InRange(150, 260));
+            int taxis = life.vehicles.FindAll(v => v.kind == (int)CityLife.Vehicle.Taxi).Count;
+            Assert.That(taxis, Is.GreaterThan(life.vehicles.Count / 5), "yellow taxis");
+            var start = life.vehicles.ConvertAll(v => v.position);
+            // Two minutes of city life: nobody ever enters the racing envelope; traffic moves.
+            float moved = 0f;
+            for (int k = 0; k < 120; k++)
+            {
+                life.Advance(1f);
+                foreach (var m in life.pedestrians) Assert.That(clear.Margin(m.position.X, m.position.Z), Is.GreaterThan(1f), "pedestrian on the track");
+                foreach (var m in life.vehicles) Assert.That(clear.Margin(m.position.X, m.position.Z), Is.GreaterThan(1f), "city traffic on the track");
+            }
+            for (int i = 0; i < life.vehicles.Count; i++) moved += Vector3.Distance(start[i], life.vehicles[i].position);
+            Assert.That(moved / life.vehicles.Count, Is.GreaterThan(30f), "traffic flows");
+            foreach (var p in life.props) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
+            foreach (var p in life.parked) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
+        }
+
+        [Test]
         public void EarClippingCoversConcaveFootprints()
         {
             // L-shaped footprint, given clockwise: area 300 m².

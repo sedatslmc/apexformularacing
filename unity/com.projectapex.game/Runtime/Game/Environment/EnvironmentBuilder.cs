@@ -74,6 +74,8 @@ namespace Apex.Game
             if (osm != null)
             {
                 BuildOsmCity(root.transform, osm);
+                BuildStreets(root.transform, new StreetNetwork(cityData, field, ci.Clearance, q));
+                BuildCityLife(root.transform, new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240), q);
                 allLots.AddRange(osm.AsLots());
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
@@ -235,6 +237,38 @@ namespace Apex.Game
                 });
                 lg.RecalculateBounds();
             }
+        }
+
+        /// <summary>
+        /// The city's side streets (StreetNetwork): visual only, no colliders; older city asphalt (the scanned
+        /// run-off set), paver pavements and footways, concrete kerbs and steps, centre dashes; each chunk is
+        /// culled when it covers less than 1.5 % of the screen height.
+        /// </summary>
+        static void BuildStreets(Transform root, StreetNetwork net)
+        {
+            var streetRoot = new GameObject("Streets").transform;
+            streetRoot.SetParent(root, false);
+            foreach (var chunk in net.chunks.Values)
+            {
+                if (chunk.TriangleCount == 0) continue;
+                var go = CircuitBuilder.AddSurface(streetRoot, chunk, "RunoffAsphalt", EnvironmentGeometry.Pavement, EnvironmentGeometry.Concrete, "Line", EnvironmentGeometry.Pavement, EnvironmentGeometry.Concrete);
+                var lg = go.AddComponent<LODGroup>();
+                lg.SetLODs(new[] { new LOD(0.015f, new Renderer[] { go.GetComponent<Renderer>() }) });
+                lg.RecalculateBounds();
+            }
+            Debug.Log($"[Apex] Streets: {net.roadLength / 1000f:F1} km roads, {net.footLength / 1000f:F1} km footways, {net.steps} steps.");
+        }
+
+        /// <summary>Street furniture, parked cars, pedestrians and traffic (CityLife), drawn instanced near the camera.</summary>
+        static void BuildCityLife(Transform root, CityLife life, int q)
+        {
+            var go = new GameObject("CityLife");
+            go.transform.SetParent(root, false);
+            var c = go.AddComponent<CityLifeComponent>();
+            c.drawDistance = q == 0 ? 150f : q == 1 ? 250f : 350f;
+            c.shadowDistance = q == 0 ? 0f : q == 1 ? 80f : 140f;
+            c.Setup(life);
+            Debug.Log($"[Apex] City life: {life.props.Count} props, {life.parked.Count} parked cars, {life.pedestrians.Count} pedestrians, {life.vehicles.Count} vehicles.");
         }
 
         /// <summary>The OSM buildings in chunks with two LODs (detailed: cornices, parapets, roof tanks).</summary>

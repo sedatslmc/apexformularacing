@@ -107,6 +107,12 @@
 - **Straßenraum:** Gehwege mit Bordstein, Querstraßen, Treppen, Stützmauern statt grauer Wände, Höfe, geparkte Autos nur außerhalb der Sperrzone.
 - **Fenster:** Interior-Mapping statt dunkler Flächen.
 
+- **Umgesetzt (2026-10-26, `CITY_FROM_OSM.md`; Overhaul-Phasen 2 und 3):**
+  - echte OSM-Stadt (Grundrisse, Höhen), Seitenstraßen mit Gehwegen, Bordsteinen und Treppen, die an den Barrieren enden
+  - Straßenmöbel und geparkte Autos
+  - Fußgänger und Stadtverkehr (instanziert, ein Drittel Taxis)
+  - **Status:** implementiert und getestet (Simulation); Low-Poly-Platzhalter-Modelle, in Unity nicht gesehen
+
 ### Phase 5 – Türkische Identität & Event
 - **Flaggen:** Monumentalflagge, Dachflaggen und Tribünenflaggen sind da. Ergänzen:
   - Balkonflaggen (schräge Wandhalter)
