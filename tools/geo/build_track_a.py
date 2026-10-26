@@ -229,6 +229,10 @@ def main():
         e, nn = OSM_POS[lid] if lid in OSM_POS else dem.enu(la, lo)
         data["geo"]["landmarks"].append({"id": lid, "name": name, "kind": kind, "height": h, "game": [round(e, 1), round(nn, 1)],
                                           "verified": ok, "source": src})
+    # Monumental Turkish flag on the Yıldız slope above the Bosphorus straight: site chosen by
+    # `cd build/Apex.Tuning && dotnet run -c Release -- flagsite bosphorus_a` (MonumentalFlagSite:
+    # on land, clear of every track part, best terrain visibility from the lap). Game frame (east, north).
+    data["monumental_flag"] = {"game": [993.3, 536.5], "source": "MonumentalFlagSite (Projektentscheidung, kein realer Standort)"}
     # Signature sightline: Çırağan Cd. before Ortaköy towards mosque and bridge.
     bridge_mid = dem.enu(41.0455, 29.0343)
     for label, frm, tgt in (("Ortaköy-Moschee", (1500, 720), OSM_POS["ortakoy_mosque"]),

@@ -47,12 +47,25 @@ namespace Apex.Game
             // Event buildings (pit building, timing tower, race control) keep stands and city away.
             foreach (var (x, z, r) in ci.EventFootprints) reserved.Add(new CityLayout.Reserved(x, z, r));
             BuildWaterfront(root.transform, env, ci, reserved);
+            // Monumental Turkish flag (site from the circuit file, re-checked against the built circuit): keep the city away.
+            bool monumental = false;
+            if (def.monumentalFlag.HasValue)
+            {
+                var (fx, fz) = def.monumentalFlag.Value;
+                monumental = MonumentalFlagSite.Validate(field, g, ci.Clearance, fx, fz, out _, out _);
+                if (monumental) reserved.Add(new CityLayout.Reserved(fx, fz, MonumentalFlagSite.ReservedRadius));
+                else Debug.LogWarning($"Monumental flag site {fx:F0},{fz:F0} is not clear of the circuit; not placed.");
+            }
             var opts = new CityLayout.Options { quality = q };
             opts.reserved.AddRange(reserved);
             var city = new CityLayout(field, def, opts);
             BuildCity(root.transform, city);
             BuildTrees(root.transform, env, city);
+            // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
+            foreach (var f in new RooftopFlagLayout(city, field, def, g, q).flags)
+                env.flagSpots.Add((V(f.position), f.length, f.pole, 1));
             BuildLandmarks(root.transform, env, ci);
+            if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
             BuildTrackside(root.transform, env, ci);
             BuildShips(root.transform, env, def, field.land);
             BuildGulls(root.transform, env, ci);
@@ -542,38 +555,17 @@ namespace Apex.Game
             var ts = new GameObject("Trackside").transform;
             ts.SetParent(root, false);
             var parts = new PartSet();
-            int n = g.Count;
-            int fenceStep = Mathf.Max(1, Mathf.RoundToInt(8f / g.Spacing));
-            float lampSpacing = Quality == 0 ? 70f : 45f;
-            float start = ci.Definition.startLineDistance;
-            foreach (int side in new[] { -1, 1 })
+            // Pavements and lamps behind the barriers, checked against every part of the circuit.
+            var furniture = new StreetFurnitureLayout(g, ci.WallLeft, ci.WallRight, ci.Clearance, field.IsWater, Quality);
+            foreach (var q in furniture.pavements)
             {
-                float[] wall = side < 0 ? ci.WallLeft : ci.WallRight;
-                float nextLamp = side < 0 ? 0f : lampSpacing * 0.5f;
-                for (int i = 0; i < n; i += fenceStep)
-                {
-                    int j = (i + fenceStep) % n;
-                    // Pavement (kerbstone and sidewalk) behind the 0.6 m deep barrier; catch fences come from TrackInfrastructureBuilder.
-                    float wi = wall[i], wj = wall[j];
-                    var a = TrackPoint(g, i, side * (wi + 0.65f), -0.1f);
-                    var b = TrackPoint(g, i, side * (wi + 4.3f), -0.1f);
-                    var c = TrackPoint(g, j, side * (wj + 4.3f), -0.1f);
-                    var e = TrackPoint(g, j, side * (wj + 0.65f), -0.1f);
-                    if (!field.IsWater(b.x, b.z))
-                    {
-                        parts.B(EnvironmentGeometry.Pavement).QuadFacing(a, b, c, e, new Vector2(a.x, a.z) / 3f, new Vector2(b.x, b.z) / 3f, new Vector2(c.x, c.z) / 3f, new Vector2(e.x, e.z) / 3f, Vector3.up);
-                        var outward = (b - a).normalized;
-                        parts.B(EnvironmentGeometry.Concrete).QuadFacing(b, c, c + Vector3.down * 2.5f, b + Vector3.down * 2.5f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, outward);
-                    }
-                    if (g.Distances[i] >= nextLamp)
-                    {
-                        nextLamp += lampSpacing;
-                        var basePt = TrackPoint(g, i, side * (wi + 3.6f), -0.1f);
-                        if (!field.IsWater(basePt.x, basePt.z))
-                            EnvironmentGeometry.Lamp(parts.B, basePt, V(g.Rights[i]) * -side, 9f);
-                    }
-                }
+                Vector3 a = V(q.a), b = V(q.b), c = V(q.c), e = V(q.d);
+                parts.B(EnvironmentGeometry.Pavement).QuadFacing(a, b, c, e, new Vector2(a.x, a.z) / 3f, new Vector2(b.x, b.z) / 3f, new Vector2(c.x, c.z) / 3f, new Vector2(e.x, e.z) / 3f, Vector3.up);
+                parts.B(EnvironmentGeometry.Concrete).QuadFacing(b, c, c + Vector3.down * 2.5f, b + Vector3.down * 2.5f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, V(q.outward));
             }
+            foreach (var l in furniture.lamps)
+                EnvironmentGeometry.Lamp(parts.B, V(l.position), V(l.towards), 9f);
+            float start = ci.Definition.startLineDistance;
             AddMeshObject(ts, "Pavements_Lamps", parts.parts, false);
             var font = CircuitBuilder.BuiltinFont();
             bool eventDress = EventBrandingBuilder.IsEvent(ci.Definition);
@@ -582,9 +574,9 @@ namespace Apex.Game
             {
                 var pr = g.Project(new System.Numerics.Vector3(x, 0f, z));
                 int i = pr.index;
-                float side = pr.lateral >= 0f ? 1f : -1f;
-                float wall = side < 0 ? ci.WallLeft[i] : ci.WallRight[i];
-                var p = TrackPoint(g, i, side * (wall + 2.2f), -0.1f);
+                // Behind the barrier on the side of the named street, or the other side; never on another track part.
+                if (!furniture.SignSpot(i, pr.lateral >= 0f ? 1 : -1, 2.2f, 1.5f, out var spot, out _)) continue;
+                var p = V(spot);
                 var fwd = V(g.Tangents[i]);
                 Board(ts, font, p + Vector3.up * 2.6f, Quaternion.LookRotation(fwd, Vector3.up), text, new Color(0.05f, 0.24f, 0.55f), Color.white, 2.6f, 0.55f, true);
             }
@@ -644,6 +636,9 @@ namespace Apex.Game
             var flagMat = EnvironmentMaterials.Flag;
             foreach (var (pos, length, pole, detail) in env.flagSpots)
             {
+                // A flag pole standing on the ground (not on a gantry, roof or tower) must not stand on any part of the circuit.
+                bool onGround = pos.y < field.Height(pos.x, pos.z) + 2f;
+                if (onGround && !ci.Clearance.IsClear(pos.x, pos.z, 0.3f, 0.3f)) continue;
                 var go = new GameObject("TurkishFlag");
                 go.transform.SetParent(flags, false);
                 var flag = go.AddComponent<FlagComponent>();

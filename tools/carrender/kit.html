@@ -90,6 +90,13 @@ const mats = {
   KerbRed: M({ color: 0xb3161b, roughness: 0.6 }),
   KerbWhite: M({ color: 0xe9e9e4, roughness: 0.6 }),
   RunoffAsphalt: M({ map: asphalt, color: 0xc9c6c0, roughness: 0.9 }),
+  // Monumental flag preview (tools: ModelPreview --monument; flag_tex.png from --flag).
+  Stone: M({ map: concrete, color: 0xe8dcc4, roughness: 0.85 }),
+  Pavement: M({ color: 0xbdb5a6, roughness: 0.8 }),
+  FlagPole: M({ color: 0xd4d7da, metalness: 0.85, roughness: 0.3 }),
+  EventGold: M({ color: 0xc9a66b, metalness: 1.0, roughness: 0.25 }),
+  Ground: M({ color: 0x5f6b45, roughness: 1 }),
+  TurkishFlag: M({ map: new THREE.TextureLoader().load('/flag_tex.png', (t) => { t.colorSpace = THREE.SRGBColorSpace; }), side: THREE.DoubleSide, roughness: 0.75 }),
 };
 const fallback = M({ color: 0xff00ff });
 

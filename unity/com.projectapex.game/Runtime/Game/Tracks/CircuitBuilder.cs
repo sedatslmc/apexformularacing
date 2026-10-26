@@ -29,6 +29,8 @@ namespace Apex.Game
         public RoadSurface Surface { get; internal set; }
         public float[] WallLeft { get; internal set; }
         public float[] WallRight { get; internal set; }
+        /// <summary>Keep-out envelope of all track parts: every placed object checks against it.</summary>
+        public TrackClearance Clearance { get; internal set; }
         /// <summary>Environment dressing (city, landmarks, water), if the circuit has geo data.</summary>
         public EnvironmentInstance Environment { get; internal set; }
         /// <summary>Event flags placed by the circuit builder (base position, flag length, pole height, detail).</summary>
@@ -99,6 +101,7 @@ namespace Apex.Game
             // triangles the offline drive tests and the road validation use.
             var surface = new RoadSurface(g, def, plan.kerbs.left, plan.kerbs.right, plan.kerbs.height);
             ci.Surface = surface;
+            ci.Clearance = new TrackClearance(surface);
             var pitMask = surface.pitMask;
             AddSurface(root.transform, surface.road, "Asphalt", "Line");
             AddSurface(root.transform, surface.kerbs, "KerbRed", "KerbWhite");

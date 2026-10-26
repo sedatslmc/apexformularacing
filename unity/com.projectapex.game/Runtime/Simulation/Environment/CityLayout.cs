@@ -251,6 +251,7 @@ namespace Apex.Environment
         {
             if (field.IsWater(x, z)) return;
             if (field.TrackDistance(x, z, 40f, out _) < 7.5f + 18f) return;
+            if (IsReserved(x, z, 2f)) return;
             float h = kind == 2 ? R(9f, 14f) : kind == 1 ? R(8f, 12f) : R(9f, 15f);
             trees.Add(new Tree { x = x, z = z, ground = field.Height(x, z), height = h, kind = kind });
         }

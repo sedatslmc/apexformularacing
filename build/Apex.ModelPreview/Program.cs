@@ -82,6 +82,62 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     Export("freighter", l => l.Freighter());
     return;
 }
+if (Array.IndexOf(args, "--monument") >= 0)
+{
+    // Monumental flag at its bosphorus_a site: flag_site.obj (installation LOD0, cloth at 6 m/s wind, terrain patch,
+    // recentred on the pole) and turkish_flag.ppm for the cloth texture.
+    var ic = CultureInfo.InvariantCulture;
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_a.json"));
+    var def = Apex.Tracks.CircuitDefinition.FromJson(json);
+    var g = Apex.Tracks.TrackGeometry.FromDefinition(def);
+    var field = new Apex.Environment.TerrainField(g, def);
+    var (fx, fz) = def.monumentalFlag.Value;
+    MonumentalFlagGeometry.Levels(field.Height, fx, fz, out float baseY, out float terrace, out float deck);
+    var parts = new Dictionary<string, MeshBuilder>();
+    MeshBuilder Get(string k) { if (!parts.TryGetValue(k, out var m)) parts[k] = m = new MeshBuilder(); return m; }
+    MonumentalFlagGeometry.Build(k => Get(k), 0, terrace, deck);
+    float poleTop = MonumentalFlagGeometry.PoleTop(deck) - 0.4f;
+    float L = Apex.Environment.MonumentalFlagSite.FlagLength, H = L / Apex.Environment.TurkishFlagDesign.AspectRatio;
+    int nu = 46, nv = 31;
+    var cloth = Get("TurkishFlag");
+    Vector3 C(int i, int j)
+    {
+        var p = Apex.Environment.FlagCloth.Evaluate(i / (nu - 1f), j / (nv - 1f), L, H, 6f, 3.7f, 0.4f);
+        return new Vector3(p.X + MonumentalFlagGeometry.TopRadius + 0.05f, poleTop + p.Y, p.Z);
+    }
+    for (int j = 0; j < nv - 1; j++)
+        for (int i = 0; i < nu - 1; i++)
+        {
+            var a = C(i, j); var b = C(i + 1, j); var c = C(i + 1, j + 1); var d = C(i, j + 1);
+            var n = Vector3.Cross(b - a, d - a);
+            cloth.QuadFacing(a, b, c, d, new Vector2(i / (nu - 1f), 1f - j / (nv - 1f)), new Vector2((i + 1) / (nu - 1f), 1f - j / (nv - 1f)),
+                new Vector2((i + 1) / (nu - 1f), 1f - (j + 1) / (nv - 1f)), new Vector2(i / (nu - 1f), 1f - (j + 1) / (nv - 1f)), n);
+        }
+    // Terrain patch (5 m grid, 160 m) around the site.
+    var terr = Get("Ground");
+    for (float z0 = -80f; z0 < 80f; z0 += 5f)
+        for (float x0 = -80f; x0 < 80f; x0 += 5f)
+        {
+            Vector3 T(float x, float z) => new Vector3(x, field.Height(fx + x, fz + z) - baseY, z);
+            terr.QuadFacing(T(x0, z0), T(x0 + 5f, z0), T(x0 + 5f, z0 + 5f), T(x0, z0 + 5f), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+        }
+    var sb = new StringBuilder();
+    int vb = 1;
+    foreach (var kv in parts)
+    {
+        sb.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+        foreach (var v in kv.Value.Vertices) sb.AppendLine(string.Format(ic, "v {0:F3} {1:F3} {2:F3}", v.x, v.y, v.z));
+        foreach (var uv in kv.Value.UVs) sb.AppendLine(string.Format(ic, "vt {0:F4} {1:F4}", uv.x, uv.y));
+        var ts = kv.Value.Triangles;
+        for (int i = 0; i < ts.Count; i += 3) sb.AppendLine($"f {ts[i] + vb}/{ts[i] + vb} {ts[i + 1] + vb}/{ts[i + 1] + vb} {ts[i + 2] + vb}/{ts[i + 2] + vb}");
+        vb += kv.Value.VertexCount;
+        Console.WriteLine($"  {kv.Key,-14} {kv.Value.TriangleCount,6} tris");
+    }
+    Directory.CreateDirectory(outDir);
+    File.WriteAllText(Path.Combine(outDir, "flag_site.obj"), sb.ToString());
+    Console.WriteLine(string.Format(ic, "site {0:F0},{1:F0}: base {2:F1} m, terrace +{3:F1} m, pole top +{4:F1} m", fx, fz, baseY, terrace, poleTop));
+    return;
+}
 if (Array.IndexOf(args, "--kit") >= 0)
 {
     // Circuit kit previews: kit_catalog_lod{0,1,2}.obj (every module side by side) and
