@@ -25,12 +25,16 @@ namespace Apex.Tracks
         /// <summary>Signed curvature (1/m), positive = turning right (clockwise from above).</summary>
         public float[] Curvatures { get; private set; }
         public float[] Distances { get; private set; }
+        /// <summary>Run-off to the barrier (m) left/right per sample; null when the definition has none.</summary>
+        public float[] RunoffLeft { get; private set; }
+        public float[] RunoffRight { get; private set; }
         public int Count => Positions.Length;
 
         public static TrackGeometry FromDefinition(CircuitDefinition def, float spacing = 2f)
         {
             var g = new TrackGeometry();
             g.Build(def.points, spacing);
+            if (def.runoffs.Count == def.points.Count && def.points.Count > 0) g.BuildRunoffs(def.runoffs);
             return g;
         }
 
@@ -62,6 +66,7 @@ namespace Apex.Tracks
             Spacing = (float)(total / count);
             Length = (float)total;
             Positions = new Vector3[count];
+            controlParam = new float[count];
             Widths = new float[count];
             Distances = new float[count];
             int j = 0;
@@ -74,6 +79,7 @@ namespace Apex.Tracks
                 Positions[k] = new Vector3(v.X, v.Y, v.Z);
                 Widths[k] = v.W;
                 Distances[k] = (float)d;
+                controlParam[k] = (j + t) / SamplesPerSegment;
             }
             Tangents = new Vector3[count];
             Rights = new Vector3[count];
@@ -90,6 +96,26 @@ namespace Apex.Tracks
             {
                 float db = ApexMath.WrapAngle(bearings[(k + 2) % count] - bearings[(k - 2 + count) % count]);
                 Curvatures[k] = db / (4f * Spacing);
+            }
+        }
+
+        /// <summary>Control-point parameter (index + fraction) of each sample, for per-point attributes.</summary>
+        float[] controlParam;
+
+        void BuildRunoffs(List<(float left, float right)> r)
+        {
+            int n = r.Count;
+            RunoffLeft = new float[Count];
+            RunoffRight = new float[Count];
+            for (int k = 0; k < Count; k++)
+            {
+                float u = controlParam[k];
+                int i = (int)MathF.Floor(u) % n;
+                float t = u - MathF.Floor(u);
+                var a = r[i];
+                var b = r[(i + 1) % n];
+                RunoffLeft[k] = a.left + (b.left - a.left) * t;
+                RunoffRight[k] = a.right + (b.right - a.right) * t;
             }
         }
 
@@ -221,6 +247,19 @@ namespace Apex.Tracks
 
         /// <summary>Detects corners as same-sign curvature runs above a threshold
         /// (mirrors tools/circuit_report.py).</summary>
+        /// <summary>Authored corners when the definition lists them, otherwise automatic detection.</summary>
+        public List<Corner> CornersFor(CircuitDefinition def)
+        {
+            if (def.corners.Count == 0) return DetectCorners();
+            var list = new List<Corner>();
+            foreach (var c in def.corners)
+            {
+                int idx = IndexAt(c.distance);
+                list.Add(new Corner { index = idx, right = c.right, angleDeg = c.angle, minRadius = 1f / MathF.Max(MathF.Abs(Curvatures[idx]), 1e-4f) });
+            }
+            return list;
+        }
+
         public List<Corner> DetectCorners(float minAngleDeg = 12f, float curvatureThreshold = 1f / 450f)
         {
             var result = new List<Corner>();

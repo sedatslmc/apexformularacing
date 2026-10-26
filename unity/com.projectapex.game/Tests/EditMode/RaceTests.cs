@@ -210,6 +210,7 @@ namespace Apex.Tests
         [Test]
         [TestCase("test_loop")]
         [TestCase("bosphorus_gp")]
+        [TestCase("bosphorus_a")]
         public void AIFieldRacesCleanlyOnRig(string trackId)
         {
             // Six AI cars on independent flat rigs (no car-to-car contact physics here):

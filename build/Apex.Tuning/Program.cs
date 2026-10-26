@@ -12,7 +12,7 @@ string mode = args.Length > 0 ? args[0] : "launch";
 
 FlatGroundRig NewRig(bool tc)
 {
-    var sim = new VehicleSimulation(new VehicleSetup()) { assistTraction = tc, assistSteering = false };
+    var sim = new VehicleSimulation(new VehicleSetup()) { assistTraction = tc, assistSteering = false, speedSensitiveSteering = false };
     var rig = new FlatGroundRig(sim);
     rig.Place(Vector3.Zero, new Vector3(0, 0, 1));
     return rig;
@@ -57,7 +57,8 @@ else if (mode == "validate")
     FlatGroundRig RigFor(string profile, float kmh, int gear, bool wet = false)
     {
         var sim = new VehicleSimulation(new VehicleSetup());
-        if (profile == "Profi") { sim.tractionLevel = 0; sim.assistAbs = false; sim.steeringAssist = 0f; }
+        if (profile == "Profi") { sim.tractionLevel = 1; sim.steeringAssist = 0f; }
+        else if (profile == "Alles aus") { sim.tractionLevel = 0; sim.assistAbs = false; sim.steeringAssist = 0f; sim.speedSensitiveSteering = false; }
         else if (profile == "Einsteiger") { sim.tractionLevel = 3; sim.steeringAssist = 1f; }
         else { sim.tractionLevel = 2; sim.steeringAssist = 0.5f; }
         if (wet) { sim.trackWetness = 0.6f; sim.FitTires(TireCompound.Intermediate); }
@@ -88,11 +89,11 @@ else if (mode == "validate")
         var balancedRig = RigFor("Ausgewogen", kmh, GearFor(kmh), wet);
         balancedRig.sim.PreStep(Dt, balancedRig.u, balancedRig.u);
         float balancedLock = balancedRig.sim.CurrentMaxLock();
-        foreach (var (profile, lockRad, label) in new[] { ("Ausgewogen", balancedLock, "Vollanschlag Eingabe"), ("Profi", gripLock, "am Grip-Limit"), ("Profi", balancedLock, "Überlenken + Vollgas"), ("Ausgewogen", balancedLock, "Vollanschlag + Vollgas") })
+        foreach (var (profile, lockRad, label) in new[] { ("Ausgewogen", balancedLock, "Vollanschlag Eingabe"), ("Profi", gripLock, "Vollanschlag Eingabe"), ("Profi", gripLock, "Vollanschlag + Vollgas"), ("Alles aus", balancedLock, "Überlenken + Vollgas"), ("Ausgewogen", balancedLock, "Vollanschlag + Vollgas") })
         {
             var r = RigFor(profile, kmh, GearFor(kmh), wet);
             float steerCmd = Math.Clamp(lockRad / (r.sim.setup.maxSteerAngleDeg * MathF.PI / 180f), 0f, 1f);
-            if (profile == "Ausgewogen") steerCmd = 1f;
+            if (profile != "Alles aus") steerCmd = 1f;
             var yaw = new System.Collections.Generic.List<float>();
             float maxBeta = 0f, maxComp = 0f; bool spun = false;
             float staticComp = r.sim.wheels[0].staticCompression;
@@ -135,13 +136,13 @@ else if (mode == "validate")
     }
 
     Console.WriteLine();
-    Console.WriteLine("## Bremsen (Vollbremsung, Ausgewogen mit ABS / Profi ohne ABS)");
+    Console.WriteLine("## Bremsen (Vollbremsung, Ausgewogen mit ABS / Alles aus ohne ABS)");
     Console.WriteLine();
     Console.WriteLine("| Start | Bedingung | Profil | Bremsweg | Zeit | max. Verzögerung | min. Schlupf v/h (>20 km/h) |");
     Console.WriteLine("|---|---|---|---|---|---|---|");
     foreach (float kmh in new[] { 100f, 200f, 300f })
         foreach (bool wet in new[] { false, true })
-            foreach (string profile in new[] { "Ausgewogen", "Profi" })
+            foreach (string profile in new[] { "Ausgewogen", "Alles aus" })
             {
                 var r = RigFor(profile, kmh, GearFor(kmh), wet);
                 float dist = 0f, peak = 0f, srF = 0f, srR = 0f, prevU = r.u;
@@ -207,6 +208,81 @@ else if (mode == "probe")
         sim.throttle = args.Length > 4 ? float.Parse(args[4]) : Math.Clamp((kmh / 3.6f - r.u) * 0.5f + 0.3f, 0f, 1f);
         r.Step(Dt);
         if (i % (args.Length > 6 ? int.Parse(args[6]) : 6) == 0) Console.WriteLine($"t={r.time:F2} lock={sim.SteerAngle * 57.3f:F1} yaw={r.yawRate * 57.3f:F1} beta={MathF.Atan2(r.v, r.u) * 57.3f:F1} aF={sim.wheels[0].slipAngle * 57.3f:F1}/{sim.wheels[1].slipAngle * 57.3f:F1} aR={sim.wheels[2].slipAngle * 57.3f:F1}/{sim.wheels[3].slipAngle * 57.3f:F1} FyF={sim.wheels[0].fy + sim.wheels[1].fy:F0} FyR={sim.wheels[2].fy + sim.wheels[3].fy:F0} FzFL={sim.wheels[0].load:F0} FzFR={sim.wheels[1].load:F0} FzRL={sim.wheels[2].load:F0} FzRR={sim.wheels[3].load:F0} thr={sim.throttle:F2} srR={sim.wheels[2].slipRatio:F2}/{sim.wheels[3].slipRatio:F2} TdR={sim.wheels[2].driveTorque:F0}/{sim.wheels[3].driveTorque:F0} srF={sim.wheels[0].slipRatio:F3}/{sim.wheels[1].slipRatio:F3} u={r.u:F1}");
+    }
+}
+else if (mode == "keyboard")
+{
+    // A "keyboard driver": the AI decides what it wants, but the car only receives
+    // digital keys through the same ramps as InputRouter (tapping to modulate).
+    string id = args.Length > 1 ? args[1] : "bosphorus_gp";
+    float pace = args.Length > 2 ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0.95f;
+    var dirk = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(Path.Combine(dirk, id + ".json")));
+    var g = TrackGeometry.FromDefinition(def);
+    var setup0 = new VehicleSetup();
+    var line = new RacingLine(g, 1.45f, setup0.downforceArea * setup0.airDensity * 0.5f / setup0.mass);
+    var profiles = new (string name, int tc, bool abs, float assist)[]
+    {
+        ("Einsteiger", 3, true, 1f), ("Ausgewogen", 2, true, 0.5f), ("Profi", 1, true, 0f), ("Profi ohne ABS", 1, false, 0f), ("Alles aus", 0, false, 0f),
+    };
+    var envProfiles = Environment.GetEnvironmentVariable("APEX_PROFILES");
+    if (!string.IsNullOrEmpty(envProfiles))
+        profiles = Array.ConvertAll(envProfiles.Split(';'), e =>
+        {
+            var f = e.Split(':');
+            return (f[0], int.Parse(f[1]), f[2] == "1", float.Parse(f[3], System.Globalization.CultureInfo.InvariantCulture));
+        });
+    Console.WriteLine($"| Profil | Rundenzeit | Dreher | max. Schwimmwinkel | max. neben Strecke |");
+    Console.WriteLine("|---|---|---|---|---|");
+    foreach (var pr in profiles)
+    {
+        var sim = new VehicleSimulation(new VehicleSetup()) { tractionLevel = pr.tc, assistAbs = pr.abs, steeringAssist = pr.assist };
+        if (Environment.GetEnvironmentVariable("APEX_WET") != null) { sim.trackWetness = 0.6f; sim.FitTires(TireCompound.Intermediate); }
+        var csEnv = Environment.GetEnvironmentVariable("APEX_CS");
+        if (csEnv != null) sim.setup.counterSteerGain = float.Parse(csEnv, System.Globalization.CultureInfo.InvariantCulture);
+        var rig = new FlatGroundRig(sim);
+        g.FrameAt(g.Wrap(def.startLineDistance - 15f), out var p0, out var f0, out _, 0f);
+        rig.Place(p0, f0);
+        var ai = new AIDriver(line, AIPersonality.Make(pace, 0.2f, 1f, 0.5f, 0.5f), 7);
+        var steerAxis = new Apex.InputLogic.DigitalAxis(3.2f, 5f, 7f);
+        var thrAxis = new Apex.InputLogic.DigitalAxis(7f, 7f, 7f);
+        var brkAxis = new Apex.InputLogic.DigitalAxis(9f, 9f, 9f);
+        var timer = new LapTimer(g.Length, Array.ConvertAll(def.sectorFractions, f => f * g.Length));
+        var others = new System.Collections.Generic.List<CarState>();
+        int hint = -1, spins = 0; bool spinning = false; float maxBeta = 0f, maxOff = 0f;
+        for (int i = 0; i < 120 * 400 && timer.completedLaps.Count < 2; i++)
+        {
+            var proj = g.Project(rig.Position, hint); hint = proj.index;
+            var st = new CarState { id = 0, distance = proj.distance, lateral = proj.lateral, speed = rig.u, position = rig.Position, forward = rig.Forward };
+            others.Clear(); others.Add(st);
+            ai.maxSteerRad = sim.CurrentMaxLock();
+            float gsum = 0f; foreach (var tr in sim.tires) gsum += tr.GripMultiplier(sim.trackWetness);
+            ai.gripFactor = gsum / 4f;
+            ai.wet = sim.trackWetness > 0.2f;
+            ai.frontSlipUsage = MathF.Max(Math.Abs(sim.wheels[0].slipAngle), Math.Abs(sim.wheels[1].slipAngle)) / sim.tireFront.slipAnglePeak;
+            var c = ai.Drive(st, others, Dt);
+            float k = Math.Clamp(rig.u / 60f, 0f, 1f);
+            steerAxis.pressRate = Apex.InputLogic.InputTuning.SteerPressRate(k);
+            steerAxis.releaseRate = Apex.InputLogic.InputTuning.SteerReleaseRate(k);
+            steerAxis.reverseRate = Apex.InputLogic.InputTuning.SteerReverseRate;
+            // Tap the key while the wheel is short of the wanted angle, release when past it.
+            float key = 0f;
+            if (Math.Abs(c.steer) > 0.05f && (c.steer - steerAxis.Value) * MathF.Sign(c.steer) > 0.03f) key = MathF.Sign(c.steer);
+            sim.steer = steerAxis.Update(key, Dt);
+            sim.throttle = thrAxis.Update(c.throttle > 0.5f ? 1f : 0f, Dt);
+            sim.brake = brkAxis.Update(c.brake > 0.25f ? 1f : 0f, Dt);
+            rig.Step(Dt);
+            timer.Update(g.Wrap(proj.distance - def.startLineDistance), rig.time);
+            float beta = MathF.Abs(MathF.Atan2(rig.v, MathF.Abs(rig.u) + 0.1f));
+            maxBeta = Math.Max(maxBeta, beta);
+            if (beta > 0.45f && !spinning) { spins++; spinning = true; }
+            if (Environment.GetEnvironmentVariable("APEX_TRACE") != null && beta > 0.12f && i % 6 == 0)
+                Console.WriteLine($"   t={rig.time:F2} d={g.Wrap(proj.distance - def.startLineDistance):F0} v={rig.u * 3.6f:F0} g={sim.gearbox.gear} beta={MathF.Atan2(rig.v, rig.u) * 57.3f:F0} st={sim.steer:F2} lock={sim.SteerAngle * 57.3f:F1} cs={sim.CounterSteer * 57.3f:F1} thr={sim.throttle:F2} brk={sim.brake:F2} aF={sim.wheels[0].slipAngle * 57.3f:F0} aR={sim.wheels[2].slipAngle * 57.3f:F0} srR={sim.wheels[2].slipRatio:F2} srF={sim.wheels[0].slipRatio:F2} yaw={rig.yawRate * 57.3f:F0} ai={c.steer:F2}");
+            if (beta < 0.1f) spinning = false;
+            maxOff = Math.Max(maxOff, Math.Abs(proj.lateral) - g.WidthAt(proj.distance) * 0.5f);
+        }
+        string lap = timer.completedLaps.Count > 1 ? $"{timer.completedLaps[1].time:F2} s" : "–";
+        Console.WriteLine($"| {pr.name} | {lap} | {spins} | {maxBeta * 57.3f:F0}° | {Math.Max(0f, maxOff):F1} m |");
     }
 }
 else if (mode == "brake")

@@ -135,24 +135,44 @@ namespace Apex.Game
             var lodRenderers = new List<Renderer>[CarGeometry.LodCount];
             for (int i = 0; i < CarGeometry.LodCount; i++) lodRenderers[i] = new List<Renderer>();
 
-            // Body: one mesh per material and LOD.
+            // Body and the two wings: one mesh per material and LOD. The wings hang off
+            // pivots near their mounts so damage can droop or remove them.
             CarGeometry geo = null;
-            for (int lod = 0; lod < CarGeometry.LodCount; lod++)
+            float g0 = -setup.cogHeight;
+            var groups = new (string name, System.Func<CarGeometry, Dictionary<string, MeshBuilder>[]> select, Vector3 pivot)[]
             {
-                var lodRoot = new GameObject("BodyLOD" + lod).transform;
-                lodRoot.SetParent(visual, false);
-                foreach (var matKey in BodyMaterials)
+                ("Body", c => c.body, Vector3.zero),
+                ("FrontWing", c => c.frontWing, new Vector3(0f, g0 + 0.15f, setup.FrontAxleZ + 1.05f)),
+                ("RearWing", c => c.rearWing, new Vector3(0f, g0 + 0.5f, setup.RearAxleZ - 0.5f)),
+            };
+            foreach (var grp in groups)
+            {
+                var pivot = new GameObject(grp.name).transform;
+                pivot.SetParent(visual, false);
+                pivot.localPosition = grp.pivot;
+                var groupRenderers = new List<Renderer>();
+                for (int lod = 0; lod < CarGeometry.LodCount; lod++)
                 {
-                    string meshKey = $"body_{key}_{lod}_{matKey}";
-                    if (!MeshCache.TryGetValue(meshKey, out var mesh) || mesh == null)
+                    var lodRoot = new GameObject(grp.name + "LOD" + lod).transform;
+                    lodRoot.SetParent(pivot, false);
+                    lodRoot.localPosition = -grp.pivot;
+                    foreach (var matKey in BodyMaterials)
                     {
-                        if (geo == null) geo = new CarGeometry(setup).BuildBody();
-                        if (!geo.body[lod].TryGetValue(matKey, out var mb)) continue;
-                        mesh = mb.ToMesh(meshKey);
-                        MeshCache[meshKey] = mesh;
+                        string meshKey = $"{grp.name}_{key}_{lod}_{matKey}";
+                        if (!MeshCache.TryGetValue(meshKey, out var mesh) || mesh == null)
+                        {
+                            if (geo == null) geo = new CarGeometry(setup).BuildBody();
+                            if (!grp.select(geo)[lod].TryGetValue(matKey, out var mb)) continue;
+                            mesh = mb.ToMesh(meshKey);
+                            MeshCache[meshKey] = mesh;
+                        }
+                        var r = AddMesh(lodRoot, matKey, mesh, Mat(matKey, paint, accent));
+                        lodRenderers[lod].Add(r);
+                        groupRenderers.Add(r);
                     }
-                    lodRenderers[lod].Add(AddMesh(lodRoot, matKey, mesh, Mat(matKey, paint, accent)));
                 }
+                if (grp.name == "FrontWing") { vis.frontWing = pivot; vis.frontWingRenderers = groupRenderers.ToArray(); }
+                if (grp.name == "RearWing") { vis.rearWing = pivot; vis.rearWingRenderers = groupRenderers.ToArray(); }
             }
 
             // Wheels: pivot (position + steering) -> spinner (tire, rim, disc) + upright (static).
@@ -195,6 +215,10 @@ namespace Apex.Game
                 // LOD2 reuses the low-detail tire and rim.
                 lodRenderers[2].Add(spinner.Find("TireLOD1").GetComponent<Renderer>());
                 lodRenderers[2].Add(spinner.Find("RimLOD1").GetComponent<Renderer>());
+                // Wheel-cover ring and centre nut on the outer face (left wheels face -x).
+                var hub = Cached($"hub_{wk}_{left}", () => Make(mb => CarGeometry.HubMesh(mb, width, RimRadius, !left, 0), "Hub"));
+                var hubR = AddMesh(spinner, "Hub", hub, accent);
+                lodRenderers[0].Add(hubR);
                 var disc = Cached("disc", () => Make(mb => CarGeometry.BrakeDisc(mb, 0.16f, 0), "BrakeDisc"));
                 float discX = (left ? 1f : -1f) * (width * 0.5f - 0.1f);
                 var discR = AddMesh(spinner, "BrakeDisc", disc, ApexMaterials.Get("BrakeDisc"), new Vector3(discX, 0f, 0f));
@@ -239,8 +263,8 @@ namespace Apex.Game
 
         static readonly string[] BodyMaterials =
         {
-            CarGeometry.Paint, CarGeometry.Accent, CarGeometry.Carbon, CarGeometry.Titanium, CarGeometry.Mirror,
-            CarGeometry.Interior, CarGeometry.Belt,
+            CarGeometry.Paint, CarGeometry.Accent, CarGeometry.Carbon, CarGeometry.CarbonSatin, CarGeometry.Titanium,
+            CarGeometry.Mirror, CarGeometry.Interior, CarGeometry.Belt, CarGeometry.Exhaust,
         };
 
         static void BuildCockpit(Transform visual, CarVisuals vis, VehicleSetup setup, Material paint, Material accent, List<Renderer>[] lods)
@@ -274,12 +298,12 @@ namespace Apex.Game
             vis.speedText = DisplayText(wheel, "Speed", new Vector3(-0.045f, -0.018f, -0.0235f), 0.0018f, TextAnchor.MiddleLeft, Color.white);
 
             // Gloves on the grips (children of the wheel, so they turn with it).
-            var gloveMesh = Cached("glove", () => Make(CarGeometry.GloveMesh, "Glove"));
             for (int s = 0; s < 2; s++)
             {
                 float side = s == 0 ? -1f : 1f;
+                var gloveMesh = Cached("glove" + s, () => Make(mb => CarGeometry.GloveMesh(mb, side), "Glove"));
                 var glove = AddMesh(wheel, s == 0 ? "GloveL" : "GloveR", gloveMesh, ApexMaterials.Get(CarGeometry.Glove),
-                    new Vector3(side * 0.15f, 0f, -0.03f), Quaternion.Euler(90f, 0f, 0f));
+                    new Vector3(side * 0.14f, 0f, -0.01f));
                 lods[0].Add(glove);
                 vis.gloves[s] = glove.transform;
                 var armMesh = Cached("unit_tube", () => Make(mb => mb.Tube(Vector3.zero, Vector3.forward, 1f, 6), "UnitTube"));

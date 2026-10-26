@@ -110,6 +110,24 @@ namespace Apex.Game
             if (vel.sqrMagnitude > 0.01f) Body.AddForce(-vel.normalized * Sim.Drag);
         }
 
+        /// <summary>A part was damaged (description for the HUD/radio).</summary>
+        public event System.Action<string> Damaged;
+
+        void OnCollisionEnter(Collision collision)
+        {
+            if (Sim == null || !Sim.damageEnabled) return;
+            Vector3 impulse = collision.impulse;
+            float deltaV = impulse.magnitude / Body.mass;
+            if (deltaV < DamageState.Threshold) return;
+            Vector3 dirLocal = transform.InverseTransformDirection(impulse.normalized);
+            // Landing on the ground / bottoming out is not a crash.
+            if (Mathf.Abs(dirLocal.y) > 0.7f) return;
+            Vector3 point = collision.contactCount > 0 ? collision.GetContact(0).point : transform.position;
+            Vector3 local = transform.InverseTransformPoint(point);
+            string hit = Sim.damage.ApplyImpact(setup, local.ToNum(), deltaV, dirLocal.ToNum());
+            if (hit != null) Damaged?.Invoke(hit);
+        }
+
         bool Raycast(Vector3 origin, Vector3 dir, float reach, out RaycastHit best)
         {
             int n = Physics.RaycastNonAlloc(origin, dir, hits, reach, groundMask, QueryTriggerInteraction.Ignore);

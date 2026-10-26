@@ -21,6 +21,9 @@ namespace Apex.Tests
                 assistTraction = assists,
                 assistAbs = assists,
                 assistSteering = false,
+                // Raw mechanical lock: these rig tests and the legacy autopilot act like
+                // an analogue wheel (speed-sensitive steering is tested separately).
+                speedSensitiveSteering = false,
             };
             var rig = new FlatGroundRig(sim);
             rig.Place(Vector3.Zero, new Vector3(0, 0, 1));
@@ -190,6 +193,7 @@ namespace Apex.Tests
 
         [TestCase("test_loop", 40.0, 75.0)]
         [TestCase("bosphorus_gp", 85.0, 140.0)]
+        [TestCase("bosphorus_a", 115.0, 165.0)]
         public void AutopilotCompletesValidLap(string trackId, double minLap, double maxLap)
         {
             var def = TestData.Circuit(trackId);

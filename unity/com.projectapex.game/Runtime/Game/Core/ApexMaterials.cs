@@ -27,9 +27,12 @@ namespace Apex.Game
             ["Water"] = new Color(0.16f, 0.32f, 0.42f),
             ["Building"] = new Color(0.82f, 0.74f, 0.62f),
             ["Roof"] = new Color(0.55f, 0.24f, 0.18f),
-            ["CarPaint"] = new Color(0.05f, 0.33f, 0.62f),
-            ["CarAccent"] = new Color(0.1f, 0.85f, 0.95f),
-            ["Carbon"] = new Color(0.06f, 0.06f, 0.07f),
+            // APEX A01 livery: Midnight Blue body, Electric Cyan accents.
+            ["CarPaint"] = new Color(0.047f, 0.12f, 0.28f),
+            ["CarAccent"] = new Color(0f, 0.83f, 1f),
+            ["Carbon"] = new Color(0.5f, 0.5f, 0.52f),
+            ["CarbonSatin"] = new Color(0.42f, 0.42f, 0.44f),
+            ["Exhaust"] = new Color(0.36f, 0.37f, 0.39f),
             ["Tire"] = new Color(0.04f, 0.04f, 0.04f),
             ["Rim"] = new Color(0.55f, 0.56f, 0.6f),
             ["Helmet"] = new Color(0.92f, 0.92f, 0.95f),
@@ -46,13 +49,46 @@ namespace Apex.Game
             ["RainLight"] = new Color(0.25f, 0.02f, 0.02f),
             ["BrakeDisc"] = new Color(0.16f, 0.16f, 0.17f),
             ["Compound"] = new Color(0.95f, 0.95f, 0.95f),
+            // Bosphorus environment (procedural placeholder art).
+            ["Stone"] = new Color(0.86f, 0.83f, 0.76f),
+            ["Marble"] = new Color(0.93f, 0.92f, 0.89f),
+            ["Lead"] = new Color(0.45f, 0.48f, 0.5f),
+            ["BridgeSteel"] = new Color(0.62f, 0.64f, 0.66f),
+            ["BridgeCable"] = new Color(0.32f, 0.34f, 0.37f),
+            ["Glass"] = new Color(0.18f, 0.24f, 0.29f),
+            ["HagiaPlaster"] = new Color(0.8f, 0.52f, 0.42f),
+            ["FerryHull"] = new Color(0.16f, 0.2f, 0.27f),
+            ["FerryFunnel"] = new Color(0.9f, 0.86f, 0.74f),
+            ["Rock"] = new Color(0.42f, 0.4f, 0.37f),
+            ["RoofTile"] = new Color(0.62f, 0.3f, 0.2f),
+            ["RoofFlat"] = new Color(0.56f, 0.54f, 0.51f),
+            ["Tank"] = new Color(0.82f, 0.82f, 0.84f),
+            ["TowerGlass"] = new Color(0.27f, 0.35f, 0.42f),
+            ["FarGround"] = new Color(0.47f, 0.45f, 0.4f),
+            ["Quay"] = new Color(0.62f, 0.6f, 0.55f),
+            ["Pavement"] = new Color(0.56f, 0.55f, 0.53f),
+            ["Concrete"] = new Color(0.64f, 0.64f, 0.62f),
+            ["Seat"] = new Color(0.06f, 0.42f, 0.62f),
+            ["SeatAccent"] = new Color(0.78f, 0.08f, 0.1f),
+            ["Canopy"] = new Color(0.92f, 0.92f, 0.94f),
+            ["LampHead"] = new Color(0.85f, 0.85f, 0.8f),
+            ["Bark"] = new Color(0.3f, 0.25f, 0.19f),
+            ["Foliage"] = new Color(0.27f, 0.39f, 0.18f),
+            ["Pine"] = new Color(0.2f, 0.32f, 0.17f),
+            ["Cypress"] = new Color(0.12f, 0.23f, 0.13f),
+            ["Skin"] = new Color(0.74f, 0.57f, 0.45f),
+            ["Gull"] = new Color(0.93f, 0.93f, 0.92f),
+            ["FlagPole"] = new Color(0.8f, 0.81f, 0.83f),
+            ["BridgeLight"] = new Color(0.9f, 0.9f, 0.95f),
         };
 
         static readonly Dictionary<string, (float smoothness, float metallic)> Surface = new Dictionary<string, (float, float)>
         {
-            ["CarPaint"] = (0.8f, 0.2f),
-            ["CarAccent"] = (0.7f, 0.1f),
-            ["Carbon"] = (0.55f, 0.2f),
+            ["CarPaint"] = (0.86f, 0.35f),
+            ["CarAccent"] = (0.8f, 0.1f),
+            ["Carbon"] = (0.78f, 0.25f),
+            ["CarbonSatin"] = (0.45f, 0.15f),
+            ["Exhaust"] = (0.55f, 1f),
             ["Rim"] = (0.7f, 0.85f),
             ["Steel"] = (0.6f, 0.6f),
             ["Water"] = (0.9f, 0f),
@@ -64,21 +100,67 @@ namespace Apex.Game
             ["Tire"] = (0.15f, 0f),
             ["BrakeDisc"] = (0.35f, 0.4f),
             ["Interior"] = (0.15f, 0f),
+            ["Glass"] = (0.92f, 0.2f),
+            ["TowerGlass"] = (0.88f, 0.35f),
+            ["BridgeSteel"] = (0.5f, 0.4f),
+            ["FlagPole"] = (0.7f, 0.8f),
+            ["Marble"] = (0.45f, 0f),
+            ["Lead"] = (0.35f, 0.6f),
+            ["FerryHull"] = (0.6f, 0.1f),
         };
 
         /// <summary>Materials whose emission is driven at runtime (rain light, brake glow,
         /// steering-wheel display); created with emission enabled and black.</summary>
-        public static readonly HashSet<string> Emissive = new HashSet<string> { "RainLight", "BrakeDisc", "Display" };
+        public static readonly HashSet<string> Emissive = new HashSet<string>
+        {
+            "RainLight", "BrakeDisc", "Display",
+            // Night: street lamps, bridge lighting, floodlit monuments, lit office towers.
+            "LampHead", "BridgeLight", "Stone", "Marble", "HagiaPlaster", "TowerGlass",
+        };
 
         static readonly Dictionary<string, Material> Cache = new Dictionary<string, Material>();
 
         public static Material Get(string key)
         {
             if (Cache.TryGetValue(key, out var m) && m != null) return m;
-            m = Resources.Load<Material>(ResourceFolder + "/" + key);
+            // Vehicle materials are always built at runtime (procedural weave texture,
+            // A01 colours); older generated assets of the same name are ignored.
+            if (!RuntimeOnly.Contains(key)) m = Resources.Load<Material>(ResourceFolder + "/" + key);
             if (m == null) m = Create(key);
             Cache[key] = m;
             return m;
+        }
+
+        /// <summary>Registers a material built elsewhere (procedural textures) under a key.</summary>
+        public static void Register(string key, Material m) => Cache[key] = m;
+
+        /// <summary>Paint uses URP Complex Lit (clear coat) where available.</summary>
+        static readonly HashSet<string> ClearCoat = new HashSet<string> { "CarPaint", "CarAccent", "Helmet" };
+        static readonly HashSet<string> Woven = new HashSet<string> { "Carbon", "CarbonSatin" };
+        /// <summary>Keys created at runtime even if an asset exists (see <see cref="Get"/>).</summary>
+        public static readonly HashSet<string> RuntimeOnly = new HashSet<string> { "CarPaint", "CarAccent", "Carbon", "CarbonSatin", "Exhaust", "Helmet" };
+        static Texture2D weave;
+
+        /// <summary>2x2 twill carbon weave (procedural, tiling 4 cm), used as base map on carbon parts.</summary>
+        public static Texture2D CarbonWeave()
+        {
+            if (weave != null) return weave;
+            const int n = 128, cells = 8, s = n / cells;
+            weave = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "CarbonWeave", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear, anisoLevel = 4 };
+            var px = new Color[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int i = x / s, j = y / s;
+                    bool warp = ((i + j) >> 1) % 2 == 0;
+                    float t = (warp ? x % s : y % s) / (float)(s - 1);
+                    float tow = Mathf.Sin(t * Mathf.PI);
+                    float v = 0.05f + 0.13f * tow;
+                    px[y * n + x] = new Color(v, v, v * 1.05f, 1f);
+                }
+            weave.SetPixels(px);
+            weave.Apply(true);
+            return weave;
         }
 
         public static Shader LitShader()
@@ -91,7 +173,26 @@ namespace Apex.Game
         /// <summary>Creates a material for a palette key (also used by the editor setup).</summary>
         public static Material Create(string key)
         {
-            var mat = new Material(LitShader()) { name = "Apex_" + key };
+            Shader shader = LitShader();
+            if (ClearCoat.Contains(key))
+            {
+                var complex = Shader.Find("Universal Render Pipeline/Complex Lit");
+                if (complex != null) shader = complex;
+            }
+            var mat = new Material(shader) { name = "Apex_" + key };
+            if (ClearCoat.Contains(key) && mat.HasProperty("_ClearCoatMask"))
+            {
+                mat.EnableKeyword("_CLEARCOAT");
+                mat.SetFloat("_ClearCoat", 1f);
+                mat.SetFloat("_ClearCoatMask", 1f);
+                mat.SetFloat("_ClearCoatSmoothness", 0.95f);
+            }
+            if (Woven.Contains(key))
+            {
+                var tex = CarbonWeave();
+                if (mat.HasProperty("_BaseMap")) { mat.SetTexture("_BaseMap", tex); mat.SetTextureScale("_BaseMap", new Vector2(25f, 25f)); }
+                if (mat.HasProperty("_MainTex")) { mat.SetTexture("_MainTex", tex); mat.SetTextureScale("_MainTex", new Vector2(25f, 25f)); }
+            }
             var color = Palette.TryGetValue(key, out var c) ? c : Color.magenta;
             if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
             if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);

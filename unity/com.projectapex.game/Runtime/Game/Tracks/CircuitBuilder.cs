@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Apex.Core;
+using Apex.Environment;
 using Apex.Tracks;
 using Apex.Vehicle;
 using UnityEngine;
@@ -19,6 +20,15 @@ namespace Apex.Game
         public float[] SectorStarts { get; internal set; }
         public System.Collections.Generic.List<TrackGeometry.Corner> Corners { get; internal set; }
         public CircuitDefinition.PitLane Pit => Definition.pit;
+        /// <summary>Shared ground height (terrain, buildings, props).</summary>
+        public TerrainField Terrain { get; internal set; }
+        /// <summary>Lateral distance of the barrier from the centreline per sample (left / right side).</summary>
+        /// <summary>Kerbs, protection, marshal posts, gates and surface details of this circuit.</summary>
+        public TrackInfrastructurePlan Infrastructure { get; internal set; }
+        public float[] WallLeft { get; internal set; }
+        public float[] WallRight { get; internal set; }
+        /// <summary>Environment dressing (city, landmarks, water), if the circuit has geo data.</summary>
+        public EnvironmentInstance Environment { get; internal set; }
 
         /// <summary>Lateral offset (+right) of the pit lane centre at a raw distance.</summary>
         public float PitLaneLateral(float rawDistance)
@@ -54,9 +64,6 @@ namespace Apex.Game
     /// </summary>
     public static class CircuitBuilder
     {
-        const float KerbWidth = 1.3f;
-        const float KerbHeight = 0.045f;
-        const float KerbCurvature = 1f / 260f;
         const float LineWidth = 0.3f;
         const float RunoffWidth = 16f;
         const float RunoffDrop = 0.12f;
@@ -77,22 +84,41 @@ namespace Apex.Game
             ci.SectorStarts = starts;
 
             var g = ci.Geometry;
-            var kerbL = new float[g.Count];
-            var kerbR = new float[g.Count];
-            ComputeKerbs(g, kerbL, kerbR);
+            runoffL = g.RunoffLeft;
+            runoffR = g.RunoffRight;
+            ci.Corners = g.CornersFor(def);
+            // Racing line (for braking rubber and protection placement) and the infrastructure layout.
+            var refSetup = new VehicleSetup();
+            var line = new Apex.AI.RacingLine(g, 1.45f, refSetup.downforceArea * refSetup.airDensity * 0.5f / refSetup.mass);
+            var plan = new TrackInfrastructurePlan(g, ci.Corners, line.offsets, line.speed);
+            ci.Infrastructure = plan;
+            var kerbL = plan.kerbs.left;
+            var kerbR = plan.kerbs.right;
+            kerbHeight = plan.kerbs.height;
+            TrackInfrastructureBuilder.EnsureMaterials();
 
             BuildRoad(root.transform, g);
             BuildKerbs(root.transform, g, kerbL, kerbR);
             var pitMask = new bool[g.Count];
             if (def.pit != null)
                 for (int i = 0; i < g.Count; i++) pitMask[i] = def.pit.Contains(g.Distances[i], g.Length);
-            ci.Corners = g.DetectCorners();
             BuildRunoffAndWalls(root.transform, g, kerbL, kerbR, def.pit, pitMask);
+            ci.WallLeft = new float[g.Count];
+            ci.WallRight = new float[g.Count];
+            for (int i = 0; i < g.Count; i++)
+            {
+                bool pitHere = def.pit != null && pitMask[i];
+                ci.WallLeft[i] = WallOffset(g, kerbL, i, pitHere && def.pit.side < 0, -1f);
+                ci.WallRight[i] = WallOffset(g, kerbR, i, pitHere && def.pit.side > 0, 1f);
+            }
             if (def.pit != null) BuildPitLane(root.transform, ci, pitMask);
-            BuildTerrain(root.transform, g, def);
+            ci.Terrain = new TerrainField(g, def);
+            BuildTerrain(root.transform, ci.Terrain, def);
             BuildStartLine(root.transform, ci);
             BuildGrid(root.transform, ci);
             BuildCornerBoards(root.transform, ci);
+            TrackInfrastructureBuilder.Build(ci, root.transform, pitMask);
+            if (def.landMasses.Count > 0) EnvironmentBuilder.Build(ci, root.transform);
             return ci;
         }
 
@@ -184,26 +210,6 @@ namespace Apex.Game
 
         // --- Parts ------------------------------------------------------------------
 
-        static void ComputeKerbs(TrackGeometry g, float[] left, float[] right)
-        {
-            int n = g.Count;
-            var raw = new float[n];
-            for (int i = 0; i < n; i++) raw[i] = Mathf.Abs(g.Curvatures[i]) > KerbCurvature ? 1f : 0f;
-            int dilate = Mathf.RoundToInt(16f / g.Spacing);
-            const int taper = 4;
-            for (int i = 0; i < n; i++)
-            {
-                float k = 0f;
-                for (int o = -dilate - taper; o <= dilate + taper; o++)
-                {
-                    float w = Mathf.Abs(o) > dilate ? 1f - (float)(Mathf.Abs(o) - dilate) / (taper + 1) : 1f;
-                    k = Mathf.Max(k, raw[((i + o) % n + n) % n] * w);
-                }
-                left[i] = k;
-                right[i] = k;
-            }
-        }
-
         static void BuildRoad(Transform parent, TrackGeometry g)
         {
             var md = new MeshData(2);
@@ -213,32 +219,59 @@ namespace Apex.Game
             AddMesh(parent, "Road", md.ToMesh("Road"), new[] { "Asphalt", "Line" }, SurfaceType.Asphalt);
         }
 
+        static float[] kerbHeight;
+
+        /// <summary>
+        /// Three-dimensional kerbs: rounded crown (height from the plan: low on fast corners,
+        /// more pronounced on slow ones), short vertical edge down to the run-off, red/white
+        /// blocks every 2.5 m. kerbL/kerbR are widths in metres.
+        /// </summary>
         static void BuildKerbs(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR)
         {
             var md = new MeshData(2);
-            Func<int, int> stripe = i => ((int)(g.Distances[i] / 3f)) % 2;
+            Func<int, int> stripe = i => ((int)(g.Distances[i] / 2.5f)) % 2;
+            // Cross-section from the track edge outwards: (fraction of width, fraction of crown height).
+            var prof = new[] { new Vector2(0f, 0f), new Vector2(0.25f, 0.7f), new Vector2(0.5f, 1f), new Vector2(0.78f, 0.85f), new Vector2(1f, 0.25f) };
             foreach (float side in new[] { -1f, 1f })
             {
                 float[] k = side < 0 ? kerbL : kerbR;
-                // Rising half then falling half: a shallow ridge.
-                Ribbon(md, 0, g, i =>
+                for (int s = 0; s < prof.Length - 1; s++)
                 {
-                    float h = g.Widths[i] * 0.5f, w = KerbWidth * k[i];
-                    float y = KerbHeight * Mathf.Min(k[i] * 2f, 1f);
-                    return side < 0 ? new Vector4(-(h + w * 0.5f), y, -h, 0f) : new Vector4(h, 0f, h + w * 0.5f, y);
-                }, 0.1f, stripe);
-                Ribbon(md, 0, g, i =>
+                    var a = prof[s];
+                    var b = prof[s + 1];
+                    Ribbon(md, 0, g, i =>
+                    {
+                        float h = g.Widths[i] * 0.5f, w = k[i], y = kerbHeight[i];
+                        if (w <= 0f) return Vector4.zero;
+                        return side < 0 ? new Vector4(-(h + w * b.x), y * b.y, -(h + w * a.x), y * a.y)
+                                        : new Vector4(h + w * a.x, y * a.y, h + w * b.x, y * b.y);
+                    }, 0.1f, stripe);
+                }
+                // Outer edge: from the kerb's outer lip down to the run-off level (double-sided strip).
+                int n = g.Count;
+                for (int i = 0; i < n; i++)
                 {
-                    float h = g.Widths[i] * 0.5f, w = KerbWidth * k[i];
-                    float y = KerbHeight * Mathf.Min(k[i] * 2f, 1f);
-                    return side < 0 ? new Vector4(-(h + w), 0f, -(h + w * 0.5f), y) : new Vector4(h + w * 0.5f, y, h + w, 0f);
-                }, 0.1f, stripe);
+                    int j = (i + 1) % n;
+                    if (k[i] <= 0f && k[j] <= 0f) continue;
+                    float oi = side * (g.Widths[i] * 0.5f + k[i]), oj = side * (g.Widths[j] * 0.5f + k[j]);
+                    md.Quad(1, P(g, i, oi, -RunoffDrop), P(g, i, oi, kerbHeight[i] * 0.25f), P(g, j, oj, -RunoffDrop), P(g, j, oj, kerbHeight[j] * 0.25f),
+                        Vector2.zero, Vector2.up, Vector2.right, Vector2.one, true);
+                }
             }
             AddMesh(parent, "Kerbs", md.ToMesh("Kerbs"), new[] { "KerbRed", "KerbWhite" }, SurfaceType.Kerb);
         }
 
-        static float WallOffset(TrackGeometry g, float[] kerb, int i, bool pit) =>
-            pit ? g.Widths[i] * 0.5f + PitOuter : g.Widths[i] * 0.5f + KerbWidth * kerb[i] + RunoffWidth;
+        // Per-sample run-off of the circuit being built (null = RunoffWidth everywhere).
+        static float[] runoffL, runoffR;
+
+        /// <summary>Lateral distance of the barrier from the centreline; side -1 = left, +1 = right.</summary>
+        static float WallOffset(TrackGeometry g, float[] kerb, int i, bool pit, float side)
+        {
+            if (pit) return g.Widths[i] * 0.5f + PitOuter;
+            float[] r = side < 0 ? runoffL : runoffR;
+            // Run-off is measured from the track edge; a kerb lies inside it.
+            return g.Widths[i] * 0.5f + Mathf.Max(r != null ? r[i] : RunoffWidth, kerb[i] + 0.2f);
+        }
 
         static void BuildRunoffAndWalls(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR, CircuitDefinition.PitLane pit, bool[] pitMask)
         {
@@ -252,16 +285,16 @@ namespace Apex.Game
                 bool pitSide = pit != null && (int)side == pit.side;
                 Ribbon(grass, 0, g, i =>
                 {
-                    float inner = g.Widths[i] * 0.5f + KerbWidth * k[i];
+                    float inner = g.Widths[i] * 0.5f + k[i];
                     // The pit lane replaces the run-off on its side.
-                    float outer = pitSide && pitMask[i] ? inner : WallOffset(g, k, i, false);
+                    float outer = pitSide && pitMask[i] ? inner : WallOffset(g, k, i, false, side);
                     return side < 0 ? new Vector4(-outer, -RunoffDrop, -inner, 0f) : new Vector4(inner, 0f, outer, -RunoffDrop);
                 }, 0.25f);
                 for (int i = 0; i < n; i++)
                 {
                     int j = (i + 1) % n;
                     bool pi_ = pitSide && pitMask[i], pj = pitSide && pitMask[j];
-                    float oi = side * WallOffset(g, k, i, pi_), oj = side * WallOffset(g, k, j, pj);
+                    float oi = side * WallOffset(g, k, i, pi_, side), oj = side * WallOffset(g, k, j, pj, side);
                     float yi = pi_ ? 0f : -RunoffDrop, yj = pj ? 0f : -RunoffDrop;
                     float v = g.Distances[i] * 0.25f;
                     int sub = ((int)(g.Distances[i] / 6f)) % 2;
@@ -276,8 +309,12 @@ namespace Apex.Game
                     skirt.Quad(0, si, bi, sj, bj, Vector2.zero, Vector2.right, Vector2.up, Vector2.one, true);
                 }
             }
-            AddMesh(parent, "Runoff", grass.ToMesh("Runoff"), new[] { "Grass" }, SurfaceType.Grass);
-            AddMesh(parent, "Barriers", walls.ToMesh("Barriers"), new[] { "Wall", "WallStripe" }, SurfaceType.Wall, true);
+            // Street circuits (authored run-off) have paved run-off and escape roads; open circuits grass.
+            bool street = runoffL != null;
+            AddMesh(parent, "Runoff", grass.ToMesh("Runoff"), new[] { street ? "RunoffAsphalt" : "Grass" }, street ? SurfaceType.Asphalt : SurfaceType.Grass);
+            // Collision walls; the visible barriers come from TrackInfrastructureBuilder.
+            var wallGo = AddMesh(parent, "Barriers", walls.ToMesh("Barriers"), new[] { "Wall", "WallStripe" }, SurfaceType.Wall, false);
+            wallGo.GetComponent<MeshRenderer>().enabled = false;
             AddMesh(parent, "Skirt", skirt.ToMesh("Skirt"), new[] { "Ground" }, null);
         }
 
@@ -379,7 +416,7 @@ namespace Apex.Game
 
         static Font builtinFont;
 
-        internal static Font BuiltinFont()
+        public static Font BuiltinFont()
         {
             if (builtinFont != null) return builtinFont;
             foreach (var name in new[] { "LegacyRuntime.ttf", "Arial.ttf" })
@@ -439,7 +476,9 @@ namespace Apex.Game
                 float d = g.Distances[corner.index];
                 // Board on the outside of the corner, facing the approaching cars.
                 float outside = corner.right ? -1f : 1f;
-                float lat = outside * (g.WidthAt(d) * 0.5f + KerbWidth + 5f);
+                // Boards stand just behind the barrier on the outside.
+                float[] wallSide = outside < 0 ? ci.WallLeft : ci.WallRight;
+                float lat = outside * (wallSide[g.IndexAt(d - 40f)] + 1.2f);
                 float bd = d - 40f;
                 g.FrameAt(bd, out var p, out var f, out _, lat);
                 // TextMesh reads from its -Z side: +Z along the driving direction faces the cars.
@@ -450,75 +489,67 @@ namespace Apex.Game
                 foreach (int metres in new[] { 150, 100, 50 })
                 {
                     float m = d - 30f - metres;
-                    g.FrameAt(m, out var bp, out var bf, out _, outside * (g.WidthAt(m) * 0.5f + KerbWidth + 3.5f));
+                    g.FrameAt(m, out var bp, out var bf, out _, outside * (wallSide[g.IndexAt(m)] + 0.9f));
                     Sign(parent, bp.ToUnity(), Quaternion.LookRotation(bf.ToUnity(), Vector3.up), metres.ToString(), new Color(0.95f, 0.95f, 0.95f), new Color(0.05f, 0.05f, 0.05f), 1.0f);
                 }
             }
         }
         /// <summary>
-        /// Coarse terrain that follows the track's elevation (inverse-distance
-        /// weighted) and stays below the road, plus water east of the shoreline.
+        /// Coarse terrain from the shared <see cref="TerrainField"/> (follows the track's
+        /// elevation, stays below the road), plus water east of the shoreline. With geo
+        /// land masses the far landscape and the strait are built by the environment.
         /// </summary>
-        static void BuildTerrain(Transform parent, TrackGeometry g, CircuitDefinition def)
+        static void BuildTerrain(Transform parent, TerrainField field, CircuitDefinition def)
         {
-            float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue, minY = float.MaxValue;
-            foreach (var p in g.Positions)
-            {
-                minX = Mathf.Min(minX, p.X); maxX = Mathf.Max(maxX, p.X);
-                minZ = Mathf.Min(minZ, p.Z); maxZ = Mathf.Max(maxZ, p.Z);
-                minY = Mathf.Min(minY, p.Y);
-            }
-            const float margin = 400f, cell = 12f;
-            minX -= margin; maxX += margin; minZ -= margin; maxZ += margin;
-            int nx = Mathf.CeilToInt((maxX - minX) / cell) + 1;
-            int nz = Mathf.CeilToInt((maxZ - minZ) / cell) + 1;
-            int step = Mathf.Max(1, Mathf.RoundToInt(10f / g.Spacing));
-            var samples = new List<System.Numerics.Vector3>();
-            for (int i = 0; i < g.Count; i += step) samples.Add(g.Positions[i]);
-            var shore = def.shoreline;
-            float baseLevel = minY - 0.8f;
-            var verts = new Vector3[nx * nz];
-            var uvs = new Vector2[nx * nz];
+            const float cell = TerrainField.NearCell;
+            float minX = field.MinX, minZ = field.MinZ, maxX = field.MaxX, maxZ = field.MaxZ;
+            int nx = Mathf.RoundToInt((maxX - minX) / cell) + 1;
+            int nz = Mathf.RoundToInt((maxZ - minZ) / cell) + 1;
+            var verts = new List<Vector3>(nx * nz);
+            var uvs = new List<Vector2>(nx * nz);
             for (int zi = 0; zi < nz; zi++)
             for (int xi = 0; xi < nx; xi++)
             {
                 float x = minX + xi * cell, z = minZ + zi * cell;
-                float wsum = 0f, hsum = 0f, nearest = float.MaxValue, nearestY = 0f;
-                foreach (var s in samples)
-                {
-                    float dx = s.X - x, dz = s.Z - z;
-                    float d2 = dx * dx + dz * dz;
-                    float w = 1f / (d2 + 400f);
-                    wsum += w;
-                    hsum += w * s.Y;
-                    if (d2 < nearest) { nearest = d2; nearestY = s.Y; }
-                }
-                float h = hsum / wsum - 1.2f;
-                float d = Mathf.Sqrt(nearest);
-                // Never poke through the road corridor.
-                if (d < 40f) h = Mathf.Min(h, nearestY - 1.0f);
-                h = Mathf.Max(h, baseLevel);
-                if (shore != null && shore.Count > 1 && x > ShoreX(shore, z)) h = Mathf.Min(h, -4f);
-                verts[zi * nx + xi] = new Vector3(x, h, z);
-                uvs[zi * nx + xi] = new Vector2(x / 40f, z / 40f);
+                verts.Add(new Vector3(x, field.Height(x, z), z));
+                uvs.Add(new Vector2(x / 40f, z / 40f));
             }
-            var tris = new int[(nx - 1) * (nz - 1) * 6];
-            int t = 0;
+            var tris = new List<int>((nx - 1) * (nz - 1) * 6);
             for (int zi = 0; zi < nz - 1; zi++)
             for (int xi = 0; xi < nx - 1; xi++)
             {
                 int a = zi * nx + xi, b = a + 1, c = a + nx, d2 = c + 1;
-                tris[t++] = a; tris[t++] = c; tris[t++] = d2;
-                tris[t++] = a; tris[t++] = d2; tris[t++] = b;
+                tris.Add(a); tris.Add(c); tris.Add(d2);
+                tris.Add(a); tris.Add(d2); tris.Add(b);
+            }
+            bool far = field.land.HasLand;
+            if (far)
+            {
+                // Skirt along the border hides hairline cracks against the coarser far grid.
+                void Skirt(int i0, int i1)
+                {
+                    var a = verts[i0]; var b = verts[i1];
+                    int s = verts.Count;
+                    verts.Add(a); verts.Add(b); verts.Add(a + Vector3.down * 12f); verts.Add(b + Vector3.down * 12f);
+                    uvs.Add(uvs[i0]); uvs.Add(uvs[i1]); uvs.Add(uvs[i0]); uvs.Add(uvs[i1]);
+                    tris.Add(s); tris.Add(s + 1); tris.Add(s + 3);
+                    tris.Add(s); tris.Add(s + 3); tris.Add(s + 2);
+                    tris.Add(s); tris.Add(s + 3); tris.Add(s + 1);
+                    tris.Add(s); tris.Add(s + 2); tris.Add(s + 3);
+                }
+                for (int xi = 0; xi < nx - 1; xi++) { Skirt(xi, xi + 1); Skirt((nz - 1) * nx + xi, (nz - 1) * nx + xi + 1); }
+                for (int zi = 0; zi < nz - 1; zi++) { Skirt(zi * nx, (zi + 1) * nx); Skirt(zi * nx + nx - 1, (zi + 1) * nx + nx - 1); }
             }
             var mesh = new Mesh { name = "Terrain", indexFormat = IndexFormat.UInt32 };
-            mesh.vertices = verts;
-            mesh.uv = uvs;
-            mesh.triangles = tris;
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-            AddMesh(parent, "Terrain", mesh, new[] { "Ground" }, SurfaceType.Grass);
-            if (shore != null && shore.Count > 1)
+            // Geo circuits sit in a city: urban ground tone instead of open grassland.
+            AddMesh(parent, "Terrain", mesh, new[] { far ? "FarGround" : "Ground" }, SurfaceType.Grass);
+            var shore = def.shoreline;
+            if (!far && shore != null && shore.Count > 1)
             {
                 var water = new MeshData(1);
                 for (int i = 0; i < shore.Count - 1; i++)
@@ -531,20 +562,6 @@ namespace Apex.Game
                 }
                 AddMesh(parent, "Water", water.ToMesh("Water"), new[] { "Water" }, null);
             }
-        }
-
-        static float ShoreX(List<(float east, float north)> shore, float z)
-        {
-            if (z <= shore[0].north) return shore[0].east;
-            for (int i = 0; i < shore.Count - 1; i++)
-            {
-                if (z <= shore[i + 1].north)
-                {
-                    float t = (z - shore[i].north) / Mathf.Max(shore[i + 1].north - shore[i].north, 1e-3f);
-                    return Mathf.Lerp(shore[i].east, shore[i + 1].east, t);
-                }
-            }
-            return shore[shore.Count - 1].east;
         }
 
         static void BuildStartLine(Transform parent, CircuitInstance ci)

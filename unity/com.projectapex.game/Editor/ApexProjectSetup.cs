@@ -80,7 +80,10 @@ namespace Apex.EditorTools
             foreach (var key in new List<string>(ApexMaterials.Palette.Keys))
             {
                 string path = $"{MaterialFolder}/{key}.mat";
-                if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) continue;
+                bool exists = AssetDatabase.LoadAssetAtPath<Material>(path) != null;
+                // Vehicle materials are refreshed (A01 colours, clear coat) so builds include their shaders.
+                if (exists && !ApexMaterials.RuntimeOnly.Contains(key)) continue;
+                if (exists) AssetDatabase.DeleteAsset(path);
                 AssetDatabase.CreateAsset(ApexMaterials.Create(key), path);
             }
             string rainPath = $"{MaterialFolder}/Rain.mat";

@@ -211,12 +211,16 @@ namespace Apex.Game
                 rows.Add(new Row { label = "Reifenverschleiß", value = () => c.tireWear <= 0f ? "Aus" : $"{c.tireWear:0}×", change = d => c.tireWear = Mathf.Clamp(c.tireWear + (d < 0 ? -1 : 1), 0f, 10f) });
                 rows.Add(new Row { label = "Startreifen", value = () => CompoundSpec.For(c.startCompound).name, change = d => c.startCompound = (TireCompound)Wrap((int)c.startCompound + (d < 0 ? -1 : 1), 3) });
             }
-            rows.Add(new Row { label = "Tageszeit", value = () => TimeName(c.timeOfDay), change = d => c.timeOfDay = (TimeOfDay)Wrap((int)c.timeOfDay + (d < 0 ? -1 : 1), 4) });
+            rows.Add(new Row { label = "Tageszeit", value = () => TimeName(c.timeOfDay), change = d => c.timeOfDay = (TimeOfDay)Wrap((int)c.timeOfDay + (d < 0 ? -1 : 1), 5) });
             if (setupMode == SetupMode.GrandPrix)
             {
                 rows.Add(new Row { label = "Frühstart-Strafe", value = () => OnOff(c.falseStarts), change = d => c.falseStarts = !c.falseStarts });
                 rows.Add(new Row { label = "Tracklimit-Strafen", value = () => OnOff(c.trackLimitPenalties), change = d => c.trackLimitPenalties = !c.trackLimitPenalties });
                 rows.Add(new Row { label = "Pflicht-Boxenstopp", value = () => OnOff(c.mandatoryPitStop), change = d => c.mandatoryPitStop = !c.mandatoryPitStop });
+                rows.Add(new Row { label = "Safety Car / VSC", value = () => OnOff(c.safetyCar), change = d => c.safetyCar = !c.safetyCar });
+                rows.Add(new Row { label = "Schäden", value = () => OnOff(c.damage), change = d => c.damage = !c.damage });
+                rows.Add(new Row { label = "Technische Defekte (KI)", value = () => c.failures == 0 ? "Aus" : c.failures == 1 ? "Selten" : "Häufig",
+                    change = d => c.failures = Wrap(c.failures + (d < 0 ? -1 : 1), 3) });
             }
             rows.Add(new Row { label = "Team", value = () => Roster.Teams[c.playerTeam].name, change = d => c.playerTeam = Wrap(c.playerTeam + (d < 0 ? -1 : 1), Roster.Teams.Length) });
             return rows;
@@ -228,7 +232,8 @@ namespace Apex.Game
             {
                 case TimeOfDay.Morning: return "Morgen";
                 case TimeOfDay.Day: return "Mittag";
-                case TimeOfDay.Dusk: return "Abenddämmerung";
+                case TimeOfDay.Dusk: return "Sonnenuntergang";
+                case TimeOfDay.Night: return "Nacht";
                 default: return "Goldene Stunde";
             }
         }
@@ -291,7 +296,7 @@ namespace Apex.Game
             if (geometries.TryGetValue(id, out var g)) return g;
             g = TrackGeometry.FromDefinition(Definition(id));
             geometries[id] = g;
-            cornerCounts[id] = g.DetectCorners().Count;
+            cornerCounts[id] = g.CornersFor(Definition(id)).Count;
             return g;
         }
 
@@ -389,7 +394,7 @@ namespace Apex.Game
                 if (ApexStyle.Button(new Rect(x, by, 460f, 64f), "Meisterschaft starten", focus == rows.Count, 28) || (navConfirm && focus == rows.Count))
                 {
                     navConfirm = false;
-                    Career.StartChampionship(new[] { "bosphorus_gp", "test_loop" }, Config.laps, Config.aiCount, Config.difficulty);
+                    Career.StartChampionship(new[] { "bosphorus_a", "test_loop" }, Config.laps, Config.aiCount, Config.difficulty);
                     SaveCareer();
                     SaveConfig();
                     StartSession(SessionKind.Championship, SessionType.Race);
@@ -454,9 +459,11 @@ namespace Apex.Game
                     change = d => s.ApplyProfile((DrivingProfile)Wrap((int)s.drivingProfile + (d < 0 ? -1 : 1), 3)) },
                 new Row { label = "Traktionskontrolle", value = () => TcName(s.tractionLevel),
                     change = d => { s.tractionLevel = Wrap(s.tractionLevel + (d < 0 ? -1 : 1), 4); s.drivingProfile = DrivingProfile.Custom; } },
-                new Row { label = "ABS", value = () => OnOff(s.abs), change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "ABS", value = () => s.abs ? "An" : "Aus (nur mit analogen Pedalen)", change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Lenkhilfe", value = () => s.steeringAssistLevel == 0 ? "Aus" : s.steeringAssistLevel == 1 ? "Leicht" : "Voll",
                     change = d => { s.steeringAssistLevel = Wrap(s.steeringAssistLevel + (d < 0 ? -1 : 1), 3); s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "Tempoabhängige Lenkung", value = () => s.speedSensitiveSteering ? "An" : "Aus (Lenkrad/Gamepad)",
+                    change = d => { s.speedSensitiveSteering = !s.speedSensitiveSteering; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Automatikgetriebe", value = () => OnOff(s.autoGearbox), change = d => { s.autoGearbox = !s.autoGearbox; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Bremsbalance vorne", value = () => $"{s.brakeBiasFront * 100f:0} %", change = d => s.brakeBiasFront += (d == 0 ? 1 : d) * 0.01f },
                 new Row { label = "Boxen-Assistent", value = () => OnOff(s.pitAssist), change = d => s.pitAssist = !s.pitAssist },
@@ -471,6 +478,8 @@ namespace Apex.Game
                 new Row { label = "HUD-Größe", value = () => $"{s.hudScale * 100f:0} %", change = d => s.hudScale += (d == 0 ? 1 : d) * 0.05f },
                 new Row { label = "Geschwindigkeit", value = () => s.speedInMph ? "mph" : "km/h", change = d => s.speedInMph = !s.speedInMph },
                 new Row { label = "Reduzierte Bewegung", value = () => OnOff(s.reducedMotion), change = d => s.reducedMotion = !s.reducedMotion },
+                new Row { label = "Umgebungsdetails", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
+                    change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
         }

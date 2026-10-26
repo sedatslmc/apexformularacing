@@ -148,10 +148,10 @@ namespace Apex.Tests
             Assert.That(s.tractionLevel, Is.EqualTo(2));
             Assert.That(s.SteeringAssistStrength, Is.EqualTo(0.5f));
             s.ApplyProfile(DrivingProfile.Expert);
-            Assert.That(s.tractionLevel, Is.EqualTo(0));
-            Assert.That(s.abs, Is.False);
+            Assert.That(s.tractionLevel, Is.EqualTo(1));
+            Assert.That(s.abs, Is.True, "digital pedals need ABS (keyboard lap test)");
             Assert.That(s.SteeringAssistStrength, Is.EqualTo(0f));
-            Assert.That(s.autoGearbox, Is.False);
+            Assert.That(s.speedSensitiveSteering, Is.True);
             s.ApplyProfile(DrivingProfile.Casual);
             Assert.That(s.tractionLevel, Is.EqualTo(3));
             Assert.That(s.SteeringAssistStrength, Is.EqualTo(1f));
@@ -311,12 +311,86 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void SpeedSensitiveSteeringLimitsLockWithoutAssist()
+        {
+            var rig = Rig(200f, 6);
+            rig.sim.steeringAssist = 0f;
+            rig.sim.PreStep(Dt, rig.u, rig.u);
+            float limited = rig.sim.CurrentMaxLock();
+            rig.sim.speedSensitiveSteering = false;
+            float raw = rig.sim.CurrentMaxLock();
+            rig.sim.steeringAssist = 1f;
+            float assisted = rig.sim.CurrentMaxLock();
+            Assert.That(raw, Is.EqualTo(rig.sim.setup.maxSteerAngleDeg * ApexMath.Deg2Rad).Within(1e-4f));
+            Assert.That(limited, Is.LessThan(raw * 0.6f));
+            Assert.That(limited, Is.GreaterThan(assisted), "more lock than the assist: the front can be overdriven");
+        }
+
+        [Test]
         public void SteeringWheelFollowsTheRack()
         {
             var rig = Rig(60f, 2);
             for (int i = 0; i < 60; i++) { rig.sim.steer = -0.5f; rig.Step(Dt); }
             Assert.That(rig.sim.SteeringWheelAngleDeg, Is.EqualTo(rig.sim.SteerAngle * ApexMath.Rad2Deg * rig.sim.setup.steeringWheelRatio).Within(1e-3f));
             Assert.That(rig.sim.SteeringWheelAngleDeg, Is.LessThan(-10f));
+        }
+
+        [Test]
+        public void FrontWingDamageCostsFrontDownforceAndIsRepaired()
+        {
+            var setup = new VehicleSetup();
+            var sim = SimAtRideHeight(0f, 250f);
+            float intactFront = sim.DownforceFront;
+            sim.damageEnabled = true;
+            string hit = sim.damage.ApplyImpact(setup, new System.Numerics.Vector3(0.3f, -0.2f, setup.FrontAxleZ + 0.9f), 12f, new System.Numerics.Vector3(0f, 0f, -1f));
+            Assert.That(hit, Does.Contain("Frontflügel"));
+            sim.PreStep(Dt, 250f / 3.6f, 250f / 3.6f);
+            sim.Step(Dt);
+            Assert.That(sim.DownforceFront, Is.LessThan(intactFront * 0.5f));
+            sim.damage.Repair(true);
+            Assert.That(sim.damage.Any, Is.False);
+        }
+
+        [Test]
+        public void SmallTapsLeaveNoDamage()
+        {
+            var d = new DamageState();
+            Assert.That(d.ApplyImpact(new VehicleSetup(), System.Numerics.Vector3.Zero, 2f, new System.Numerics.Vector3(1f, 0f, 0f)), Is.Null);
+            Assert.That(d.Any, Is.False);
+        }
+
+        [Test]
+        public void BentSuspensionPullsTheCar()
+        {
+            var setup = new VehicleSetup();
+            var rig = Rig(150f, 5);
+            rig.sim.damageEnabled = true;
+            var fr = setup.MountPosition(1, out _);
+            rig.sim.damage.ApplyImpact(setup, fr, 8f, new System.Numerics.Vector3(-1f, 0f, 0f));
+            for (int i = 0; i < 240; i++)
+            {
+                rig.sim.steer = 0f;
+                rig.sim.throttle = 0.3f;
+                rig.Step(Dt);
+            }
+            Assert.That(MathF.Abs(rig.positionXZ.X), Is.GreaterThan(1f), "drifts off line without steering");
+        }
+
+        [Test]
+        public void PunctureCostsGripAndSpeed()
+        {
+            var a = Rig(200f, 6);
+            var b = Rig(200f, 6);
+            b.sim.damageEnabled = true;
+            b.sim.damage.puncture[2] = true;
+            for (int i = 0; i < 600; i++)
+            {
+                a.sim.throttle = b.sim.throttle = 1f;
+                a.sim.steer = b.sim.steer = 0f;
+                a.Step(Dt);
+                b.Step(Dt);
+            }
+            Assert.That(b.u, Is.LessThan(a.u - 2f));
         }
     }
 }

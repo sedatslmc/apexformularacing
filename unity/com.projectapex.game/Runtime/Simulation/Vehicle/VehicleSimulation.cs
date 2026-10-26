@@ -38,6 +38,15 @@ namespace Apex.Vehicle
         /// bounded counter-steer correction.</summary>
         public float steeringAssist = 1f;
         public bool autoGearbox = true;
+        /// <summary>
+        /// Speed-sensitive steering (an input filter, not a driving aid): limits the lock
+        /// to a margin above what the front tires can use at the current speed, so full
+        /// digital input at 250 km/h does not mean 22° of lock. No counter-steer, no grip.
+        /// Off = raw mechanical lock (for analogue wheels / pads).
+        /// </summary>
+        public bool speedSensitiveSteering = true;
+        /// <summary>Lock margin above the grip limit with speed-sensitive steering and no assist.</summary>
+        public float speedSensitiveHeadroom = 1.35f;
 
         public bool assistTraction
         {
@@ -57,6 +66,9 @@ namespace Apex.Vehicle
         public float speedLimit = float.PositiveInfinity;
 
         // Conditions
+        /// <summary>Damage from impacts; only has effects when <see cref="damageEnabled"/>.</summary>
+        public readonly DamageState damage = new DamageState();
+        public bool damageEnabled;
         public readonly TireState[] tires = new TireState[4];
         /// <summary>Simulate tire temperature, wear and compound grip.</summary>
         public bool simulateTires = true;
@@ -300,6 +312,9 @@ namespace Apex.Vehicle
                     // Wheel starting to lock: release pressure so it can spin back up
                     // (past the peak the tire transmits only the sliding floor).
                     if (w.slipRatio < -setup.absSlipThreshold) capacity *= 0.4f;
+                    // Cornering brake control: a rear tire already past its lateral peak
+                    // gets no brake pressure, so braking cannot pull the rear round.
+                    if (!w.front && sy > 0.95f) capacity *= ApexMath.Clamp01((1.25f - sy) / 0.3f);
                     capacity = MathF.Max(capacity, 0f);
                     if (tb > capacity)
                     {
@@ -378,6 +393,7 @@ namespace Apex.Vehicle
                         TireFor(w).Compute(w.load, w.slipRatio, w.slipAngle, w.grip, out fx, out fy);
                     }
                     float rolling = SurfaceProperties.For(w.surface).rollingDrag * w.load * w.radius * MathF.Sign(w.omega);
+                    if (damageEnabled && damage.puncture[i]) rolling *= 6f;
                     float torque = w.driveTorque - fx * w.radius - rolling;
                     // A locked clutch couples the engine's inertia to the driven wheels.
                     float inertia = w.inertia + (clutchLocked && !w.front ? engineReflected : 0f);
@@ -441,12 +457,14 @@ namespace Apex.Vehicle
             float rakeChange = (RideHeightRear - RideHeightFront) - (setup.rideHeightRear - setup.rideHeightFront);
             AeroBalance = ApexMath.Clamp(setup.aeroBalanceFront + setup.aeroRakeSensitivity * rakeChange, setup.aeroBalanceFront - 0.06f, setup.aeroBalanceFront + 0.06f);
             float q = 0.5f * setup.airDensity * ForwardSpeed * ForwardSpeed;
-            float cla = setup.downforceArea * (1f - setup.floorShare + setup.floorShare * gain);
+            bool dmg = damageEnabled;
+            float floorPart = setup.floorShare * gain * (dmg ? damage.FloorFactor : 1f);
+            float cla = setup.downforceArea * (1f - setup.floorShare + floorPart);
             float downforce = cla * q;
-            DownforceFront = downforce * AeroBalance;
-            DownforceRear = downforce * (1f - AeroBalance);
+            DownforceFront = downforce * AeroBalance * (dmg ? damage.FrontAeroFactor : 1f);
+            DownforceRear = downforce * (1f - AeroBalance) * (dmg ? damage.RearAeroFactor : 1f);
             float induced = 1f + setup.inducedDragFactor * MathF.Max(0f, gain - 1f);
-            Drag = setup.dragArea * induced * 0.5f * setup.airDensity * Speed * Speed;
+            Drag = setup.dragArea * induced * (dmg ? damage.DragFactor : 1f) * 0.5f * setup.airDensity * Speed * Speed;
         }
 
         void ComputeLoads(float dt)
@@ -459,6 +477,7 @@ namespace Apex.Vehicle
                 var props = SurfaceProperties.For(w.surface);
                 float tireGrip = simulateTires ? tires[w.index].GripMultiplier(trackWetness) : 1f;
                 w.grip = props.grip * w.conditionGrip * tireGrip;
+                if (damageEnabled && damage.puncture[w.index]) w.grip *= 0.3f;
                 // Surface texture (kerb ripples, grass, gravel) excites the suspension.
                 // Its frequency is capped well below the 120 Hz step to avoid aliasing.
                 if (props.textureAmplitude > 0f && w.contact)
@@ -551,19 +570,23 @@ namespace Apex.Vehicle
         {
             float maxLock = setup.maxSteerAngleDeg * ApexMath.Deg2Rad;
             float strength = ApexMath.Clamp01(steeringAssist);
-            if (strength <= 0f) return maxLock;
+            if (strength <= 0f && !speedSensitiveSteering) return maxLock;
             float v = MathF.Abs(ForwardSpeed);
             float t = ApexMath.Clamp01(v / setup.steerAssistSpeed);
-            float faded = ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t));
+            float faded = strength > 0f ? ApexMath.Lerp(maxLock, setup.highSpeedSteerDeg * ApexMath.Deg2Rad, ApexMath.SmoothStep01(t)) : maxLock;
             if (v < 5f) return faded;
             float downforcePerMass = 0.5f * setup.airDensity * v * v * setup.downforceArea / setup.mass;
             float aMax = tireFront.muPeak * 0.9f * (9.81f + downforcePerMass);
             float gripLimit = MathF.Atan(setup.wheelbase * aMax / (v * v)) + tireFront.slipAnglePeak * 0.9f;
             // Lighter assist leaves headroom past the grip limit: the driver can
             // overdrive the front (understeer) or load up the rear.
-            float headroom = 1f + 0.8f * (1f - strength);
+            if (strength <= 0f) return MathF.Min(maxLock, gripLimit * speedSensitiveHeadroom);
+            float headroom = 1f + AssistHeadroom * (1f - strength);
             return MathF.Min(maxLock, MathF.Min(faded, gripLimit) * headroom);
         }
+
+        /// <summary>Extra lock above the grip limit per unit of missing assist strength.</summary>
+        public const float AssistHeadroom = 0.5f;
 
         /// <summary>Rack speed (rad/s): slower at speed with the assist so digital input cannot snap the car.</summary>
         float CurrentRackRate()
@@ -589,7 +612,9 @@ namespace Apex.Vehicle
             // slides left -> negative slip -> steer left). The driver can still
             // override with more lock; the assist only adds a bounded correction.
             float cs = 0f;
-            if (assistSteering && Speed > 8f)
+            // Only for power oversteer (on throttle, off the brake). Reacting to rear slip
+            // while trail braking fought the driver and caused spins (keyboard lap test).
+            if (assistSteering && Speed > 8f && throttle > 0.2f && brake < 0.05f)
             {
                 float ar = 0.5f * (wheels[2].slipAngle + wheels[3].slipAngle);
                 float af = 0.5f * (wheels[0].slipAngle + wheels[1].slipAngle);
@@ -614,6 +639,8 @@ namespace Apex.Vehicle
             }
             wheels[2].steer = 0f;
             wheels[3].steer = 0f;
+            if (damageEnabled)
+                for (int i = 0; i < 4; i++) wheels[i].steer += damage.toe[i];
         }
 
         /// <summary>

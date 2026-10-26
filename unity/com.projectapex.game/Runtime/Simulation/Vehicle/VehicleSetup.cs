@@ -46,9 +46,9 @@ namespace Apex.Vehicle
         public float highSpeedSteerDeg = 4.5f;
         public float steerAssistSpeed = 75f;
         /// <summary>Steering rack speed limit at standstill (deg/s at the wheels).</summary>
-        public float steerRateDeg = 140f;
+        public float steerRateDeg = 160f;
         /// <summary>Rack speed limit at high speed when the steering assist is on (deg/s).</summary>
-        public float steerRateHighSpeedDeg = 35f;
+        public float steerRateHighSpeedDeg = 70f;
         /// <summary>Counter-steer assist gain (rad of wheel angle per rad of excess rear slip).</summary>
         public float counterSteerGain = 1.2f;
         public float ackermann = 0.12f;

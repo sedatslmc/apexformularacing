@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Apex.Environment;
 using Apex.Weather;
 using UnityEngine;
 
@@ -16,6 +17,10 @@ namespace Apex.Game
         public TimeOfDay timeOfDay = TimeOfDay.GoldenHour;
         public Light sun;
         public Transform cameraTransform;
+        /// <summary>True north in the game frame (deg); NaN for schematic circuits.</summary>
+        public float trueNorthBearing = float.NaN;
+        public EnvironmentInstance environment;
+        SunModel.Light light;
 
         ParticleSystem rain;
         ParticleSystem.EmissionModule rainEmission;
@@ -47,32 +52,20 @@ namespace Apex.Game
 
         void ApplyTimeOfDay()
         {
-            if (sun == null) return;
-            // Schematic layout: east is the Bosphorus. Golden hour = low western sun
-            // lighting the European shore; morning = low eastern sun.
-            switch (timeOfDay)
+            light = SunModel.Get(timeOfDay);
+            if (sun != null)
             {
-                case TimeOfDay.Morning:
-                    sun.transform.rotation = Quaternion.Euler(18f, 105f, 0f);
-                    sunBaseColor = new Color(1f, 0.9f, 0.8f);
-                    sunBaseIntensity = 1.1f;
-                    break;
-                case TimeOfDay.Day:
-                    sun.transform.rotation = Quaternion.Euler(55f, 160f, 0f);
-                    sunBaseColor = new Color(1f, 0.97f, 0.92f);
-                    sunBaseIntensity = 1.35f;
-                    break;
-                case TimeOfDay.Dusk:
-                    sun.transform.rotation = Quaternion.Euler(6f, 255f, 0f);
-                    sunBaseColor = new Color(1f, 0.6f, 0.4f);
-                    sunBaseIntensity = 0.75f;
-                    break;
-                default:
-                    sun.transform.rotation = Quaternion.Euler(16f, 245f, 0f);
-                    sunBaseColor = new Color(1f, 0.8f, 0.58f);
-                    sunBaseIntensity = 1.2f;
-                    break;
+                // The light shines away from the source: yaw = source azimuth + 180°.
+                float az = SunModel.GameAzimuth(light, trueNorthBearing);
+                sun.transform.rotation = Quaternion.Euler(light.elevation, az + 180f, 0f);
+                sunBaseColor = new Color(light.r, light.g, light.b);
+                sunBaseIntensity = light.intensity;
+                RenderSettings.sun = sun;
             }
+            var sky = RenderSettings.skybox;
+            if (sky != null && sky.HasProperty("_Exposure"))
+                sky.SetFloat("_Exposure", timeOfDay == TimeOfDay.Night ? 0.12f : timeOfDay == TimeOfDay.Dusk ? 0.7f : 1.3f);
+            if (environment != null) environment.SetArtificialLight(light.artificial);
         }
 
         void CreateRain()
@@ -122,10 +115,19 @@ namespace Apex.Game
                 sun.color = Color.Lerp(sunBaseColor, new Color(0.8f, 0.85f, 0.9f), cloud * 0.8f);
                 sun.shadowStrength = Mathf.Lerp(0.9f, 0.3f, cloud);
             }
-            RenderSettings.ambientIntensity = Mathf.Lerp(1f, 0.75f, cloud);
-            RenderSettings.fogColor = Color.Lerp(new Color(0.72f, 0.78f, 0.84f), new Color(0.55f, 0.58f, 0.62f), cloud);
-            RenderSettings.fogStartDistance = Mathf.Lerp(300f, 60f, rainI);
-            RenderSettings.fogEndDistance = Mathf.Lerp(3500f, 900f, rainI);
+            RenderSettings.ambientIntensity = Mathf.Lerp(1f, 0.75f, cloud) * light.ambient;
+            var clearFog = timeOfDay == TimeOfDay.Night ? new Color(0.05f, 0.07f, 0.11f)
+                : timeOfDay == TimeOfDay.Dusk ? new Color(0.66f, 0.56f, 0.52f)
+                : timeOfDay == TimeOfDay.GoldenHour ? new Color(0.78f, 0.74f, 0.68f) : new Color(0.72f, 0.78f, 0.84f);
+            RenderSettings.fogColor = Color.Lerp(clearFog, clearFog * 0.75f + new Color(0.14f, 0.15f, 0.16f), cloud);
+            RenderSettings.fogStartDistance = Mathf.Lerp(600f, 60f, rainI);
+            RenderSettings.fogEndDistance = Mathf.Lerp(environment != null ? 8000f : 3500f, 900f, rainI);
+            if (environment != null)
+            {
+                environment.SetWetness(wet);
+                // Heavy overcast and rain switch some lights on early.
+                environment.SetArtificialLight(Mathf.Max(light.artificial, cloud * 0.35f));
+            }
             if (rain != null && cameraTransform != null)
             {
                 rain.transform.position = cameraTransform.position + Vector3.up * 14f + cameraTransform.forward * 8f;

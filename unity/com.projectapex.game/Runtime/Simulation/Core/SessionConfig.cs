@@ -15,7 +15,7 @@ namespace Apex.Core
     [Serializable]
     public sealed class SessionConfig
     {
-        public string trackId = "bosphorus_gp";
+        public string trackId = "bosphorus_a";
         public SessionType sessionType = SessionType.Race;
         public WeekendFormat format = WeekendFormat.QualifyingAndRace;
         public int laps = 5;
@@ -30,6 +30,12 @@ namespace Apex.Core
         public bool falseStarts = true;
         public bool trackLimitPenalties = true;
         public bool mandatoryPitStop;
+        /// <summary>Race control may neutralise the race with a (virtual) safety car.</summary>
+        public bool safetyCar = true;
+        /// <summary>Damage from contact (wings, floor, suspension, punctures).</summary>
+        public bool damage = true;
+        /// <summary>Technical failures of AI cars: 0 off (default), 1 rare, 2 frequent.</summary>
+        public int failures;
         public TireCompound startCompound = TireCompound.Medium;
         public int playerTeam;
         public int seed = 1;
@@ -46,11 +52,14 @@ namespace Apex.Core
 
         public void Validate()
         {
+            // The Bosphorus GP moved to the geographic layout (Variant A).
+            if (trackId == "bosphorus_gp") trackId = "bosphorus_a";
             laps = Math.Max(1, Math.Min(60, laps));
             aiCount = Math.Max(0, Math.Min(19, aiCount));
             difficulty = Math.Max(0f, Math.Min(1f, difficulty));
             qualifyingMinutes = Math.Max(3f, Math.Min(30f, qualifyingMinutes));
             tireWear = Math.Max(0f, Math.Min(10f, tireWear));
+            failures = Math.Max(0, Math.Min(2, failures));
             playerTeam = Math.Max(0, Math.Min(Roster.Teams.Length - 1, playerTeam));
         }
     }

@@ -28,7 +28,7 @@ namespace Apex.Game
         TireCompound radioCompound = TireCompound.Medium;
         readonly List<(string name, Rect rect)> hudZones = new List<(string, Rect)>();
 
-        static readonly string[] RadioItems = { "Box diese Runde", "Reifen wählen", "Wetter", "Abstand", "Strategie", "Schließen" };
+        static readonly string[] RadioItems = { "Box diese Runde", "Reifen wählen", "Wetter", "Abstand", "Strategie", "Schaden", "Schließen" };
 
         // --- Radio ------------------------------------------------------------------------
 
@@ -117,10 +117,34 @@ namespace Apex.Game
                     CloseRadio();
                     break;
                 }
+                case 5:
+                {
+                    ShowMessage("Funk: " + DamageReport(p.Sim), Color.white, 4f, true);
+                    CloseRadio();
+                    break;
+                }
                 default:
                     CloseRadio();
                     break;
             }
+        }
+
+        static string DamageReport(VehicleSimulation sim)
+        {
+            if (!sim.damageEnabled) return "Schadensmodell ist aus.";
+            var d = sim.damage;
+            if (!d.Any) return "Keine Schäden, Auto in Ordnung.";
+            var parts = new List<string>();
+            if (d.frontWing > 0.02f) parts.Add($"Frontflügel {d.frontWing * 100f:0} %");
+            if (d.rearWing > 0.02f) parts.Add($"Heckflügel {d.rearWing * 100f:0} %");
+            if (d.floor > 0.02f) parts.Add($"Unterboden {d.floor * 100f:0} %");
+            string[] names = { "VL", "VR", "HL", "HR" };
+            for (int i = 0; i < 4; i++)
+            {
+                if (d.puncture[i]) parts.Add($"Reifenschaden {names[i]}");
+                else if (Mathf.Abs(d.toe[i]) > 0.001f) parts.Add($"Spur {names[i]} {d.toe[i] * Mathf.Rad2Deg:+0.0;-0.0}°");
+            }
+            return string.Join(", ", parts) + (d.NeedsNewNose || d.puncture[0] || d.puncture[1] || d.puncture[2] || d.puncture[3] ? " – Box empfohlen" : "");
         }
 
         // --- HUD --------------------------------------------------------------------------
@@ -229,6 +253,7 @@ namespace Apex.Game
             var w8 = Race.Weather;
             string wx = $"{WeatherModel.Name(w8.State)} · {w8.TrackTemp:0}°C" + (w8.TrackWetness > 0.05f ? $" · nass {w8.TrackWetness * 100f:0}%" : "");
             ApexStyle.Text(new Rect(x + 14f, y + 50f, w - 20f, 30f), wx, 17, w8.TrackWetness > 0.25f ? ApexStyle.Caution : ApexStyle.TextDim);
+            DrawTrackStatus(new Rect(x, y + h + 30f, w, 30f), p);
             float fx = safe.xMax - 120f;
             ApexStyle.Text(new Rect(fx - 160f, y + h + 4f, 270f, 24f), $"{fps:0} FPS", 16, ApexStyle.TextDim, FontStyle.Normal, TextAnchor.MiddleRight);
             if (Settings.controlPreset == ControlPreset.Keyboard)
@@ -240,6 +265,30 @@ namespace Apex.Game
                     else OpenRadio();
                 }
             }
+        }
+
+        /// <summary>Persistent flag strip under the info panel (race control status).</summary>
+        void DrawTrackStatus(Rect r, RaceCar p)
+        {
+            var rc = Race.Control;
+            if (rc == null || Race.Type != SessionType.Race) return;
+            string text = null;
+            Color c = ApexStyle.Caution;
+            switch (rc.Status)
+            {
+                case TrackStatus.Yellow:
+                    if (rc.IsYellowAt(p.raw)) text = "GELB – nicht überholen";
+                    break;
+                case TrackStatus.VirtualSafetyCar: text = "VSC – Tempo begrenzt"; break;
+                case TrackStatus.VirtualSafetyCarEnding: text = "VSC ENDET"; c = ApexStyle.Faster; break;
+                case TrackStatus.SafetyCar: text = "SAFETY CAR"; c = new Color(1f, 0.6f, 0.1f); break;
+                case TrackStatus.SafetyCarIn: text = "SC IN DIESER RUNDE"; c = new Color(1f, 0.6f, 0.1f); break;
+            }
+            if (text == null) return;
+            ApexStyle.Box(r, new Color(c.r * 0.25f, c.g * 0.25f, c.b * 0.1f, 0.85f));
+            ApexStyle.Box(new Rect(r.x, r.y, 6f, r.height), c);
+            ApexStyle.Text(new Rect(r.x + 16f, r.y, r.width - 20f, r.height), text, 18, c, FontStyle.Bold);
+            Zone("TrackStatus", r);
         }
 
         void DrawDash(Rect safe, RaceCar p)

@@ -1,0 +1,113 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+// Inspection renderer for the procedural APEX A01 (OBJ from build/Apex.ModelPreview).
+// Unity is left-handed (+z forward); three.js is right-handed, so the model is
+// mirrored on x on import, which also turns Unity's clockwise front faces into
+// three.js's counter-clockwise ones.
+import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 1600), Hh = +(params.get('h') || 900);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, Hh);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.5;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(params.get('bg') ? parseInt(params.get('bg'), 16) : 0x1b1d22);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+function weave(gloss) {
+  // 2x2 twill carbon weave, generated procedurally (no external texture).
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const n = 8, s = 128 / n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const warp = ((i + j) >> 1) % 2 === 0;
+    const grd = warp ? g.createLinearGradient(i * s, 0, i * s + s, 0) : g.createLinearGradient(0, j * s, 0, j * s + s);
+    grd.addColorStop(0, '#0d0e10'); grd.addColorStop(0.5, gloss ? '#2a2c31' : '#212226'); grd.addColorStop(1, '#0d0e10');
+    g.fillStyle = grd; g.fillRect(i * s, j * s, s, s);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(16, 16); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const M = (o) => new THREE.MeshPhysicalMaterial(o);
+const mats = {
+  CarPaint: M({ color: 0x0c1f48, metalness: 0.35, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.06 }),
+  CarAccent: M({ color: 0x00d4ff, metalness: 0.1, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.05 }),
+  Carbon: M({ color: 0xffffff, map: weave(true), metalness: 0.2, roughness: 0.28, clearcoat: 0.8, clearcoatRoughness: 0.12 }),
+  CarbonSatin: M({ color: 0xffffff, map: weave(false), metalness: 0.15, roughness: 0.55 }),
+  Titanium: M({ color: 0x7c8087, metalness: 1, roughness: 0.32 }),
+  Tire: M({ color: 0x141414, metalness: 0, roughness: 0.88 }),
+  Rim: M({ color: 0x24272c, metalness: 0.85, roughness: 0.38 }),
+  Mirror: M({ color: 0xdfe6ee, metalness: 1, roughness: 0.04 }),
+  Interior: M({ color: 0x18191c, metalness: 0, roughness: 0.82 }),
+  Belt: M({ color: 0xd8262b, metalness: 0, roughness: 0.6 }),
+  Helmet: M({ color: 0xe9ecf1, metalness: 0.1, roughness: 0.25, clearcoat: 1 }),
+  Visor: M({ color: 0x050608, metalness: 0.6, roughness: 0.05 }),
+  Glove: M({ color: 0x1c1d20, metalness: 0, roughness: 0.75 }),
+  Display: M({ color: 0x050505, emissive: 0x003a4a, roughness: 0.2 }),
+  Exhaust: M({ color: 0x5a5d62, metalness: 1, roughness: 0.42 }),
+  RainLight: M({ color: 0x400505, emissive: 0xff2010, emissiveIntensity: 2 }),
+  // Environment / landmarks (match ApexMaterials).
+  Stone: M({ color: 0xd8ccb2, roughness: 0.85 }),
+  Marble: M({ color: 0xefede6, roughness: 0.55 }),
+  Lead: M({ color: 0x7e848b, metalness: 0.35, roughness: 0.5 }),
+  BridgeSteel: M({ color: 0xc2c6cb, metalness: 0.5, roughness: 0.45 }),
+  BridgeCable: M({ color: 0x8e9298, metalness: 0.6, roughness: 0.4 }),
+  Glass: M({ color: 0x1a2229, metalness: 0.5, roughness: 0.12 }),
+  HagiaPlaster: M({ color: 0xc58e6a, roughness: 0.85 }),
+  FerryHull: M({ color: 0xf0f0ee, roughness: 0.5 }),
+  FerryFunnel: M({ color: 0xe3b23c, roughness: 0.5 }),
+  Rock: M({ color: 0x6b6359, roughness: 0.95 }),
+  Roof: M({ color: 0xa4442e, roughness: 0.8 }),
+};
+
+// Studio: soft key, rim lights and a glossy floor.
+const key = new THREE.DirectionalLight(0xffffff, 3.0);
+key.position.set(4, 8, 5); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+const sh = +(params.get('shadow') || 4);
+Object.assign(key.shadow.camera, { left: -sh, right: sh, top: sh, bottom: -sh, near: 0.5, far: sh * 6 });
+key.position.multiplyScalar(sh / 4);
+scene.add(key);
+const rim1 = new THREE.DirectionalLight(0x9fd8ff, 1.2); rim1.position.set(-6, 3, -4); scene.add(rim1);
+const rim2 = new THREE.DirectionalLight(0xffffff, 0.8); rim2.position.set(0, 4, -8); scene.add(rim2);
+scene.add(new THREE.HemisphereLight(0xa0b0c0, 0x202020, 0.8));
+const fill = new THREE.DirectionalLight(0xffffff, 1.2); fill.position.set(-3, 2, 7); scene.add(fill);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(+(params.get('floorR') || 30), 64), M({ color: params.get('floor') ? parseInt(params.get('floor'), 16) : 0x0f1013, roughness: 0.35, metalness: 0.0 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const cogHeight = +(params.get('lift') ?? 0.30);
+new OBJLoader().load(params.get('obj'), (obj) => {
+  obj.traverse((m) => {
+    if (!m.isMesh) return;
+    const name = Array.isArray(m.material) ? null : m.material.name;
+    m.material = Array.isArray(m.material) ? m.material.map((x) => mats[x.name] || mats.Interior) : (mats[name] || mats.Interior);
+    m.castShadow = true; m.receiveShadow = true;
+  });
+  for (const k in mats) mats[k].envMapIntensity = 0.55;
+  obj.scale.x = -1;               // left-handed (Unity) -> right-handed (three)
+  obj.position.y = cogHeight;      // ground at y = 0
+  scene.add(obj);
+  const cam = new THREE.PerspectiveCamera(+(params.get('fov') || 30), W / Hh, 0.02, +(params.get('far') || 100));
+  // View given in car space (Unity coordinates): eye and target.
+  const e = params.get('eye').split(',').map(Number), t = params.get('target').split(',').map(Number);
+  cam.position.set(-e[0], e[1] + cogHeight, e[2]);
+  cam.lookAt(-t[0], t[1] + cogHeight, t[2]);
+  renderer.render(scene, cam);
+  window.renderDone = true;
+});
+</script></body></html>

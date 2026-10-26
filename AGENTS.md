@@ -30,6 +30,7 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
 - Fahrzeuggeometrie ohne Unity: `cd build/Apex.ModelPreview && dotnet run -c Release -- <out_dir>`, dann
   `python3 tools/render_car_preview.py <out_dir>/car_lod0.obj <bild.png> 0,0.47,0.02` (mit Cockpit-Ansicht).
   Unity-Konvention: Vorderseite, wenn `cross(b−a, c−a)` zum Betrachter zeigt.
+- PBR-Inspektionsrenders (three.js, Headless-Chromium): `tools/carrender/README.md`.
 - Prozedurale Fahrzeuggeometrie ist Platzhalter-Art und wird nicht als fotorealistisch bezeichnet.
 - In Unity: Window → General → Test Runner → EditMode (das Paket steht in `testables`).
 - Die Kompiliertests laufen gegen UnityEngine-2021.3- und UnityEditor-2021.1-Referenzen. Code hinter
@@ -37,10 +38,13 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
 
 ## Strecken
 - Daten: `unity/com.projectapex.game/Runtime/Resources/Tracks/*.json` (`[Ost, Nord, Höhe, Breite]` in Metern).
-- Bosporus-Layout wird erzeugt: `python3 tools/build_bosphorus_layout.py`. Bericht und Schema:
+- **Bosphorus Grand Prix = `bosphorus_a.json`** (Variante A, reale Straßen): `tools/geo/fetch_dem.sh`, OSM-Auszüge nach
+  `data/geo/osm/` (siehe `data/geo/README.md`), dann `osm_import.py` → `route_variants.py` → `track_analysis.py` →
+  `build_track_a.py` (alle in `tools/geo/`). Plan/Status: `docs/BOSPHORUS_GEO_TRACK_PLAN.md`, `docs/BOSPHORUS_GP_UPGRADE.md`.
+- Alter schematischer Kurs (`bosphorus_gp.json`, Archiv) wird erzeugt: `python3 tools/build_bosphorus_layout.py`. Bericht und Schema:
   `python3 tools/circuit_report.py <json> docs/img/<name>.png`.
-- Die Tests verlangen: gegen den Uhrzeigersinn, Länge 4,8–5,4 km, 19–21 Kurven, Höhenunterschied 35–55 m,
-  Mindestabstand zwischen Abschnitten > 60 m.
+- Tests für `bosphorus_a`: gegen den Uhrzeigersinn, 7,5–7,8 km, 13 freigegebene Kurven, Steigung < 12,5 %/50 m,
+  Barrieren ohne Überschneidung. Archivkurs: 4,8–5,4 km, 19–21 Kurven, Abschnitte > 60 m auseinander.
 
 ## Abnahmekriterien M1
 Siehe `docs/TEST_PLAN.md`, Abschnitt „M1-Abnahme“.

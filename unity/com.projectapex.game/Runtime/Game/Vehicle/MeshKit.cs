@@ -268,29 +268,265 @@ namespace Apex.Game
             Vector2 centroid = Vector2.zero;
             foreach (var p in poly) centroid += p;
             centroid /= n;
-            // Orientation of the polygon decides the winding of the faces.
-            float area = 0f;
-            for (int i = 0; i < n; i++) area += poly[i].x * poly[(i + 1) % n].y - poly[(i + 1) % n].x * poly[i].y;
-            bool ccw = area > 0f;
-            Vector3 normalMapped = Vector3.Cross(map(new Vector2(1, 0)) - map(Vector2.zero), map(new Vector2(0, 1)) - map(Vector2.zero));
-            bool flipBase = Vector3.Dot(normalMapped, halfExtrude) < 0f;
+            Vector3 c3 = map(centroid);
+            // Every face is oriented against its known outward direction, so the
+            // polygon's winding and the mapping's handedness do not matter.
             for (int side = 0; side < 2; side++)
             {
                 Vector3 off = side == 0 ? halfExtrude : -halfExtrude;
-                int c = V(map(centroid) + off, new Vector2(0.5f, 0.5f));
+                int c = V(c3 + off, new Vector2(0.5f, 0.5f));
                 int first = verts.Count;
                 for (int i = 0; i < n; i++) V(map(poly[i]) + off, poly[i]);
                 for (int i = 0; i < n; i++)
-                    Tri(c, first + i, first + (i + 1) % n, (side == 0) == (ccw ^ flipBase));
+                    TriFacing(c, first + i, first + (i + 1) % n, off);
             }
             for (int i = 0; i < n; i++)
             {
                 Vector3 a = map(poly[i]), b = map(poly[(i + 1) % n]);
+                Vector3 outward = Vector3.ProjectOnPlane((a + b) * 0.5f - c3, halfExtrude);
                 int v0 = V(a + halfExtrude, Vector2.zero), v1 = V(b + halfExtrude, Vector2.right);
                 int v2 = V(b - halfExtrude, Vector2.one), v3 = V(a - halfExtrude, Vector2.up);
-                Quad(v0, v1, v2, v3, ccw ^ flipBase);
+                TriFacing(v0, v1, v2, outward);
+                TriFacing(v0, v2, v3, outward);
             }
         }
+
+        /// <summary>Quad with explicit UVs whose front face points along outward (environment meshes).</summary>
+        public void QuadFacing(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud, Vector3 outward)
+        {
+            int ia = V(a, ua), ib = V(b, ub), ic = V(c, uc), id = V(d, ud);
+            TriFacing(ia, ib, ic, outward);
+            TriFacing(ia, ic, id, outward);
+        }
+
+        /// <summary>Triangle with explicit UVs whose front face points along outward.</summary>
+        public void TriangleFacing(Vector3 a, Vector3 b, Vector3 c, Vector2 ua, Vector2 ub, Vector2 uc, Vector3 outward)
+        {
+            int ia = V(a, ua), ib = V(b, ub), ic = V(c, uc);
+            TriFacing(ia, ib, ic, outward);
+        }
+
+        /// <summary>Adds a triangle whose front face (Unity convention) points along outward.</summary>
+        void TriFacing(int a, int b, int c, Vector3 outward)
+        {
+            Vector3 normal = Vector3.Cross(verts[b] - verts[a], verts[c] - verts[a]);
+            if (Vector3.Dot(normal, outward) >= 0f) { tris.Add(a); tris.Add(b); tris.Add(c); }
+            else { tris.Add(a); tris.Add(c); tris.Add(b); }
+        }
+
+        // --- Smooth sculpting tools (APEX A01) -------------------------------------------
+
+        /// <summary>
+        /// Connects closed rings with the same point count into a smooth surface.
+        /// Rings must be ordered along the body; outward faces are chosen from the
+        /// ring centroids, so ring direction and station order do not matter.
+        /// </summary>
+        public void RingLoft(IList<Vector3[]> rings, bool capStart, bool capEnd)
+        {
+            int n = rings[0].Length;
+            int start = verts.Count;
+            for (int i = 0; i < rings.Count; i++)
+                for (int j = 0; j < n; j++)
+                    V(rings[i][j], new Vector2((float)j / n, i));
+            // Orientation from topology, not from local geometry: a ring that winds
+            // counter-clockwise about the loft direction gives outward quads (a, b, c).
+            // This stays correct for concave sections (cockpit notch, undercuts).
+            bool lastSign = true;
+            for (int i = 0; i < rings.Count - 1; i++)
+            {
+                Vector3 dir = Centroid(rings[i + 1]) - Centroid(rings[i]);
+                float dot = Vector3.Dot(Newell(rings[i]), dir);
+                bool sign = Mathf.Abs(dot) < 1e-9f ? lastSign : dot > 0f;
+                lastSign = sign;
+                for (int j = 0; j < n; j++)
+                {
+                    int j1 = (j + 1) % n;
+                    int a = start + i * n + j, b = start + i * n + j1, c = start + (i + 1) * n + j1, d = start + (i + 1) * n + j;
+                    if (sign) { tris.Add(a); tris.Add(b); tris.Add(c); tris.Add(a); tris.Add(c); tris.Add(d); }
+                    else { tris.Add(a); tris.Add(c); tris.Add(b); tris.Add(a); tris.Add(d); tris.Add(c); }
+                }
+            }
+            for (int end = 0; end < 2; end++)
+            {
+                if ((end == 0 && !capStart) || (end == 1 && !capEnd)) continue;
+                int ri = end == 0 ? 0 : rings.Count - 1;
+                int other = end == 0 ? Mathf.Min(1, rings.Count - 1) : Mathf.Max(0, rings.Count - 2);
+                Vector3 c = Centroid(rings[ri]);
+                Vector3 outward = c - Centroid(rings[other]);
+                int ci = V(c, new Vector2(0.5f, 0.5f));
+                int first = verts.Count;
+                for (int j = 0; j < n; j++) V(rings[ri][j], Vector2.zero);
+                for (int j = 0; j < n; j++) TriFacing(ci, first + j, first + (j + 1) % n, outward);
+            }
+        }
+
+        /// <summary>Newell normal of a closed polygon (right-handed sense of its winding).</summary>
+        static Vector3 Newell(Vector3[] ring)
+        {
+            Vector3 n = Vector3.zero;
+            for (int i = 0; i < ring.Length; i++)
+            {
+                Vector3 p = ring[i], q = ring[(i + 1) % ring.Length];
+                n += new Vector3((p.y - q.y) * (p.z + q.z), (p.z - q.z) * (p.x + q.x), (p.x - q.x) * (p.y + q.y));
+            }
+            return n;
+        }
+
+        static Vector3 Centroid(Vector3[] ring)
+        {
+            Vector3 c = Vector3.zero;
+            foreach (var p in ring) c += p;
+            return c / ring.Length;
+        }
+
+        /// <summary>Airfoil ring (closed) in the (z, y) plane: leading edge at +chord/2, points ordered upper then lower.</summary>
+        public static Vector2[] AirfoilRing(float chord, float thickness, float camber, float aoaDeg, int chordSegments)
+        {
+            var ring = new Vector2[chordSegments * 2];
+            float rad = aoaDeg * Mathf.Deg2Rad;
+            float ca = Mathf.Cos(rad), sa = Mathf.Sin(rad);
+            for (int k = 0; k < chordSegments * 2; k++)
+            {
+                bool upper = k < chordSegments;
+                int i = upper ? k : chordSegments * 2 - k;
+                float x = 0.5f * (1f - Mathf.Cos(Mathf.PI * i / chordSegments));
+                float yt = 5f * thickness * (0.2969f * Mathf.Sqrt(x) - 0.126f * x - 0.3516f * x * x + 0.2843f * x * x * x - 0.1036f * x * x * x * x);
+                float yc = camber * 4f * x * (1f - x);
+                float zc = chord * (0.5f - x);
+                float yy = (upper ? yc + yt : yc - yt) * chord;
+                ring[k] = new Vector2(zc * ca + yy * sa, -zc * sa + yy * ca);
+            }
+            return ring;
+        }
+
+        /// <summary>One spanwise station of a wing: position of the quarter chord and section shape.</summary>
+        public struct WingStation
+        {
+            public Vector3 position;
+            public float chord, thickness, camber, aoaDeg;
+            /// <summary>Roll of the section about the chord line (deg): curls tips down into end plates.</summary>
+            public float rollDeg;
+        }
+
+        /// <summary>Smooth wing surface through spanwise stations (curved, twisted, tapered elements).</summary>
+        public void SpanWing(IList<WingStation> stations, int chordSegments, bool capEnds = true)
+        {
+            var rings = new List<Vector3[]>();
+            foreach (var st in stations)
+            {
+                var prof = AirfoilRing(st.chord, st.thickness, st.camber, st.aoaDeg, chordSegments);
+                float rr = st.rollDeg * Mathf.Deg2Rad;
+                float cr = Mathf.Cos(rr), sr = Mathf.Sin(rr);
+                var ring = new Vector3[prof.Length];
+                for (int k = 0; k < prof.Length; k++)
+                {
+                    // Section plane spanned by z (chord) and the rolled "up" vector (x, y).
+                    float up = prof[k].y;
+                    ring[k] = st.position + new Vector3(-sr * up, cr * up, prof[k].x);
+                }
+                rings.Add(ring);
+            }
+            RingLoft(rings, capEnds, capEnds);
+        }
+
+        /// <summary>
+        /// Curved thin wall (end plates, fences, strakes): a path in plan view (x, z)
+        /// with bottom/top heights per point; thickness across the path.
+        /// </summary>
+        public void Fin(IList<Vector2> pathXZ, IList<float> bottom, IList<float> top, float thickness)
+        {
+            int n = pathXZ.Count;
+            var rings = new List<Vector3[]>();
+            for (int i = 0; i < n; i++)
+            {
+                Vector2 dir = i == 0 ? pathXZ[1] - pathXZ[0] : i == n - 1 ? pathXZ[n - 1] - pathXZ[n - 2] : pathXZ[i + 1] - pathXZ[i - 1];
+                float len = Mathf.Sqrt(dir.x * dir.x + dir.y * dir.y);
+                Vector3 side = new Vector3(dir.y / len, 0f, -dir.x / len) * (thickness * 0.5f);
+                Vector3 b = new Vector3(pathXZ[i].x, bottom[i], pathXZ[i].y), t = new Vector3(pathXZ[i].x, top[i], pathXZ[i].y);
+                rings.Add(new[] { b - side, t - side, t + side, b + side });
+            }
+            RingLoft(rings, true, true);
+        }
+
+        /// <summary>Tube with an elliptical, flattened section along a path (halo, faired links).</summary>
+        public void FairedTube(IList<Vector3> path, float width, float height, int sides, Vector3 upHint)
+        {
+            var rings = new List<Vector3[]>();
+            for (int i = 0; i < path.Count; i++)
+            {
+                Vector3 dir = i == 0 ? path[1] - path[0] : i == path.Count - 1 ? path[i] - path[i - 1] : path[i + 1] - path[i - 1];
+                dir = dir.normalized;
+                Vector3 side = Vector3.Cross(upHint, dir).normalized;
+                if (side.magnitude < 0.5f) side = Vector3.Cross(Vector3.forward, dir).normalized;
+                Vector3 up = Vector3.Cross(dir, side);
+                var ring = new Vector3[sides];
+                for (int j = 0; j < sides; j++)
+                {
+                    float t = Mathf.PI * 2f * j / sides;
+                    ring[j] = path[i] + side * (Mathf.Cos(t) * width * 0.5f) + up * (Mathf.Sin(t) * height * 0.5f);
+                }
+                rings.Add(ring);
+            }
+            RingLoft(rings, true, true);
+        }
+
+        /// <summary>Per-vertex normals (area-weighted face normals).</summary>
+        public Vector3[] ComputeNormals()
+        {
+            var normals = new Vector3[verts.Count];
+            for (int i = 0; i < tris.Count; i += 3)
+            {
+                Vector3 a = verts[tris[i]], b = verts[tris[i + 1]], c = verts[tris[i + 2]];
+                Vector3 n = Vector3.Cross(b - a, c - a);
+                normals[tris[i]] += n;
+                normals[tris[i + 1]] += n;
+                normals[tris[i + 2]] += n;
+            }
+            for (int i = 0; i < normals.Length; i++) normals[i] = normals[i].normalized;
+            return normals;
+        }
+
+        /// <summary>Replaces UVs with metric box projection (1 unit = 1 m) for tiling detail textures (carbon weave).</summary>
+        public void MetricUVs()
+        {
+            var normals = ComputeNormals();
+            for (int i = 0; i < verts.Count; i++)
+            {
+                Vector3 n = normals[i], p = verts[i];
+                float ax = Mathf.Abs(n.x), ay = Mathf.Abs(n.y), az = Mathf.Abs(n.z);
+                uvs[i] = ax >= ay && ax >= az ? new Vector2(p.z, p.y) : ay >= az ? new Vector2(p.x, p.z) : new Vector2(p.x, p.y);
+            }
+        }
+
+        readonly Dictionary<long, int> shared = new Dictionary<long, int>();
+
+        /// <summary>Vertex shared by key within this builder (smooth shading across quads).</summary>
+        public int SharedVertex(long key, Vector3 p, Vector2 uv)
+        {
+            if (shared.TryGetValue(key, out int i)) return i;
+            i = V(p, uv);
+            shared[key] = i;
+            return i;
+        }
+
+        /// <summary>Raw triangle by vertex indices (caller guarantees orientation).</summary>
+        public void Triangle(int a, int b, int c)
+        {
+            tris.Add(a);
+            tris.Add(b);
+            tris.Add(c);
+        }
+
+        /// <summary>Applies f to the last count vertices in builder-local space (the matrix's translation is kept).</summary>
+        public void TransformLast(int count, Func<Vector3, Vector3> f)
+        {
+            Vector3 offset = matrix.MultiplyPoint3x4(Vector3.zero);
+            for (int i = verts.Count - count; i < verts.Count; i++) verts[i] = offset + f(verts[i] - offset);
+        }
+
+        public IReadOnlyList<Vector3> Vertices => verts;
+        public IReadOnlyList<Vector2> UVs => uvs;
+        public IReadOnlyList<int> Triangles => tris;
 
         public Mesh ToMesh(string name)
         {

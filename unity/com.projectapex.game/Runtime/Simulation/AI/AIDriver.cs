@@ -65,6 +65,12 @@ namespace Apex.AI
         public float frontSlipUsage;
         /// <summary>Speed cap (m/s), e.g. pit limiter.</summary>
         public float speedCap = float.PositiveInfinity;
+        /// <summary>Speed limit from race control (yellow, VSC, safety car), separate from the pit cap.</summary>
+        public float controlSpeedCap = float.PositiveInfinity;
+        /// <summary>Yellow flag / safety car: no passing; follow the car ahead at <see cref="followGap"/>.</summary>
+        public bool noOvertaking;
+        /// <summary>Following distance (m) with <see cref="noOvertaking"/>.</summary>
+        public float followGap = 10f;
 
         public float TargetLateral { get; private set; }
         public string Intent { get; private set; } = "line";
@@ -106,7 +112,7 @@ namespace Apex.AI
         public float TargetSpeed(float distance)
         {
             // The base profile scales with sqrt(grip usage) in corners (v ~ sqrt(mu)).
-            return MathF.Min(line.SpeedAt(distance) * MathF.Sqrt(PaceFactor()), speedCap);
+            return MathF.Min(line.SpeedAt(distance) * MathF.Sqrt(PaceFactor()), MathF.Min(speedCap, controlSpeedCap));
         }
 
         /// <summary>Highest speed now that still allows the offset path ahead (incl. braking).</summary>
@@ -154,7 +160,7 @@ namespace Apex.AI
             float desired = lineOffset;
 
             // --- Traffic ----------------------------------------------------------------
-            passCommit = MathF.Max(0f, passCommit - dt);
+            passCommit = noOvertaking ? 0f : MathF.Max(0f, passCommit - dt);
             float nearestGap = float.MaxValue;
             CarState ahead = default;
             bool hasAhead = false;
@@ -174,7 +180,9 @@ namespace Apex.AI
                 }
                 if (MathF.Abs(gap) < 7f && MathF.Abs(dl) < 3.4f)
                     alongsideLateral = o.lateral;
-                if (gap > 0f && gap < 60f && MathF.Abs(dl) < 2.6f && gap < nearestGap)
+                // Without passing, any car ahead counts (queue behind it, whatever the line).
+                bool inLane = noOvertaking ? gap < 150f : gap < 60f && MathF.Abs(dl) < 2.6f;
+                if (gap > 0f && inLane && gap < nearestGap)
                 {
                     nearestGap = gap;
                     ahead = o;
@@ -190,7 +198,7 @@ namespace Apex.AI
                 float upcoming = 0f;
                 for (float s2 = 0f; s2 <= 80f; s2 += 10f) upcoming = MathF.Max(upcoming, MathF.Abs(line.curvature[g.IndexAt(d + s2)]));
                 bool straight = upcoming < 1f / 300f;
-                bool wantsPass = (closing > 1f || nearestGap < 18f) && personality.aggression > 0.15f
+                bool wantsPass = !noOvertaking && (closing > 1f || nearestGap < 18f) && personality.aggression > 0.15f
                                  && (straight || closing > 10f * (1.3f - personality.aggression));
                 if (wantsPass && passCommit <= 0f)
                 {
@@ -206,7 +214,17 @@ namespace Apex.AI
                         passTargetLateral = ahead.lateral;
                     }
                 }
-                if (timeToContact < 1.4f || nearestGap < 9f)
+                if (noOvertaking)
+                {
+                    // Queue: close up to the follow gap, never faster than the car ahead plus a margin.
+                    float follow = ahead.speed + (nearestGap - followGap) * 0.4f;
+                    if (follow < wantSpeed)
+                    {
+                        wantSpeed = MathF.Max(follow, 0f);
+                        Intent = "queue";
+                    }
+                }
+                else if (timeToContact < 1.4f || nearestGap < 9f)
                 {
                     // Blocked: match speed with a safety margin.
                     float follow = ahead.speed + (nearestGap - 10f) * 0.5f;

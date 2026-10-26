@@ -50,25 +50,30 @@ Kraft F = μ(Fz) · Grip · Fz · f(s), aufgeteilt in Fx = F·sx/s und Fy = −F
 - **Oberflächen-Textur:** Kerbs (7 mm, 1,1 m Welle), Gras und Kies regen die Federung an. Die Frequenz ist auf 24 Hz begrenzt (120-Hz-Physik, kein Aliasing).
 
 ## Fahrprofile
-| Profil | TC | ABS | Lenkhilfe | Getriebe |
-|---|---|---|---|---|
-| Einsteiger | hoch | an | voll (Stärke 1) | Automatik |
-| **Ausgewogen (Standard)** | mittel | an | leicht (Stärke 0,5) | Automatik |
-| Profi | aus | aus | aus | manuell |
-| Individuell | frei | frei | frei | frei |
+| Profil | TC | ABS | Lenkhilfe | Tempoabh. Lenkung | Getriebe |
+|---|---|---|---|---|---|
+| Einsteiger | hoch | an | voll (Stärke 1) | an | Automatik |
+| **Ausgewogen (Standard)** | mittel | an | leicht (Stärke 0,5) | an | Automatik |
+| Profi | niedrig | an | aus | an | Automatik (manuell wählbar) |
+| Individuell | frei | frei | frei | frei | frei |
 
-Keine Hilfe erhöht den Grip oder zwingt das Auto auf die Ideallinie. Bei leichter Lenkhilfe bleiben 40 % Einschlag über dem Grip-Limit: Die Front kann überfahren werden. Die Gegenlenk-Verstärkung skaliert mit der Stärke. Alte Einstellungen (v1) werden auf „Ausgewogen“ migriert.
+- Keine Hilfe erhöht den Grip oder zwingt das Auto auf die Ideallinie.
+- **Tempoabhängige Lenkung** ist ein Eingabefilter, keine Fahrhilfe. Er begrenzt den Einschlag auf das 1,35-Fache des Grip-Limits, damit volle Taste bei 250 km/h nicht 22° bedeutet. Es gibt keinen Gegenlenk-Eingriff. Für Lenkrad und Gamepad lässt er sich abschalten.
+- **Leichte Lenkhilfe:** 25 % Einschlag über dem Grip-Limit. Die Front kann überfahren werden.
+- **Profi behält ABS und niedrige TC.** Tasten und Touch liefern nur 0/100 % Pedal; ohne ABS ist das Auto damit nachweislich unfahrbar (Tastatur-Runde).
+- Alte Einstellungen werden migriert: v1 → „Ausgewogen“, v3 übernimmt die neuen Profilwerte.
 
 ## Assistenzsysteme (optional, gekennzeichnet)
 - **Traktionskontrolle (Stufen niedrig/mittel/hoch = 115 / 100 / 88 % erlaubter Schlupf):** Vorsteuerung. Rutscht ein Rad schon über dem Haftmaximum, wird unter die Gleitkraft begrenzt, auch unter 3 m/s. Das Antriebsmoment wird auf die übertragbare Kraft der Hinterreifen begrenzt, also μ·Fz·f(0,92) mal dem Längsanteil, der nach dem Schräglauf noch übrig ist. Zusätzlich gibt es eine sanfte Rückkopplung. Das greift beim Start und bei Power-Oversteer in der Kurve.
+- **ABS mit Kurvenbremsfunktion:** Ein Hinterreifen jenseits seines Schräglaufmaximums bekommt keinen Bremsdruck mehr.
 - **ABS:** Begrenzt jedes Bremsmoment auf die übertragbare Kraft. Die Motorbremse wird abgezogen, und bei beginnendem Blockieren wird der Druck abgebaut. Unter 3 m/s ist ABS aus.
 - **Lenkhilfe** (überarbeitet nach dem Spielertest):
   - Einschlag 22° bei niedrigem Tempo, für ca. 9 m Wenderadius.
   - Bei Tempo begrenzt das kleinere von zwei Limits: eine Tempo-Überblendung auf 4,5° oder ein Grip-Limit. Das Grip-Limit ist der kinematische Winkel für die maximale Querbeschleunigung inklusive Abtrieb plus 90 % des Schräglauf-Maximums vorne.
   - Die Zahnstange ist langsamer bei Tempo: 140°/s im Stand, 35°/s ab ca. 200 km/h.
-  - **Gegenlenk-Assistent:** Übersteigt der Schräglauf hinten 75 % seines Maximums (und arbeitet hinten mehr als vorne), lenkt die Hilfe begrenzt gegen. Der Fahrer kann übersteuern.
-  - Tastatur und Touch: Ein voller Einschlag dauert langsam ca. 0,3 s, bei Tempo ca. 0,6 s.
-  - Ohne Lenkhilfe bleibt der volle mechanische Einschlag mit 140°/s.
+  - **Gegenlenk-Assistent:** nur bei Leistungsübersteuern, also mit Gas und ohne Bremse. Übersteigt der Schräglauf hinten 75 % seines Maximums, lenkt die Hilfe begrenzt gegen. Beim Anbremsen griff er früher auch ein und verursachte Dreher (Tastatur-Runde).
+  - **Zahnstange:** 160°/s im Stand. Bei Tempo und voller Lenkhilfe 70°/s (vorher 35°/s), bei leichter ca. 115°/s.
+  - **Tastatur und Touch:** Ein voller Einschlag dauert langsam ca. 0,18 s, bei Tempo ca. 0,33 s (vorher 0,3 / 0,6 s). Der Einschlag selbst ist tempoabhängig begrenzt.
 
 ## Gemessene Kennwerte (flacher Prüfstand)
 Ausführlicher Bericht mit Kurven-, Brems-, Nässe- und Kerb-Szenarien: [`HANDLING_VALIDATION.md`](HANDLING_VALIDATION.md).

@@ -46,10 +46,86 @@ namespace Apex.Tracks
             public float BoxDistance(int box) => boxStart + box * boxSpacing;
         }
 
+        /// <summary>
+        /// Optional run-off (m) from the track edge to the barrier per control point, left and
+        /// right of the driving direction (point columns 5 and 6). Empty = default run-off.
+        /// Street circuits use 1–2 m with escape roads at braking zones.
+        /// </summary>
+        public readonly List<(float left, float right)> runoffs = new List<(float, float)>();
+
+        /// <summary>Authored corner (apex raw distance, direction, angle) — overrides automatic detection when present.</summary>
+        public sealed class CornerMark
+        {
+            public string name = "";
+            public float distance, angle;
+            public bool right;
+        }
+
+        public readonly List<CornerMark> corners = new List<CornerMark>();
+
         public PitLane pit;
         public readonly List<string> cornerNames = new List<string>();
         /// <summary>Optional shoreline polyline (east, north), water lies to the east.</summary>
         public readonly List<(float east, float north)> shoreline = new List<(float, float)>();
+
+        /// <summary>A real-world landmark placed in game coordinates (see tools/bosphorus_geo.py).</summary>
+        public sealed class Landmark
+        {
+            public string id = "";
+            public string name = "";
+            public string kind = "";
+            public float east, north, height;
+            public bool verified;
+        }
+
+        public readonly List<Landmark> landmarks = new List<Landmark>();
+        /// <summary>Opposite (Asian) shoreline, water lies to the west of it.</summary>
+        public readonly List<(float east, float north)> farShoreline = new List<(float, float)>();
+        /// <summary>Bearing of true north in the game frame (deg, 0 = +z); NaN without geo data.</summary>
+        public float trueNorthBearing = float.NaN;
+
+        /// <summary>Distant land outline (game metres) with a hill profile for the skyline layer.</summary>
+        public sealed class LandMass
+        {
+            public string id = "";
+            /// <summary>Maximum hill height above the shore (m) and the distance scale of the rise (m).</summary>
+            public float rise, scale;
+            public readonly List<(float east, float north)> polygon = new List<(float, float)>();
+        }
+
+        public readonly List<LandMass> landMasses = new List<LandMass>();
+
+        /// <summary>Optional terrain grid (street-level heights, m) in game metres; null if absent.</summary>
+        public sealed class HeightGrid
+        {
+            public float originEast, originNorth, cell;
+            public int nx, nz;
+            public float[] h;
+
+            /// <summary>Bilinear height; 0 outside the grid.</summary>
+            public float Sample(float east, float north)
+            {
+                float fx = (east - originEast) / cell, fz = (north - originNorth) / cell;
+                if (fx < 0f || fz < 0f || fx > nx - 1 || fz > nz - 1) return 0f;
+                int x0 = Math.Min((int)fx, nx - 2), z0 = Math.Min((int)fz, nz - 2);
+                float tx = fx - x0, tz = fz - z0;
+                float a = h[z0 * nx + x0], b = h[z0 * nx + x0 + 1], c = h[(z0 + 1) * nx + x0], d = h[(z0 + 1) * nx + x0 + 1];
+                return (a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * tz;
+            }
+        }
+
+        public HeightGrid heightGrid;
+
+        /// <summary>Signature view from a point of the circuit (game-frame bearing, deg).</summary>
+        public sealed class Sightline
+        {
+            public string label = "";
+            public float east, north, bearing;
+        }
+
+        public readonly List<Sightline> sightlines = new List<Sightline>();
+
+        public Landmark FindLandmark(string landmarkId) => landmarks.Find(l => l.id == landmarkId);
 
         public static CircuitDefinition FromJson(string json)
         {
@@ -76,7 +152,10 @@ namespace Apex.Tracks
                 if (!(row is List<object> r) || r.Count < 3) throw new FormatException("Bad control point row");
                 float w = r.Count > 3 ? Convert.ToSingle(r[3]) : def.defaultWidth;
                 def.points.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1]), Convert.ToSingle(r[2]), w));
+                if (r.Count > 5) def.runoffs.Add((Convert.ToSingle(r[4]), Convert.ToSingle(r[5])));
             }
+            if (def.runoffs.Count != 0 && def.runoffs.Count != def.points.Count)
+                throw new FormatException("Run-off columns must be given for all control points or none");
             if (root.TryGetValue("pit", out var pv) && pv is Dictionary<string, object> pd)
             {
                 def.pit = new PitLane
@@ -89,6 +168,14 @@ namespace Apex.Tracks
                     speedLimitKmh = Num(pd, "speed_limit_kmh", 80f),
                 };
             }
+            if (root.TryGetValue("corners", out var cm) && cm is List<object> cml)
+                foreach (var o in cml)
+                    if (o is Dictionary<string, object> cd)
+                        def.corners.Add(new CornerMark
+                        {
+                            name = Str(cd, "name"), distance = Num(cd, "distance", 0f), angle = Num(cd, "angle", 90f),
+                            right = cd.TryGetValue("right", out var rv) && rv is bool rb && rb,
+                        });
             if (root.TryGetValue("corner_names", out var cn) && cn is List<object> cnl)
                 foreach (var c in cnl) def.cornerNames.Add(c as string ?? "");
             if (root.TryGetValue("shoreline", out var sh) && sh is List<object> shl)
@@ -96,6 +183,66 @@ namespace Apex.Tracks
                 foreach (var row in shl)
                     if (row is List<object> r && r.Count >= 2)
                         def.shoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
+            }
+            if (root.TryGetValue("sightlines", out var sl) && sl is List<object> sll)
+                foreach (var o in sll)
+                {
+                    if (!(o is Dictionary<string, object> sd)) continue;
+                    var from = sd.TryGetValue("from", out var fr) ? fr as List<object> : null;
+                    if (from == null || from.Count < 2) continue;
+                    def.sightlines.Add(new Sightline
+                    {
+                        label = Str(sd, "label"),
+                        east = Convert.ToSingle(from[0]),
+                        north = Convert.ToSingle(from[1]),
+                        bearing = Num(sd, "bearing_deg", 0f),
+                    });
+                }
+            if (root.TryGetValue("geo", out var geo) && geo is Dictionary<string, object> gd)
+            {
+                def.trueNorthBearing = Num(gd, "true_north_bearing_deg", float.NaN);
+                if (gd.TryGetValue("landmarks", out var lm) && lm is List<object> lml)
+                    foreach (var o in lml)
+                    {
+                        if (!(o is Dictionary<string, object> ld)) continue;
+                        var pos = ld.TryGetValue("game", out var gp) ? gp as List<object> : null;
+                        def.landmarks.Add(new Landmark
+                        {
+                            id = Str(ld, "id"),
+                            name = Str(ld, "name"),
+                            kind = Str(ld, "kind"),
+                            height = Num(ld, "height", 0f),
+                            east = pos != null && pos.Count > 1 ? Convert.ToSingle(pos[0]) : 0f,
+                            north = pos != null && pos.Count > 1 ? Convert.ToSingle(pos[1]) : 0f,
+                            verified = ld.TryGetValue("verified", out var vf) && vf is bool b && b,
+                        });
+                    }
+                if (gd.TryGetValue("shoreline_asia", out var sa) && sa is List<object> sal)
+                    foreach (var row in sal)
+                        if (row is List<object> r && r.Count >= 2)
+                            def.farShoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
+                if (gd.TryGetValue("height_grid", out var hg) && hg is Dictionary<string, object> hgd
+                    && hgd.TryGetValue("h", out var hv) && hv is List<object> hl && hgd.TryGetValue("origin", out var ov) && ov is List<object> ol)
+                {
+                    var grid = new HeightGrid
+                    {
+                        originEast = Convert.ToSingle(ol[0]), originNorth = Convert.ToSingle(ol[1]),
+                        cell = Num(hgd, "cell", 100f), nx = (int)Num(hgd, "nx", 0f), nz = (int)Num(hgd, "nz", 0f), h = new float[hl.Count],
+                    };
+                    for (int i = 0; i < hl.Count; i++) grid.h[i] = Convert.ToSingle(hl[i]);
+                    if (grid.nx >= 2 && grid.nz >= 2 && grid.h.Length == grid.nx * grid.nz) def.heightGrid = grid;
+                }
+                if (gd.TryGetValue("land", out var la) && la is List<object> lal)
+                    foreach (var o in lal)
+                    {
+                        if (!(o is Dictionary<string, object> ld)) continue;
+                        var mass = new LandMass { id = Str(ld, "id"), rise = Num(ld, "rise", 40f), scale = Num(ld, "scale", 500f) };
+                        if (ld.TryGetValue("polygon", out var pg) && pg is List<object> pgl)
+                            foreach (var row in pgl)
+                                if (row is List<object> r && r.Count >= 2)
+                                    mass.polygon.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
+                        if (mass.polygon.Count >= 3) def.landMasses.Add(mass);
+                    }
             }
             return def;
         }

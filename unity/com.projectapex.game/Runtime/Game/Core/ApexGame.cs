@@ -29,7 +29,7 @@ namespace Apex.Game
     /// </summary>
     public sealed partial class ApexGame : MonoBehaviour
     {
-        public static readonly string[] TrackIds = { "bosphorus_gp", "test_loop" };
+        public static readonly string[] TrackIds = { "bosphorus_a", "test_loop" };
         const string CareerFile = "career.json";
         const string ConfigFile = "session.json";
 
@@ -127,7 +127,7 @@ namespace Apex.Game
                 go.AddComponent<AudioListener>();
             }
             cam.nearClipPlane = 0.1f;
-            cam.farClipPlane = 4000f;
+            cam.farClipPlane = 9000f;
             raceCam = cam.GetComponent<RaceCamera>();
             if (raceCam == null) raceCam = cam.gameObject.AddComponent<RaceCamera>();
             raceCam.enabled = false;
@@ -165,6 +165,8 @@ namespace Apex.Game
             RenderSettings.fogColor = new Color(0.72f, 0.78f, 0.84f);
             RenderSettings.fogStartDistance = 300f;
             RenderSettings.fogEndDistance = 3500f;
+            var sky = RenderSettings.skybox;
+            if (sky != null && sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.3f);
         }
 
         public static Color PaintColour(int index)
@@ -172,7 +174,7 @@ namespace Apex.Game
             // Same order as the colour rewards in Progression.
             Color[] table =
             {
-                new Color(0.05f, 0.33f, 0.62f), new Color(0.75f, 0.1f, 0.12f), new Color(0.93f, 0.93f, 0.95f), new Color(0.85f, 0.78f, 0.64f),
+                new Color(0.047f, 0.12f, 0.28f), new Color(0.75f, 0.1f, 0.12f), new Color(0.93f, 0.93f, 0.95f), new Color(0.85f, 0.78f, 0.64f),
                 new Color(0.12f, 0.38f, 0.22f), new Color(0.9f, 0.68f, 0.2f), new Color(0.16f, 0.17f, 0.19f), new Color(0.1f, 0.85f, 0.95f),
                 new Color(0.95f, 0.5f, 0.1f), new Color(0.58f, 0.6f, 0.63f), new Color(0.85f, 0.15f, 0.3f), new Color(0.35f, 0.15f, 0.55f),
                 new Color(0.75f, 0.88f, 0.95f), new Color(0.95f, 0.3f, 0.65f), new Color(0.82f, 0.7f, 0.48f), new Color(0.2f, 0.55f, 0.25f),
@@ -328,6 +330,7 @@ namespace Apex.Game
             showroom = null;
             showroomCar = null;
             world = new GameObject("World");
+            EnvironmentBuilder.Quality = Settings.environmentDetail;
             var circuit = CircuitBuilder.Build(def, world.transform);
             yield return null;
 
@@ -355,6 +358,9 @@ namespace Apex.Game
             weatherVisuals.weather = Race.Weather;
             weatherVisuals.timeOfDay = cfg.timeOfDay;
             weatherVisuals.sun = sun;
+            weatherVisuals.trueNorthBearing = def.trueNorthBearing;
+            weatherVisuals.environment = circuit.Environment;
+            if (circuit.Environment != null) circuit.Environment.ambienceVolume = Settings.masterVolume * 0.6f;
             weatherVisuals.cameraTransform = cam.transform;
             weatherVisuals.Bind(circuit.gameObject);
 
@@ -402,6 +408,7 @@ namespace Apex.Game
             sim.tractionLevel = Settings.tractionLevel;
             sim.assistAbs = Settings.abs;
             sim.steeringAssist = Settings.SteeringAssistStrength;
+            sim.speedSensitiveSteering = Settings.speedSensitiveSteering;
             sim.setup.brakeBiasFront = Settings.brakeBiasFront;
             sim.autoGearbox = Settings.autoGearbox;
             input.manualGears = !sim.autoGearbox;

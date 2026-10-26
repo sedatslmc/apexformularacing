@@ -31,7 +31,7 @@ namespace Apex.Game
             public string label;
         }
 
-        public static readonly string[] RadioLabels = { "1 Box", "2 Reifen", "3 Wetter", "4 Abstand", "5 Strategie", "6 Schließen" };
+        public static readonly string[] RadioLabels = { "1 Box", "2 Reifen", "3 Wetter", "4 Abstand", "5 Strategie", "6 Schaden", "7 Schließen" };
 
         public static List<Button> Compute(SettingsData s, bool tilt, bool manualGears, bool radioOpen = false)
         {
