@@ -201,6 +201,7 @@ def main():
                        "Çırağan, Ortaköy, Palanga, Yıldız, Barbaros, Akaretler, Bayıldım, Kabataş. Straßenachsen © OpenStreetMap-Mitwirkende "
                        "(ODbL), Gelände Copernicus DEM. Breiten und Kreuzungen für das Rennen angepasst.",
         "direction": "counter_clockwise",
+        "identity": "bosphorus",
         "default_width": 11.0,
         "sector_fractions": sorted(sec),
         "start_line_distance": LEAD,

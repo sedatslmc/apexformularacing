@@ -5,6 +5,12 @@ using System.Collections.Generic;
 
 namespace UnityEngine
 {
+    public struct Color
+    {
+        public float r, g, b, a;
+        public Color(float r, float g, float b, float a = 1f) { this.r = r; this.g = g; this.b = b; this.a = a; }
+    }
+
     public struct Vector2
     {
         public float x, y;

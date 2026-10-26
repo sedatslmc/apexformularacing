@@ -25,6 +25,26 @@ if (Array.IndexOf(args, "--flag") >= 0)
         for (int i = 0; i < w; i++) { int k = (j * w + i) * 4; fs.WriteByte(px[k]); fs.WriteByte(px[k + 1]); fs.WriteByte(px[k + 2]); }
     return;
 }
+if (Array.IndexOf(args, "--art") >= 0)
+{
+    // Event emblem (on grey) and the İznik tile (2x2, to check the seams) as binary PPMs.
+    void WritePpm(string name, float[] px, int n, int repeat, float bg)
+    {
+        int size = n * repeat;
+        using var fs = File.Create(Path.Combine(outDir, name));
+        var header = Encoding.ASCII.GetBytes($"P6 {size} {size} 255\n");
+        fs.Write(header, 0, header.Length);
+        for (int j = size - 1; j >= 0; j--)
+            for (int i = 0; i < size; i++)
+            {
+                int k = ((j % n) * n + (i % n)) * 4;
+                for (int c = 0; c < 3; c++) fs.WriteByte((byte)Math.Round(255f * (px[k + c] * px[k + 3] + bg * (1f - px[k + 3]))));
+            }
+    }
+    WritePpm("event_emblem.ppm", Apex.Environment.EventArt.Emblem(512), 512, 1, 0.5f);
+    WritePpm("iznik_tile.ppm", Apex.Environment.EventArt.IznikTile(256), 256, 2, 0f);
+    return;
+}
 if (Array.IndexOf(args, "--landmarks") >= 0)
 {
     // One OBJ per landmark, each at the origin, for inspection renders.
@@ -190,6 +210,45 @@ if (Array.IndexOf(args, "--environment") >= 0)
             }
             Place(TrackInfrastructureGeometry.MarshalShelter, Q(i, po.side * (w[i] + 2.3f), -0.12f));
             Place(T2 => TrackInfrastructureGeometry.PanelHousing(T2(TrackInfrastructureGeometry.Housing)), Q(i, po.side * (w[i] + 0.75f), -0.12f));
+        }
+        // Event identity: gantry, pit building with podium and trophy, timing tower, race control (EventLayout as in the game).
+        if (def.identity == Apex.Race.EventIdentity.Bosphorus)
+        {
+            var ev = new Apex.Environment.EventLayout(g, def, field, wl, wr, 13.5f);
+            void PutEv(Action<EventGeometry.Parts> build, Vector3 at, float yaw, Vector3 local = default, float localYaw = 0f)
+            {
+                var tmp = new Dictionary<string, MeshBuilder>();
+                MeshBuilder T(string key) { if (!tmp.TryGetValue(key, out var mb2)) tmp[key] = mb2 = new MeshBuilder(); return mb2; }
+                build(T);
+                var q = Quaternion.Euler(0f, yaw, 0f) ;
+                var ql = Quaternion.Euler(0f, localYaw, 0f);
+                foreach (var kv in tmp)
+                {
+                    var v = kv.Value.Vertices; var tr = kv.Value.Triangles;
+                    for (int t = 0; t < tr.Count; t += 3)
+                    {
+                        Vector3 W(Vector3 p) => at + q * (local + ql * p);
+                        Vector3 a = W(v[tr[t]]), b = W(v[tr[t + 1]]), c = W(v[tr[t + 2]]);
+                        B(kv.Key).TriangleFacing(a, b, c, Vector2.zero, Vector2.zero, Vector2.zero, Vector3.Cross(c - a, b - a));
+                    }
+                }
+            }
+            Vector3 U(System.Numerics.Vector3 v) => new Vector3(v.X, v.Y, v.Z);
+            g.FrameAt(def.startLineDistance, out var sp, out var sf, out _);
+            PutEv(T => EventGeometry.Gantry(T, g.WidthAt(def.startLineDistance)), U(sp), Apex.Environment.EventLayout.Yaw(sf));
+            if (ev.pitBuilding.placed)
+            {
+                var at = U(ev.pitBuilding.position);
+                PutEv(T => EventGeometry.PitBuilding(T, ev.pitLength, ev.bayZ, def.pit.boxSpacing), at, ev.pitBuilding.yaw);
+                var podiumAt = new Vector3(EventGeometry.PitDepth * 0.5f, EventGeometry.PitRoof, ev.podiumZ);
+                PutEv(EventGeometry.Podium, at, ev.pitBuilding.yaw, podiumAt, -90f);
+                PutEv(T => { EventGeometry.Trophy(T); }, at, ev.pitBuilding.yaw, podiumAt + Quaternion.Euler(0f, -90f, 0f) * EventGeometry.TrophyOnPodium, -90f);
+            }
+            if (ev.timingTower.placed) PutEv(EventGeometry.TimingTower, U(ev.timingTower.position), ev.timingTower.yaw);
+            if (ev.raceControl.placed) PutEv(EventGeometry.RaceControl, U(ev.raceControl.position), ev.raceControl.yaw);
+            Console.WriteLine($"  start line ({sp.X:F0}, {sp.Y:F1}, {sp.Z:F0}) heading {Apex.Environment.EventLayout.Yaw(sf):F0}°, pit building at ({ev.pitBuilding.position.X:F0}, {ev.pitBuilding.position.Z:F0}) yaw {ev.pitBuilding.yaw:F0}, tower ({ev.timingTower.position.X:F0}, {ev.timingTower.position.Z:F0}), race control ({ev.raceControl.position.X:F0}, {ev.raceControl.position.Z:F0})");
+            Console.WriteLine($"event: pit building {ev.pitBuilding.placed} ({ev.pitLength:F0} m, {ev.bayZ.Count} bays), timing tower {ev.timingTower.placed}, race control {ev.raceControl.placed}, {ev.flags.Count} event flags");
+            foreach (var (fp, _, _) in ev.flags) Console.WriteLine($"  flag at ({fp.X:F0}, {fp.Z:F0})");
         }
     }
     // Trees (instanced in the game).

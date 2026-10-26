@@ -232,5 +232,41 @@ namespace Apex.Tests
                     Assert.That(land.IsLand(p.X, p.Y), Is.False, $"{r.name} on land at t={t} ({p.X:F0}, {p.Y:F0})");
                 }
         }
+
+        [Test]
+        public void BosphorusEventStructuresFitBesideTheTrack()
+        {
+            var def = TestData.Circuit("bosphorus_a");
+            Assert.That(def.identity, Is.EqualTo(Apex.Race.EventIdentity.Bosphorus));
+            var g = TrackGeometry.FromDefinition(def);
+            var field = new TerrainField(g, def);
+            // Barrier offsets as the circuit builder sets them (street circuit: run-off or kerb + 0.2).
+            var wl = new float[g.Count];
+            var wr = new float[g.Count];
+            for (int i = 0; i < g.Count; i++)
+            {
+                wl[i] = g.Widths[i] * 0.5f + g.RunoffLeft[i];
+                wr[i] = g.Widths[i] * 0.5f + g.RunoffRight[i];
+            }
+            var layout = new EventLayout(g, def, field, wl, wr, 13.5f);
+            Assert.That(layout.pitBuilding.placed, Is.True, "pit building");
+            Assert.That(layout.timingTower.placed, Is.True, "timing tower");
+            Assert.That(layout.raceControl.placed, Is.True, "race control");
+            Assert.That(layout.bayZ.Count, Is.EqualTo(20), "a garage bay per grid slot");
+            Assert.That(layout.pitLength, Is.GreaterThan(19 * def.pit.boxSpacing));
+            Assert.That(Math.Abs(layout.podiumZ), Is.LessThan(layout.pitLength * 0.5f));
+            // The building stands behind the pit lane, never over it or another part of the circuit.
+            var pb = layout.pitBuilding;
+            for (float z = -layout.pitLength * 0.5f; z <= layout.pitLength * 0.5f; z += 10f)
+            {
+                var front = pb.position + EventLayout.Rotate(pb.yaw, new System.Numerics.Vector3(0f, 0f, z));
+                var pr = g.Project(front);
+                Assert.That(Math.Abs(pr.lateral), Is.GreaterThan(g.Widths[pr.index] * 0.5f + 13.5f), $"pit building face at z={z:F0} over the pit lane");
+            }
+            // Event flags at the pit roof and at least at one of the two squares, all on land.
+            Assert.That(layout.flags.Count, Is.GreaterThanOrEqualTo(3));
+            foreach (var (pos, _, _) in layout.flags)
+                Assert.That(field.IsWater(pos.X, pos.Z), Is.False, $"flag in the water at ({pos.X:F0}, {pos.Z:F0})");
+        }
     }
 }
