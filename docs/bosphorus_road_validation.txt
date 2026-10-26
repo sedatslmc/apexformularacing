@@ -1,41 +1,28 @@
-samples 3822 (every 2.00 m), height 4.4..100.7 m, width min 9.4 m
-grade max 11.0 % (2 m), 10.9 % (50 m); grade change max 2.54 %/10 m
-vertical radius min: crest 612 m, sag 388 m; worst use of the vehicle limit 123 %; min body clearance -2 mm
+samples 3822 (every 2.00 m), height 4.3..100.7 m, width min 9.4 m
+grade max 10.9 % (2 m), 10.9 % (50 m); grade change max 2.40 %/10 m
+vertical radius min: crest 614 m, sag 412 m; worst use of the vehicle limit 155 %; min body clearance 0 mm
 collider surface vs design max 0.0 mm, cross-fall max 0.00 %, grid slots ok 20/20
-findings: 0 critical, 13 warnings, 23 info
-  Warning  sag curvature          lap   1628 m (1471, 12.1, 703)  8.834E-05 (limit 7.874E-05) R 11320 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap   1020 m (927, 8.5, 435)  8.345E-05 (limit 7.874E-05) R 11983 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap   4258 m (598, 74.7, 1323)  8.822E-05 (limit 8.344E-05) R 11335 m at 320 km/h, body clearance 2 mm
-  Warning  sag curvature          lap    756 m (675, 7.3, 356)  8.286E-05 (limit 7.874E-05) R 12069 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap    162 m (102, 7.6, 202)  8.25E-05 (limit 8.059E-05) R 12121 m at 326 km/h, body clearance -0 mm
-  Warning  sag curvature          lap   4156 m (615, 79.8, 1423)  0.0001202 (limit 0.0001176) R 8321 m at 308 km/h, body clearance 5 mm
-  Warning  sag curvature          lap   1574 m (1423, 11.4, 678)  7.994E-05 (limit 7.874E-05) R 12510 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap   4596 m (527, 53.0, 994)  7.964E-05 (limit 7.874E-05) R 12557 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap   1264 m (1146, 9.1, 539)  7.952E-05 (limit 7.874E-05) R 12576 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap   7530 m (-160, 9.7, 116)  0.0003866 (limit 0.0003833) R 2587 m at 297 km/h, body clearance 5 mm
-  Warning  sag curvature          lap   4162 m (614, 79.5, 1417)  9.776E-05 (limit 9.704E-05) R 10229 m at 309 km/h, body clearance 5 mm
-  Warning  sag curvature          lap   1908 m (1718, 14.0, 834)  7.916E-05 (limit 7.874E-05) R 12632 m at 330 km/h, body clearance -2 mm
-  Warning  sag curvature          lap   7552 m (-140, 9.2, 124)  0.0003051 (limit 0.0003047) R 3278 m at 300 km/h, body clearance 5 mm
-  Info     grade change (10 m)    lap   2130 m (1905, 9.7, 953)  0.02535 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2132 m (1907, 9.8, 954)  0.02533 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2128 m (1904, 9.6, 951)  0.02497 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2134 m (1908, 9.9, 956)  0.02478 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2126 m (1903, 9.5, 950)  0.02423 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2136 m (1909, 10.0, 957)  0.02368 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2124 m (1901, 9.4, 949)  0.02321 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2138 m (1911, 10.1, 959)  0.0222 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2122 m (1900, 9.4, 947)  0.02209 (limit 0.02) covered by the curvature check
+findings: 0 critical, 4 warnings, 19 info
+  Warning  sag curvature          lap    250 m (186, 6.3, 228)  0.0001633 (limit 0.0001063) R 6125 m at 331 km/h, body clearance 0 mm
+  Warning  sag curvature          lap   5098 m (449, 14.5, 499)  0.0001112 (limit 0.0001063) R 8990 m at 331 km/h, body clearance 1 mm
+  Warning  sag curvature          lap   1630 m (1472, 12.1, 704)  0.0001088 (limit 0.0001063) R 9187 m at 331 km/h, body clearance 1 mm
+  Warning  sag curvature          lap   1918 m (1727, 13.8, 839)  0.0001066 (limit 0.0001063) R 9382 m at 331 km/h, body clearance 1 mm
+  Info     grade change (10 m)    lap   2116 m (1895, 9.2, 944)  0.02405 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2114 m (1893, 9.1, 942)  0.02401 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2118 m (1896, 9.3, 945)  0.0237 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2112 m (1892, 9.1, 941)  0.02362 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2120 m (1898, 9.3, 946)  0.02298 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2110 m (1890, 9.0, 940)  0.02295 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2108 m (1888, 9.0, 939)  0.02199 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2122 m (1899, 9.4, 947)  0.02193 (limit 0.02) covered by the curvature check
   Info     grade change (10 m)    lap   6730 m (-535, 19.8, 130)  0.02193 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   6728 m (-534, 20.0, 129)  0.02192 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   6732 m (-536, 19.7, 132)  0.02177 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   6728 m (-534, 20.0, 129)  0.0219 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   6732 m (-536, 19.7, 132)  0.02178 (limit 0.02) covered by the curvature check
   Info     grade change (10 m)    lap   6726 m (-532, 20.1, 127)  0.02168 (limit 0.02) covered by the curvature check
   Info     grade change (10 m)    lap   6734 m (-537, 19.5, 134)  0.02147 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   6724 m (-531, 20.3, 125)  0.02124 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2120 m (1898, 9.3, 946)  0.02103 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   6724 m (-531, 20.3, 125)  0.02125 (limit 0.02) covered by the curvature check
   Info     grade change (10 m)    lap   6736 m (-538, 19.4, 135)  0.02102 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   6722 m (-530, 20.5, 124)  0.02063 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2106 m (1887, 9.0, 938)  0.02081 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   6722 m (-530, 20.5, 124)  0.02062 (limit 0.02) covered by the curvature check
+  Info     grade change (10 m)    lap   2124 m (1901, 9.5, 949)  0.02056 (limit 0.02) covered by the curvature check
   Info     grade change (10 m)    lap   6738 m (-539, 19.3, 137)  0.02042 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2140 m (1912, 10.3, 960)  0.02038 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   2118 m (1896, 9.3, 945)  0.02006 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   5564 m (151, 7.7, 249)  0.02003 (limit 0.02) covered by the curvature check
-  Info     grade change (10 m)    lap   5566 m (150, 7.8, 250)  0.02001 (limit 0.02) covered by the curvature check

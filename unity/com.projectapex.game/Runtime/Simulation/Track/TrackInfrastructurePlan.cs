@@ -16,6 +16,8 @@ namespace Apex.Tracks
     public sealed class TrackInfrastructurePlan
     {
         public const float KerbMaxWidth = 1.3f;
+        /// <summary>Highest kerb crown (m): front plank height at rest (35 mm) minus 5 mm.</summary>
+        public const float MaxKerbHeight = 0.03f;
         public const float DefaultRunoff = 16f;
 
         public sealed class Kerbs
@@ -89,8 +91,10 @@ namespace Apex.Tracks
             foreach (var c in corners)
             {
                 float r = c.minRadius;
-                // Fast corners: low wide kerbs; slow corners: shorter, more pronounced ones.
-                float h = r > 150f ? 0.025f : r > 60f ? 0.038f : 0.05f;
+                // Fast corners: low wide kerbs; slow corners: more pronounced ones, but never higher than the
+                // car's body clearance at the front axle minus a margin (BodyCollider: 35 mm at rest), so a car
+                // straddling a kerb does not ground on it.
+                float h = r > 150f ? 0.02f : r > 60f ? 0.025f : MaxKerbHeight;
                 int inside = c.right ? 1 : -1;
                 // Corner extent from the curvature around the apex.
                 int a = c.index, b = c.index;

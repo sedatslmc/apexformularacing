@@ -22,6 +22,8 @@ namespace Apex.Environment
         const float Blend = 260f;
 
         readonly List<Vector3> samples = new List<Vector3>();
+        /// <summary>Lap distance between consecutive samples (m).</summary>
+        readonly float sampleStep;
         readonly CircuitDefinition def;
         public readonly LandModel land;
         readonly float baseLevel;
@@ -52,6 +54,7 @@ namespace Apex.Environment
             MaxZ = MathF.Ceiling((maxZ + Margin) / FarCell) * FarCell;
             baseLevel = minY - 0.8f;
             int step = Math.Max(1, (int)MathF.Round(10f / g.Spacing));
+            sampleStep = step * g.Spacing;
             for (int i = 0; i < g.Count; i += step) samples.Add(g.Positions[i]);
             binsX = (int)MathF.Ceiling((MaxX - MinX) / BinSize) + 1;
             binsZ = (int)MathF.Ceiling((MaxZ - MinZ) / BinSize) + 1;
@@ -65,6 +68,33 @@ namespace Apex.Environment
         }
 
         public bool InNearArea(float x, float z) => x >= MinX && x <= MaxX && z >= MinZ && z <= MaxZ;
+
+        /// <summary>Lap distance beyond which a sample counts as another part of the circuit.</summary>
+        const float OtherPartGap = 100f;
+        /// <summary>Reach of another part's road, run-off and pit (half width + pit + one terrain cell diagonal).</summary>
+        const float OtherPartReach = 40f;
+
+        IEnumerable<int> SamplesNear(float x, float z, float range)
+        {
+            int r = (int)MathF.Ceiling(range / BinSize);
+            int cx = (int)MathF.Floor((x - MinX) / BinSize), cz = (int)MathF.Floor((z - MinZ) / BinSize);
+            float r2 = range * range;
+            for (int bz = cz - r; bz <= cz + r; bz++)
+            {
+                if (bz < 0 || bz >= binsZ) continue;
+                for (int bx = cx - r; bx <= cx + r; bx++)
+                {
+                    if (bx < 0 || bx >= binsX) continue;
+                    var list = bins[bz * binsX + bx];
+                    if (list == null) continue;
+                    foreach (int i in list)
+                    {
+                        float dx = samples[i].X - x, dz = samples[i].Z - z;
+                        if (dx * dx + dz * dz <= r2) yield return i;
+                    }
+                }
+            }
+        }
 
         /// <summary>Nearest centreline sample (flat distance) within maxRange, else MaxValue.</summary>
         public float TrackDistance(float x, float z, float maxRange, out float trackY)
@@ -97,15 +127,29 @@ namespace Apex.Environment
         float NearHeight(float x, float z)
         {
             float wsum = 0f, hsum = 0f, nearest = float.MaxValue, nearestY = 0f;
-            foreach (var s in samples)
+            int nearestIdx = -1;
+            for (int i = 0; i < samples.Count; i++)
             {
+                var s = samples[i];
                 float dx = s.X - x, dz = s.Z - z;
                 float d2 = dx * dx + dz * dz;
                 float w = 1f / (d2 + 400f);
                 wsum += w;
                 hsum += w * s.Y;
-                if (d2 < nearest) { nearest = d2; nearestY = s.Y; }
+                if (d2 < nearest) { nearest = d2; nearestY = s.Y; nearestIdx = i; }
             }
+            // Other parts of the circuit within reach (more than OtherPartGap along the lap from the nearest
+            // sample, closer than OtherPartReach) also keep the terrain below them: where two parts run close
+            // at different heights the nearest one alone let the terrain poke through the other.
+            float otherMin = float.MaxValue;
+            int gap = Math.Max(1, (int)(OtherPartGap / sampleStep));
+            foreach (int i in SamplesNear(x, z, OtherPartReach))
+            {
+                int along = Math.Abs(i - nearestIdx);
+                along = Math.Min(along, samples.Count - along);
+                if (along > gap) otherMin = MathF.Min(otherMin, samples[i].Y);
+            }
+            if (otherMin < float.MaxValue) nearestY = MathF.Min(nearestY, otherMin);
             float h = hsum / wsum - 1.2f;
             if (land.HasHeightGrid)
             {

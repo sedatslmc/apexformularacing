@@ -31,7 +31,7 @@ namespace Apex.Tests
             {
                 Assert.That(plan.kerbs.left[i], Is.LessThanOrEqualTo(Math.Max(0f, plan.RunoffAt(i, -1) - 0.2f) + 1e-4f));
                 Assert.That(plan.kerbs.right[i], Is.LessThanOrEqualTo(Math.Max(0f, plan.RunoffAt(i, 1) - 0.2f) + 1e-4f));
-                Assert.That(plan.kerbs.height[i], Is.LessThanOrEqualTo(0.05f), "kerbs stay drivable with the simcade suspension");
+                Assert.That(plan.kerbs.height[i], Is.LessThanOrEqualTo(new Apex.Vehicle.VehicleSetup().rideHeightFront - 0.005f + 1e-4f), "kerbs stay below the body clearance (no grounding when straddled)");
             }
         }
 
