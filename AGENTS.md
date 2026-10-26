@@ -22,7 +22,7 @@ Input System, UI). Details: `docs/TECHNICAL_DESIGN.md`.
 
 ## Prüfen
 ```sh
-tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Tests aus, kompiliert Runtime + Editor
+tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Tests aus, kompiliert Tests (NUnit 3.5), Runtime + Editor
 ```
 - Tests einzeln: `cd build/Apex.Simulation.Tests && dotnet test`
 - Fahrdynamik-Diagnose: `cd build/Apex.Tuning && dotnet run -c Release -- launch|brake|aero|validate|lap <track_id> [trace]`

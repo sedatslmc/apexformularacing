@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Compile-only check of the EditMode tests against NUnit 3.5, the framework version in
+       Unity's com.unity.ext.nunit. The tests themselves run in Apex.Simulation.Tests (NUnit 3.14
+       on .NET 8); this project catches API that Unity's NUnit does not have. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>NU1701</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/com.projectapex.game/Tests/EditMode/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="NUnit" Version="3.5.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Apex.Simulation/Apex.Simulation.csproj" />
+  </ItemGroup>
+</Project>
