@@ -57,6 +57,17 @@ namespace Apex.Game
             wettable.Add((m, c, s));
         }
 
+        readonly List<(Light light, float full)> realLights = new List<(Light, float)>();
+
+        /// <summary>A real light that follows the night level (off in daylight).</summary>
+        public void AddRealLight(Light l, float fullIntensity)
+        {
+            if (l == null) return;
+            realLights.Add((l, fullIntensity));
+            l.intensity = fullIntensity * Mathf.Max(0f, artificial);
+            l.enabled = artificial > 0.02f;
+        }
+
         /// <summary>0 = daylight .. 1 = all street lamps, windows, floodlights and bridge lights on.</summary>
         public void SetArtificialLight(float a)
         {
@@ -64,6 +75,12 @@ namespace Apex.Game
             artificial = a;
             foreach (var (mat, full) in lights)
                 if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", full * a);
+            foreach (var (l, full) in realLights)
+            {
+                if (l == null) continue;
+                l.enabled = a > 0.02f;
+                l.intensity = full * a;
+            }
         }
 
         /// <summary>Wet facades, pavements and roofs: darker albedo, higher smoothness.</summary>

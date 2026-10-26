@@ -150,6 +150,48 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void StreetLightPoolTakesTheLampsAheadAndNeverPops()
+        {
+            var lamps = new System.Collections.Generic.List<System.Numerics.Vector3>();
+            for (int k = -20; k <= 20; k++) lamps.Add(new System.Numerics.Vector3(6f, 9.2f, k * 34f));
+            var cam = new System.Numerics.Vector3(0f, 2f, 0f);
+            var fwd = new System.Numerics.Vector3(0f, 0f, 1f);
+            var picked = new System.Collections.Generic.List<int>();
+            StreetLighting.Pick(lamps, cam, fwd, 6, picked);
+            int ahead = 0;
+            foreach (int i in picked) if (lamps[i].Z >= 0f) ahead++;
+            Assert.That(ahead, Is.GreaterThanOrEqualTo(4), "lamps ahead preferred");
+            var pool = new StreetLighting(8);
+            float dt = 1f / 60f;
+            var before = new float[8];
+            for (int frame = 0; frame < 300; frame++)   // 400 m, the lamps reach 680 m
+            {
+                cam.Z += 80f * dt;   // 288 km/h
+                for (int s = 0; s < 8; s++) before[s] = pool.slots[s].lamp >= 0 ? pool.slots[s].level : 0f;
+                pool.Update(lamps, cam, fwd, dt);
+                for (int s = 0; s < 8; s++)
+                {
+                    float now = pool.slots[s].lamp >= 0 ? pool.slots[s].level : 0f;
+                    Assert.That(Math.Abs(now - before[s]), Is.LessThanOrEqualTo(StreetLighting.FadeRate * dt + 1e-4f), "fades, never pops");
+                }
+            }
+            // After the run the lit lamps are around the camera, mostly ahead.
+            int lit = 0;
+            foreach (var slot in pool.slots)
+                if (slot.lamp >= 0 && slot.level > 0.99f) { lit++; Assert.That(lamps[slot.lamp].Z - cam.Z, Is.InRange(-120f, 260f)); }
+            Assert.That(lit, Is.GreaterThanOrEqualTo(5));
+            // Under a lamp the road gets about half the moon-lit night level ten times over.
+            Assert.That(StreetLighting.Intensity / (9.2f * 9.2f), Is.InRange(0.4f, 0.7f));
+            int prev = 0;
+            for (int i = 0; i < GraphicsPreset.TierCount; i++)
+            {
+                int n = GraphicsPreset.For((GraphicsTier)i).streetLights;
+                Assert.That(n, Is.GreaterThan(prev));
+                prev = n;
+            }
+        }
+
+        [Test]
         public void SettingsKeepTheGraphicsTierInRange()
         {
             var s = new Apex.Core.SettingsData { graphicsTier = 9 };

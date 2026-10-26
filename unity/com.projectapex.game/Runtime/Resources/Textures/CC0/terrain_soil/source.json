@@ -1,0 +1,17 @@
+{
+  "name": "terrain_soil",
+  "metres": 3.1500000953674316,
+  "meanSmoothness": 0.0987,
+  "meanAlbedoLinear": 0.1147,
+  "source": "https://polyhaven.com/a/forest_ground_04",
+  "author": "Rob Tuytel, Rico Cilliers",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "4327ce70511832ed2e5a78602ee24a6d7e2c23b2305f2b90c3e7f2e90821ff3b",
+    "Normal.png": "4b8aedb9e77c537fa57bd81226198fafd86951e3c7f1ff236ebf5f2ff83ca752",
+    "MetallicSmoothness.png": "55e1e10ee779447099d3bf590bf21b52262604d15b8077d3d3bcbf2a64a181db",
+    "Occlusion.jpg": "6547a40671d421f888f3c82709a7d70ee840253035db34b15cec6793a753018a"
+  }
+}

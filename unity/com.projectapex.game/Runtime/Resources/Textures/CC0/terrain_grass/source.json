@@ -1,0 +1,17 @@
+{
+  "name": "terrain_grass",
+  "metres": 2.0,
+  "meanSmoothness": 0.315,
+  "meanAlbedoLinear": 0.2442,
+  "source": "https://polyhaven.com/a/leafy_grass",
+  "author": "Charlotte Baglioni",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "a41199eb6a5fe2e94d2f9ac64aaaa86bed266369c09e53072b95972672151804",
+    "Normal.png": "b2936b1d7f6780b10f447775d99c6aaeb538e7109b77203dd8fb97dde4ab9a6d",
+    "MetallicSmoothness.png": "f890b9470db4a806c7bf60370708e1ac17ce8a639733c1b0db739a62b3ea79f2",
+    "Occlusion.jpg": "af575f8ba3f095cf66b1442b6b38a7db44222069b7e03c538d59c395bcf6b275"
+  }
+}

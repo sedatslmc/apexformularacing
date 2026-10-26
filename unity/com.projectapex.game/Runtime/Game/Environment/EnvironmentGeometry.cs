@@ -37,6 +37,7 @@ namespace Apex.Game
         public const string Gull = "Gull";
         public const string FlagPole = "FlagPole";
         public const string BridgeLight = "BridgeLight";
+        public const string BridgeRed = "BridgeRed", BridgeWhite = "BridgeWhite";
 
         public static string Facade(int style) => "Facade" + style;
 
@@ -109,6 +110,103 @@ namespace Apex.Game
                 B(Tank).Box(Up(L(hw * 0.4f, hd * 0.3f, 0f), y1 + 0.7f), new Vector3(1.6f, 1.4f, 1.1f), q);
                 B(RoofFlat).Box(Up(L(-hw * 0.35f, -hd * 0.2f, 0f), y1 + 1.2f), new Vector3(3f, 2.4f, 3f), q);
             }
+        }
+
+        /// <summary>
+        /// A real building from its OSM footprint (<see cref="OsmCity"/>): facade walls along every edge (the
+        /// facade texture runs continuously around the building, shopfronts at street level), a cornice band,
+        /// and either a flat roof with a parapet, water tanks and a stair head (most Istanbul apartment blocks)
+        /// or, for small four-cornered houses, a tiled hip roof. `detailed` = false gives the LOD1 mass.
+        /// </summary>
+        public static void FootprintBuilding(Parts B, OsmCity.Building b, bool detailed)
+        {
+            var o = b.outline;
+            int n = o.Count;
+            float y0 = b.ground, y1 = b.ground + 0.6f + b.height;
+            float tileH = CityLayout.FloorHeight * TileBays, tileW = BayWidth * TileBays;
+            string wall = Facade(b.style);
+            Vector3 W(int i, float y) => new Vector3(o[i % n].X, y, o[i % n].Y);
+            float u = (o[0].X * 0.37f + o[0].Y * 0.11f) % tileW;
+            float vb = -0.6f / tileH, vt = (y1 - y0 - 0.6f) / tileH;
+            for (int i = 0; i < n; i++)
+            {
+                var a = W(i, 0f); var c = W(i + 1, 0f);
+                var edge = c - a;
+                float len = edge.magnitude;
+                if (len < 0.05f) continue;
+                // Counter-clockwise footprint (x right, z up): the outside is to the right of the edge.
+                var outward = new Vector3(edge.z, 0f, -edge.x) / len;
+                B(wall).QuadFacing(Up(a, y0), Up(c, y0), Up(c, y1), Up(a, y1),
+                    new Vector2(u / tileW, vb), new Vector2((u + len) / tileW, vb), new Vector2((u + len) / tileW, vt), new Vector2(u / tileW, vt), outward);
+                u += len;
+                if (!detailed) continue;
+                // Cornice: a 0.35 m ledge projecting 0.3 m just under the roof line.
+                var off = outward * 0.3f;
+                string trim = b.historic ? LandmarkGeometry.Stone : Concrete;
+                B(trim).QuadFacing(Up(a, y1 - 0.35f) + off, Up(c, y1 - 0.35f) + off, Up(c, y1) + off, Up(a, y1) + off, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, outward);
+                B(trim).QuadFacing(Up(a, y1), Up(c, y1), Up(c, y1) + off, Up(a, y1) + off, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                B(trim).QuadFacing(Up(a, y1 - 0.35f), Up(c, y1 - 0.35f), Up(c, y1 - 0.35f) + off, Up(a, y1 - 0.35f) + off, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.down);
+            }
+            if (b.roof == 1 && n == 4)
+            {
+                HipRoof(B, o, y1);
+                return;
+            }
+            // Flat roof (triangulated footprint) with a 0.9 m parapet.
+            var tris = Polygon.Triangulate(o);
+            var roof = B(RoofFlat);
+            for (int t = 0; t + 2 < tris.Count; t += 3)
+                roof.TriangleFacing(W(tris[t], y1), W(tris[t + 1], y1), W(tris[t + 2], y1),
+                    new Vector2(o[tris[t]].X, o[tris[t]].Y) / 6f, new Vector2(o[tris[t + 1]].X, o[tris[t + 1]].Y) / 6f, new Vector2(o[tris[t + 2]].X, o[tris[t + 2]].Y) / 6f, Vector3.up);
+            if (!detailed) return;
+            for (int i = 0; i < n; i++)
+            {
+                var a = W(i, y1); var c = W(i + 1, y1);
+                var edge = c - a;
+                if (edge.sqrMagnitude < 0.01f) continue;
+                var inward = new Vector3(-edge.z, 0f, edge.x).normalized;
+                B(Concrete).QuadFacing(a, c, c + Vector3.up * 0.9f, a + Vector3.up * 0.9f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, inward);
+            }
+            // Water tanks and a stair head on larger roofs (positions from the footprint, deterministic).
+            float area = Polygon.SignedArea(o);
+            if (area > 120f)
+            {
+                var ctr = System.Numerics.Vector2.Zero;
+                foreach (var p in o) ctr += p;
+                ctr /= n;
+                var e0 = o[1] - o[0];
+                float yaw = Mathf.Atan2(e0.X, e0.Y) * Mathf.Rad2Deg;
+                var q = Quaternion.Euler(0f, yaw, 0f);
+                var dir = new Vector3(e0.X, 0f, e0.Y).normalized;
+                var side = new Vector3(dir.z, 0f, -dir.x);
+                var c3 = new Vector3(ctr.X, y1, ctr.Y);
+                B(RoofFlat).Box(c3 - dir * 2f + Vector3.up * 1.2f, new Vector3(3f, 2.4f, 3f), q);
+                B(Tank).Box(c3 + dir * 2.5f + side * 1.5f + Vector3.up * 0.7f, new Vector3(1.6f, 1.4f, 1.1f), q);
+                if (area > 400f) B(Tank).Box(c3 + dir * 4.5f - side * 1.8f + Vector3.up * 0.7f, new Vector3(1.6f, 1.4f, 1.1f), q);
+            }
+        }
+
+        /// <summary>Tiled hip roof over a four-cornered footprint (ridge along the longer pair of sides).</summary>
+        static void HipRoof(Parts B, List<System.Numerics.Vector2> o, float y1)
+        {
+            var e = new Vector3[4];
+            for (int i = 0; i < 4; i++) e[i] = new Vector3(o[i].X, y1, o[i].Y);
+            var ctr = (e[0] + e[1] + e[2] + e[3]) * 0.25f;
+            float l01 = (e[1] - e[0]).magnitude + (e[3] - e[2]).magnitude, l12 = (e[2] - e[1]).magnitude + (e[0] - e[3]).magnitude;
+            // Rotate so that edges 0-1 and 2-3 are the long sides.
+            if (l12 > l01) e = new[] { e[1], e[2], e[3], e[0] };
+            float halfLong = ((e[1] - e[0]).magnitude + (e[3] - e[2]).magnitude) * 0.25f;
+            float halfShort = ((e[2] - e[1]).magnitude + (e[0] - e[3]).magnitude) * 0.25f;
+            var along = ((e[1] - e[0]) + (e[2] - e[3])).normalized;
+            float r = Mathf.Max(0f, halfLong - halfShort);
+            float rise = halfShort * 1.1f * 0.5f;
+            var ra = ctr - along * r + Vector3.up * rise;
+            var rb = ctr + along * r + Vector3.up * rise;
+            Vector3 Out(Vector3 p) => (p - ctr) + Vector3.up * 2f;
+            B(RoofTile).QuadFacing(e[0], e[1], rb, ra, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.75f, 1), new Vector2(0.25f, 1), Out((e[0] + e[1]) * 0.5f));
+            B(RoofTile).QuadFacing(e[2], e[3], ra, rb, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.75f, 1), new Vector2(0.25f, 1), Out((e[2] + e[3]) * 0.5f));
+            B(RoofTile).TriangleFacing(e[1], e[2], rb, Vector2.zero, Vector2.right, new Vector2(0.5f, 1f), Out((e[1] + e[2]) * 0.5f));
+            B(RoofTile).TriangleFacing(e[3], e[0], ra, Vector2.zero, Vector2.right, new Vector2(0.5f, 1f), Out((e[3] + e[0]) * 0.5f));
         }
 
         /// <summary>
@@ -203,6 +301,111 @@ namespace Apex.Game
             skin.Box(new Vector3(0f, 0.88f, 0.01f), new Vector3(0.12f, 0.15f, 0.13f));
             skin.Box(new Vector3(-0.16f, 0.62f, 0.02f), new Vector3(0.06f, 0.3f, 0.07f));
             skin.Box(new Vector3(0.16f, 0.62f, 0.02f), new Vector3(0.06f, 0.3f, 0.07f));
+        }
+
+        // --- City life: street furniture, vehicles, pedestrians (local frame: +z forward, y up, base at 0) ---
+
+        public const string Wood = "Bark", DarkSteel = "KitDark", Glass = "Glass", Tyre = "Tire";
+
+        /// <summary>Street furniture by <see cref="CityLife.Prop"/>; +z faces the street.</summary>
+        public static void StreetProp(Parts B, CityLife.Prop kind)
+        {
+            switch (kind)
+            {
+                case CityLife.Prop.Bench:
+                    for (int k = 0; k < 4; k++) B(Wood).Box(new Vector3(0f, 0.45f, -0.18f + k * 0.12f), new Vector3(1.8f, 0.04f, 0.1f));
+                    for (int k = 0; k < 3; k++) B(Wood).Box(new Vector3(0f, 0.62f + k * 0.13f, -0.3f), new Vector3(1.8f, 0.1f, 0.03f), Quaternion.Euler(-12f, 0f, 0f));
+                    foreach (float x in new[] { -0.75f, 0.75f })
+                    {
+                        B(DarkSteel).Box(new Vector3(x, 0.22f, 0f), new Vector3(0.06f, 0.44f, 0.5f));
+                        B(DarkSteel).Box(new Vector3(x, 0.7f, -0.3f), new Vector3(0.05f, 0.5f, 0.05f));
+                    }
+                    break;
+                case CityLife.Prop.Bin:
+                    B(DarkSteel).Tube(new Vector3(0f, 0f, 0f), new Vector3(0f, 0.9f, 0f), 0.24f, 10, true);
+                    B(DarkSteel).Tube(new Vector3(0f, 0.9f, 0f), new Vector3(0f, 0.96f, 0f), 0.27f, 10, true);
+                    break;
+                case CityLife.Prop.Bollard:
+                    B(DarkSteel).Tube(new Vector3(0f, 0f, 0f), new Vector3(0f, 0.85f, 0f), 0.07f, 8, true);
+                    B(DarkSteel).Tube(new Vector3(0f, 0.85f, 0f), new Vector3(0f, 0.92f, 0f), 0.09f, 8, true);
+                    break;
+                case CityLife.Prop.Planter:
+                    B(Concrete).Box(new Vector3(0f, 0.3f, 0f), new Vector3(1.2f, 0.6f, 1.2f));
+                    B(Foliage).Box(new Vector3(0f, 0.85f, 0f), new Vector3(1.0f, 0.55f, 1.0f), Quaternion.Euler(0f, 45f, 0f));
+                    break;
+                case CityLife.Prop.BusShelter:
+                    B(DarkSteel).Box(new Vector3(0f, 2.55f, 0f), new Vector3(4.2f, 0.12f, 1.8f));
+                    foreach (float x in new[] { -2f, 2f }) B(DarkSteel).Box(new Vector3(x, 1.25f, -0.75f), new Vector3(0.08f, 2.5f, 0.08f));
+                    B(Glass).Box(new Vector3(0f, 1.35f, -0.8f), new Vector3(4f, 2.1f, 0.03f));
+                    B(Glass).Box(new Vector3(-2f, 1.35f, -0.1f), new Vector3(0.03f, 2.1f, 1.3f));
+                    for (int k = 0; k < 3; k++) B(Wood).Box(new Vector3(-0.6f + k * 0.12f, 0.46f, -0.5f + k * 0.12f), new Vector3(2.2f, 0.04f, 0.1f));
+                    B(Seat).Box(new Vector3(1.4f, 1.6f, -0.76f), new Vector3(1.0f, 1.4f, 0.04f));   // timetable / city map panel
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// A city vehicle by <see cref="CityLife.Vehicle"/>, body material `body`. Sedan 4.5 m, van 5 m,
+        /// İETT-style bus 12 m, scooter 1.9 m. Low-poly, with glass, wheels and lights.
+        /// </summary>
+        public static void CityVehicle(Parts B, CityLife.Vehicle kind, string body)
+        {
+            void Wheels(float track, float[] zs, float r)
+            {
+                foreach (float z in zs)
+                    foreach (float x in new[] { -track, track })
+                        B(Tyre).Tube(new Vector3(x - 0.1f * Mathf.Sign(x), r, z), new Vector3(x + 0.1f * Mathf.Sign(x), r, z), r, 10, true);
+            }
+            switch (kind)
+            {
+                case CityLife.Vehicle.Bus:
+                    B(body).Box(new Vector3(0f, 1.0f, 0f), new Vector3(2.5f, 1.3f, 12f));
+                    B(Glass).Box(new Vector3(0f, 2.1f, 0f), new Vector3(2.52f, 0.9f, 11.6f));
+                    B(body).Box(new Vector3(0f, 2.75f, 0f), new Vector3(2.5f, 0.4f, 12f));
+                    Wheels(1.05f, new[] { -3.8f, 3.6f }, 0.5f);
+                    break;
+                case CityLife.Vehicle.Van:
+                    B(body).Box(new Vector3(0f, 0.95f, -0.3f), new Vector3(1.95f, 1.5f, 4.2f));
+                    B(body).Box(new Vector3(0f, 0.75f, 2.0f), new Vector3(1.9f, 1.0f, 0.9f));
+                    B(Glass).Box(new Vector3(0f, 1.4f, 1.62f), new Vector3(1.8f, 0.6f, 0.4f), Quaternion.Euler(-25f, 0f, 0f));
+                    Wheels(0.85f, new[] { -1.5f, 1.7f }, 0.36f);
+                    break;
+                case CityLife.Vehicle.Scooter:
+                    B(body).Box(new Vector3(0f, 0.55f, 0f), new Vector3(0.45f, 0.5f, 1.3f));
+                    B(DarkSteel).Box(new Vector3(0f, 1.0f, 0.55f), new Vector3(0.6f, 0.06f, 0.06f));
+                    B(Skin).Box(new Vector3(0f, 1.15f, -0.1f), new Vector3(0.36f, 0.6f, 0.3f));   // rider
+                    B(DarkSteel).Box(new Vector3(0f, 1.55f, -0.1f), new Vector3(0.24f, 0.26f, 0.26f));   // helmet
+                    foreach (float z in new[] { -0.65f, 0.65f }) B(Tyre).Tube(new Vector3(-0.05f, 0.25f, z), new Vector3(0.05f, 0.25f, z), 0.25f, 10, true);
+                    break;
+                default:   // sedan (cars and taxis)
+                    B(body).Box(new Vector3(0f, 0.6f, 0f), new Vector3(1.8f, 0.6f, 4.5f));
+                    B(body).Box(new Vector3(0f, 1.1f, -0.2f), new Vector3(1.6f, 0.45f, 2.1f));
+                    B(Glass).Box(new Vector3(0f, 1.12f, 0.95f), new Vector3(1.58f, 0.42f, 0.35f), Quaternion.Euler(-35f, 0f, 0f));
+                    B(Glass).Box(new Vector3(0f, 1.12f, -1.35f), new Vector3(1.58f, 0.4f, 0.3f), Quaternion.Euler(35f, 0f, 0f));
+                    B(Glass).Box(new Vector3(0f, 1.12f, -0.2f), new Vector3(1.62f, 0.34f, 1.8f));
+                    if (body == "CityTaxi") B(DarkSteel).Box(new Vector3(0f, 1.42f, -0.2f), new Vector3(0.5f, 0.14f, 0.2f));   // TAKSİ roof sign
+                    Wheels(0.82f, new[] { -1.4f, 1.4f }, 0.32f);
+                    break;
+            }
+        }
+
+        /// <summary>Pedestrian, 1.72 m, two walking poses (stride 0/1) so instanced crowds can alternate them; shirt material `shirt`.</summary>
+        public static void Pedestrian(Parts B, string shirt, string trousers, int stride)
+        {
+            float s = stride == 0 ? 1f : -1f;
+            // Legs (trousers), swinging opposite each other.
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var hip = new Vector3(0.1f * side, 0.86f, 0f);
+                var foot = new Vector3(0.1f * side, 0.04f, 0.22f * s * side);
+                B(trousers).Tube(foot, hip, 0.075f, 6, true);
+                B(Tyre).Box(foot + new Vector3(0f, 0f, 0.06f), new Vector3(0.1f, 0.08f, 0.26f));   // shoe
+            }
+            B(shirt).Box(new Vector3(0f, 1.18f, 0f), new Vector3(0.36f, 0.62f, 0.22f));
+            foreach (float side in new[] { -1f, 1f })
+                B(shirt).Tube(new Vector3(0.22f * side, 1.46f, 0f), new Vector3(0.24f * side, 0.9f, -0.16f * s * side), 0.05f, 5, true);
+            B(Skin).Box(new Vector3(0f, 1.6f, 0.01f), new Vector3(0.18f, 0.22f, 0.2f));
+            B(DarkSteel).Box(new Vector3(0f, 1.72f, -0.01f), new Vector3(0.19f, 0.06f, 0.21f));   // hair
         }
 
         /// <summary>Gull, 1 m wingspan at the origin heading +z; wings form a shallow V (flap by scaling y).</summary>

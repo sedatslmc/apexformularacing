@@ -67,6 +67,16 @@ namespace Apex.Tracks
         public readonly List<Protection> protections = new List<Protection>();
         public readonly List<Post> posts = new List<Post>();
         public readonly List<float> gates = new List<float>();
+        /// <summary>
+        /// Where a catch fence is needed per sample and side (see <see cref="BuildFenceNeeds"/>); the start/finish
+        /// straight with the main grandstands is added by the kit layout, which knows the start line.
+        /// </summary>
+        public bool[] fenceLeft, fenceRight;
+        /// <summary>Line speed (m/s) above which both sides get a fence (debris energy on fast straights).</summary>
+        public const float FenceSpeed = 65f;
+        /// <summary>Fence on the outside of a corner until this far after the apex (m).</summary>
+        public const float FenceAfterApex = 70f;
+
         public readonly List<RubberStrip> rubber = new List<RubberStrip>();
         /// <summary>Rubber intensity 0..1 per centreline sample (tyre work: braking, cornering, traction).</summary>
         public float[] rubberIntensity;
@@ -89,6 +99,7 @@ namespace Apex.Tracks
             BuildProtectionAndPosts(corners, lineSpeed);
             BuildGates();
             BuildSurface(corners, lineOffsets, lineSpeed);
+            BuildFenceNeeds(corners, lineSpeed);
         }
 
         int N => g.Count;
@@ -315,6 +326,53 @@ namespace Apex.Tracks
                     });
                 }
                 i = end;
+            }
+        }
+
+        /// <summary>
+        /// Debris fences where cars arrive or leave fast, not as a cage along the whole lap: the outside of each
+        /// corner from its braking point to <see cref="FenceAfterApex"/> m after the apex (where a car leaving
+        /// the road goes), both sides wherever the line is faster than <see cref="FenceSpeed"/>. Gaps under 60 m
+        /// are closed and pieces under 40 m dropped, so the fence runs in calm stretches. Inside of corners and
+        /// slow sections stay open (views of the city, the Bosphorus and the landmarks).
+        /// </summary>
+        void BuildFenceNeeds(List<TrackGeometry.Corner> corners, float[] lineSpeed)
+        {
+            int n = N;
+            fenceLeft = new bool[n];
+            fenceRight = new bool[n];
+            foreach (var c in corners)
+            {
+                float brake = lineSpeed != null ? MathF.Min(260f, MathF.Max(60f, (Max(lineSpeed, c.index - Samples(300f), c.index) - lineSpeed[c.index]) * 3f)) : 120f;
+                var outside = c.right ? fenceLeft : fenceRight;
+                for (int k = -Samples(brake); k <= Samples(FenceAfterApex); k++) outside[Wrap(c.index + k)] = true;
+            }
+            if (lineSpeed != null)
+                for (int i = 0; i < n; i++)
+                    if (lineSpeed[i] >= FenceSpeed) fenceLeft[i] = fenceRight[i] = true;
+            foreach (var f in new[] { fenceLeft, fenceRight }) Tidy(f, Samples(60f), Samples(40f));
+        }
+
+        /// <summary>Closes false gaps shorter than `gap` samples, then drops true runs shorter than `piece`.</summary>
+        void Tidy(bool[] f, int gap, int piece)
+        {
+            foreach (bool value in new[] { false, true })
+            {
+                int limit = value ? piece : gap;
+                int n = N, start = -1;
+                for (int i = 0; i < n && start < 0; i++) if (f[i] != f[Wrap(i - 1)]) start = i;
+                if (start < 0) return;
+                int runStart = start;
+                for (int k = 1; k <= n; k++)
+                {
+                    int i = Wrap(start + k);
+                    if (k < n && f[i] == f[runStart]) continue;
+                    int len = Wrap(i - runStart);
+                    if (len == 0) len = n;
+                    if (f[runStart] == value && len < limit)
+                        for (int j = 0; j < len; j++) f[Wrap(runStart + j)] = !value;
+                    runStart = i;
+                }
             }
         }
 

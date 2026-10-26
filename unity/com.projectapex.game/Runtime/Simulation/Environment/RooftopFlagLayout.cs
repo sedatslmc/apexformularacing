@@ -26,6 +26,10 @@ namespace Apex.Environment
         public readonly List<Flag> flags = new List<Flag>();
 
         public RooftopFlagLayout(CityLayout city, TerrainField field, CircuitDefinition def, TrackGeometry g, int quality)
+            : this(city.lots, field, def, g, quality) { }
+
+        /// <param name="lots">buildings to choose from (generic blocks and/or <see cref="OsmCity.AsLots"/>)</param>
+        public RooftopFlagLayout(IEnumerable<CityLayout.Lot> lots, TerrainField field, CircuitDefinition def, TrackGeometry g, int quality)
         {
             int max = quality == 0 ? 14 : quality == 1 ? 32 : 48;
             var focal = new List<Vector2>();
@@ -35,7 +39,7 @@ namespace Apex.Environment
             if (mosque != null) focal.Add(new Vector2(mosque.east, mosque.north));
             if (def.monumentalFlag.HasValue) focal.Add(new Vector2(def.monumentalFlag.Value.east, def.monumentalFlag.Value.north));
             var candidates = new List<(float score, CityLayout.Lot lot)>();
-            foreach (var lot in city.lots)
+            foreach (var lot in lots)
             {
                 if (lot.band != 0 || lot.roof == 1) continue;   // tiled hip roofs carry no flag poles
                 float td = field.TrackDistance(lot.x, lot.z, MaxTrackDistance, out _);

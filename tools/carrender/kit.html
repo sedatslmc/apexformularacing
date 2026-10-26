@@ -96,6 +96,13 @@ const mats = {
   FlagPole: M({ color: 0xd4d7da, metalness: 0.85, roughness: 0.3 }),
   EventGold: M({ color: 0xc9a66b, metalness: 1.0, roughness: 0.25 }),
   Ground: M({ color: 0x5f6b45, roughness: 1 }),
+  // Landmarks (ModelPreview --landmarks): values as in ApexMaterials.
+  Marble: M({ map: concrete, color: 0xf6f3ec, roughness: 0.55 }),
+  Lead: M({ color: 0x737a80, metalness: 0.6, roughness: 0.65 }),
+  Gilt: M({ color: 0xd4a84d, metalness: 1.0, roughness: 0.4 }),
+  Glass: M({ color: 0x2e3d4a, metalness: 0.2, roughness: 0.08 }),
+  ClockFace: M({ color: 0xf2efe6, roughness: 0.4 }),
+  RowPlaster: M({ map: concrete, color: 0xe6d6bc, roughness: 0.8 }),
   TurkishFlag: M({ map: new THREE.TextureLoader().load('/flag_tex.png', (t) => { t.colorSpace = THREE.SRGBColorSpace; }), side: THREE.DoubleSide, roughness: 0.75 }),
 };
 // Optional scanned CC0 sets (&cc0=1): files prepared in ./cc0/ from Resources/Textures/CC0 (gitignored);
@@ -146,6 +153,64 @@ if (params.get('cc0')) {
       sh.fragmentShader = 'uniform sampler2D detailMap; uniform vec2 detailRepeat;\n' + sh.fragmentShader.replace('#include <map_fragment>',
         '#include <map_fragment>\n diffuseColor.rgb *= texture2D(detailMap, vMapUv * detailRepeat).rgb * 4.59;');
     };
+  }
+}
+// Ground: default the old flat "FarGround" colour; &terrain=1 ports Apex/Terrain (slope blend of the scanned
+// grass, soil and rubble-wall sets, macro variation, albedo calibration; detail normals left out).
+mats.FarGround = M({ color: new THREE.Color().setRGB(0.47, 0.45, 0.4, THREE.SRGBColorSpace), roughness: 0.95 });
+if (params.get('terrain')) {
+  const L = new THREE.TextureLoader(), dir = '/' + (params.get('cc0dir') || 'cc0') + '/';
+  const t = (f) => { const x = L.load(dir + f); x.wrapS = x.wrapT = THREE.RepeatWrapping; x.colorSpace = THREE.SRGBColorSpace; x.anisotropy = 16; return x; };
+  const m = M({ color: 0xffffff, roughness: 0.9 });
+  // Load before the first render (onBeforeCompile runs at render time).
+  const tex = { tGrass: { value: t('terrain_grass_color.jpg') }, tSoil: { value: t('terrain_soil_color.jpg') }, tWall: { value: t('terrain_wall_color.jpg') } };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, tex);
+    sh.vertexShader = 'varying vec3 vWPos; varying vec3 vWNrm;\n' + sh.vertexShader.replace('#include <worldpos_vertex>',
+      '#include <worldpos_vertex>\n vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz; vWNrm = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = 'uniform sampler2D tGrass, tSoil, tWall; varying vec3 vWPos; varying vec3 vWNrm;\n' + sh.fragmentShader.replace('#include <map_fragment>', `
+      vec3 gN = normalize(vWNrm); vec2 top = vWPos.xz;
+      float macro = dot(texture2D(tGrass, top / 37.0).rgb, vec3(0.3, 0.59, 0.11));
+      float up = gN.y + (macro - 0.35) * 0.25 * 0.15;
+      float soil = clamp((0.95 - up) / 0.07, 0.0, 1.0), wall = clamp((0.8 - up) / 0.12, 0.0, 1.0);
+      float wG = 1.0 - soil, wS = soil * (1.0 - wall), wW = wall;
+      vec3 grass = texture2D(tGrass, top / 2.0).rgb * mix(0.8, 1.2, clamp(macro * 1.6, 0.0, 1.0));
+      vec3 soilC = texture2D(tSoil, top / 3.15).rgb;
+      vec2 side = abs(gN.xz); side /= max(side.x + side.y, 1e-3);
+      vec3 wallC = texture2D(tWall, vec2(vWPos.z, vWPos.y) / 2.0).rgb * side.x + texture2D(tWall, vec2(vWPos.x, vWPos.y) / 2.0).rgb * side.y;
+      diffuseColor.rgb *= grass * (0.12 / 0.2442) * wG + soilC * (0.12 / 0.1147) * wS + wallC * (0.22 / 0.1987) * wW;`);
+  };
+  mats.FarGround = m;
+}
+// &fence=1: the catch fence as in TrackInfrastructureBuilder.CatchFenceTexture (100 mm mesh, thin antialiased
+// wire, alpha-blended); default the old 0.5 m alpha-tested mesh.
+if (params.get('fence')) {
+  const n = 256, cells = 20, wire = 0.6, c = n / cells, sp = c / Math.SQRT2, cv = document.createElement('canvas');
+  cv.width = cv.height = n;
+  const g = cv.getContext('2d'), img = g.createImageData(n, n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const a = (x + y + 1) / c, b = (x - y + n) / c;
+    const da = Math.abs(a - Math.round(a)) * sp, db = Math.abs(b - Math.round(b)) * sp;
+    const cover = Math.max(Math.min(1, Math.max(0, wire + 0.5 - da)), Math.min(1, Math.max(0, wire + 0.5 - db)));
+    const k = (y * n + x) * 4; img.data[k] = 158; img.data[k + 1] = 163; img.data[k + 2] = 168; img.data[k + 3] = cover * 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  mats.CatchFence = M({ map: t, transparent: true, depthWrite: false, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.55 });
+}
+// Bridge (ModelPreview --landmarks bridge_night.obj): steel, cables and the red/white night lighting
+// (emission as EnvironmentBuilder: red #E30A17 x 1.3, white x 2.4, scaled by &night=level).
+{
+  const lvl = +(params.get('night') || 0);
+  mats.BridgeSteel = M({ color: 0x8c9196, metalness: 0.4, roughness: 0.5 });
+  mats.BridgeCable = M({ color: 0x9aa0a6, metalness: 0.5, roughness: 0.45 });
+  mats.BridgeRoad = M({ color: 0x333336, roughness: 0.85 });
+  mats.LampHead = M({ color: 0xd9d9cc, emissive: new THREE.Color(1, 0.82, 0.58).multiplyScalar(2.2 * lvl), roughness: 0.4 });
+  mats.BridgeRed = M({ color: 0x9e1214, emissive: new THREE.Color(0.89, 0.04, 0.09).multiplyScalar(1.3 * lvl), roughness: 0.5 });
+  mats.BridgeWhite = M({ color: 0xebebe6, emissive: new THREE.Color(1, 0.97, 0.92).multiplyScalar(2.4 * lvl), roughness: 0.5 });
+  if (params.get('waterplane')) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), new THREE.MeshStandardMaterial({ color: 0x050a10, metalness: 0.0, roughness: 0.08 }));
+    w.rotation.x = -Math.PI / 2; w.position.y = -0.4; scene.add(w);
   }
 }
 const fallback = M({ color: 0xff00ff });

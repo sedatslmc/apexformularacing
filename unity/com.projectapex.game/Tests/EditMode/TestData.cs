@@ -29,5 +29,9 @@ namespace Apex.Tests
             CircuitDefinition.FromJson(File.ReadAllText(Path.Combine(TracksDir(), id + ".json")));
 
         public static TrackGeometry Geometry(string id) => TrackGeometry.FromDefinition(Circuit(id));
+
+        /// <summary>The OSM city data next to the circuits (Resources/City/&lt;id&gt;.json).</summary>
+        public static Apex.Environment.CityData City(string id) =>
+            Apex.Environment.CityData.FromJson(File.ReadAllText(Path.Combine(TracksDir(), "..", "City", id + ".json")));
     }
 }

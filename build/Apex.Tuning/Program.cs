@@ -601,6 +601,76 @@ else if (mode == "profile-csv")
     }
     Console.WriteLine("wrote " + args[2]);
 }
+else if (mode == "terrain-audit")
+{
+    // Gray-wall audit: per lap sample (every 10 m) and side, the terrain profile from the barrier outwards
+    // (0..80 m): rise above the road and the steepest 12 m step. "Wall" = rise > 4 m with slope > 30°.
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    var g = bed.g; var f = bed.terrain;
+    int walls = 0, samples = 0; float wallLen = 0f, maxRise = 0f;
+    var hist = new int[7];
+    float segStart = -1f; int segSide = 0; float segRise = 0f, segSlope = 0f;
+    var segs = new System.Collections.Generic.List<string>();
+    for (float d = 0f; d < g.Length; d += 10f)
+    {
+        int i = g.IndexAt(d);
+        foreach (int side in new[] { -1, 1 })
+        {
+            samples++;
+            float wall = side < 0 ? bed.surface.wallLeft[i] : bed.surface.wallRight[i];
+            var p0 = g.Positions[i]; var r = g.Rights[i];
+            float rise = 0f, steep = 0f, prevH = float.NaN;
+            for (float o = 1f; o <= 80f; o += 6f)
+            {
+                var q = p0 + r * (side * (wall + o));
+                if (f.IsWater(q.X, q.Z)) break;
+                float h = f.Height(q.X, q.Z) - p0.Y;
+                rise = MathF.Max(rise, h);
+                if (!float.IsNaN(prevH)) steep = MathF.Max(steep, MathF.Atan2(MathF.Abs(h - prevH), 6f) * 180f / MathF.PI);
+                prevH = h;
+            }
+            hist[Math.Min(6, (int)(steep / 10f))]++;
+            bool isWall = rise > 4f && steep > 30f;
+            if (isWall) { walls++; wallLen += 10f; maxRise = MathF.Max(maxRise, rise); }
+            if (side == 1) continue;
+        }
+    }
+    // Contiguous wall stretches (either side) with their lap distance.
+    for (int side = -1; side <= 1; side += 2)
+    {
+        float start = -1f, top = 0f, topSlope = 0f;
+        for (float d = 0f; d <= g.Length; d += 10f)
+        {
+            int i = g.IndexAt(Math.Min(d, g.Length - 1f));
+            float wall = side < 0 ? bed.surface.wallLeft[i] : bed.surface.wallRight[i];
+            var p0 = g.Positions[i]; var r = g.Rights[i];
+            float rise = 0f, steep = 0f, prevH = float.NaN;
+            for (float o = 1f; o <= 80f; o += 6f)
+            {
+                var q = p0 + r * (side * (wall + o));
+                if (f.IsWater(q.X, q.Z)) break;
+                float h = f.Height(q.X, q.Z) - p0.Y;
+                rise = MathF.Max(rise, h);
+                if (!float.IsNaN(prevH)) steep = MathF.Max(steep, MathF.Atan2(MathF.Abs(h - prevH), 6f) * 180f / MathF.PI);
+                prevH = h;
+            }
+            bool w = rise > 4f && steep > 30f && d < g.Length;
+            if (w && start < 0f) { start = d; top = 0f; topSlope = 0f; }
+            if (w) { top = MathF.Max(top, rise); topSlope = MathF.Max(topSlope, steep); }
+            if (!w && start >= 0f)
+            {
+                float lap = Apex.Core.ApexMath.PosMod(start - bed.def.startLineDistance, g.Length);
+                if (d - start >= 30f) segs.Add($"{(side < 0 ? "links " : "rechts")} Runde {lap,6:F0}–{lap + d - start,6:F0} m ({d - start,4:F0} m): bis {top,4:F1} m hoch, bis {topSlope,3:F0}°");
+                start = -1f;
+            }
+        }
+    }
+    Console.WriteLine($"{id}: {samples} Profile, {walls} Wandprofile ({100f * walls / samples:F1} %), ~{wallLen:F0} m Wand, höchste {maxRise:F1} m");
+    Console.WriteLine("steilster 6-m-Schritt (Grad, Anteil): " + string.Join("  ", hist.Select((c, k) => $"{k * 10}-{k * 10 + 10}: {100f * c / samples:F0}%")));
+    foreach (var sgm in segs) Console.WriteLine(sgm);
+}
 else if (mode == "sky")
 {
     float cloud = args.Length > 1 ? float.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture) : 0f;

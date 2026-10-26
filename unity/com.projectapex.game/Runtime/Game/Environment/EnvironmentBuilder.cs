@@ -24,6 +24,8 @@ namespace Apex.Game
         public static int Quality = 1;
 
         const float WaterY = -0.4f;
+        /// <summary>Tower wash spot: illuminance intensity / d² gives ~0.6 on the legs 60 m up (night exposure).</summary>
+        const float BridgeWashIntensity = 2200f;
         const float ChunkSize = 384f;
 
         public static EnvironmentInstance Build(CircuitInstance ci, Transform parent)
@@ -56,20 +58,39 @@ namespace Apex.Game
                 if (monumental) reserved.Add(new CityLayout.Reserved(fx, fz, MonumentalFlagSite.ReservedRadius));
                 else Debug.LogWarning($"Monumental flag site {fx:F0},{fz:F0} is not clear of the circuit; not placed.");
             }
-            var opts = new CityLayout.Options { quality = q };
+            // The real city (OSM footprints, streets, green) where the circuit has city data; generic blocks beyond it.
+            var cityText = Resources.Load<TextAsset>("City/" + def.id);
+            CityData cityData = null;
+            if (cityText != null)
+            {
+                try { cityData = CityData.FromJson(cityText.text); }
+                catch (System.Exception e) { Debug.LogError("[Apex] Invalid city data " + def.id + ": " + e.Message); }
+            }
+            OsmCity osm = cityData != null ? new OsmCity(cityData, field, ci.Clearance, def, reserved, q) : null;
+            var opts = new CityLayout.Options { quality = q, realCityRadius = cityData != null ? cityData.radius : 0f };
             opts.reserved.AddRange(reserved);
             var city = new CityLayout(field, def, opts);
+            var allLots = new List<CityLayout.Lot>(city.lots);
+            if (osm != null)
+            {
+                BuildOsmCity(root.transform, osm);
+                BuildStreets(root.transform, new StreetNetwork(cityData, field, ci.Clearance, q));
+                BuildCityLife(root.transform, new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240), q);
+                allLots.AddRange(osm.AsLots());
+                city.trees.AddRange(osm.trees);
+                Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
+            }
             BuildCity(root.transform, city);
             BuildTrees(root.transform, env, city);
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
-            foreach (var f in new RooftopFlagLayout(city, field, def, g, q).flags)
+            foreach (var f in new RooftopFlagLayout(allLots, field, def, g, q).flags)
                 env.flagSpots.Add((V(f.position), f.length, f.pole, 1));
-            BuildLandmarks(root.transform, env, ci);
+            BuildLandmarks(root.transform, env, ci, osm != null && osm.buildings.Exists(b => b.classical == OsmCity.PalaceWing));
             if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
             BuildTrackside(root.transform, env, ci);
             BuildShips(root.transform, env, def, field.land);
             BuildGulls(root.transform, env, ci);
-            BuildAmbience(root.transform, env, ci, city);
+            BuildAmbience(root.transform, env, ci, allLots);
             return env;
         }
 
@@ -218,6 +239,142 @@ namespace Apex.Game
             }
         }
 
+        /// <summary>
+        /// The city's side streets (StreetNetwork): visual only, no colliders; older city asphalt (the scanned
+        /// run-off set), paver pavements and footways, concrete kerbs and steps, centre dashes; each chunk is
+        /// culled when it covers less than 1.5 % of the screen height.
+        /// </summary>
+        static void BuildStreets(Transform root, StreetNetwork net)
+        {
+            var streetRoot = new GameObject("Streets").transform;
+            streetRoot.SetParent(root, false);
+            foreach (var chunk in net.chunks.Values)
+            {
+                if (chunk.TriangleCount == 0) continue;
+                var go = CircuitBuilder.AddSurface(streetRoot, chunk, "RunoffAsphalt", EnvironmentGeometry.Pavement, EnvironmentGeometry.Concrete, "Line", EnvironmentGeometry.Pavement, EnvironmentGeometry.Concrete);
+                var lg = go.AddComponent<LODGroup>();
+                lg.SetLODs(new[] { new LOD(0.015f, new Renderer[] { go.GetComponent<Renderer>() }) });
+                lg.RecalculateBounds();
+            }
+            Debug.Log($"[Apex] Streets: {net.roadLength / 1000f:F1} km roads, {net.footLength / 1000f:F1} km footways, {net.steps} steps.");
+        }
+
+        /// <summary>Street furniture, parked cars, pedestrians and traffic (CityLife), drawn instanced near the camera.</summary>
+        static void BuildCityLife(Transform root, CityLife life, int q)
+        {
+            var go = new GameObject("CityLife");
+            go.transform.SetParent(root, false);
+            var c = go.AddComponent<CityLifeComponent>();
+            c.drawDistance = q == 0 ? 150f : q == 1 ? 250f : 350f;
+            c.shadowDistance = q == 0 ? 0f : q == 1 ? 80f : 140f;
+            c.Setup(life);
+            Debug.Log($"[Apex] City life: {life.props.Count} props, {life.parked.Count} parked cars, {life.pedestrians.Count} pedestrians, {life.vehicles.Count} vehicles.");
+        }
+
+        /// <summary>LOD screen heights of the palace buildings (per building, they are up to 140 m long).</summary>
+        static readonly float[] PalaceLods = { 0.3f, 0.08f, 0.01f };
+        static readonly float[] RowLods = { 0.12f, 0.03f, 0.004f };
+
+        /// <summary>
+        /// The palaces on their OSM footprints with modelled classical facades (LandmarkGeometry.ClassicalBuilding),
+        /// the dome over Dolmabahçe's ceremonial hall, and the clock tower; each building with three LODs.
+        /// </summary>
+        static void BuildClassical(Transform root, OsmCity osm)
+        {
+            var palaceRoot = new GameObject("Palaces").transform;
+            palaceRoot.SetParent(root, false);
+            int seed = 0, count = 0;
+            foreach (var b in osm.buildings)
+            {
+                if (b.classical == OsmCity.NotClassical) continue;
+                var c = System.Numerics.Vector2.Zero;
+                foreach (var p in b.outline) c += p;
+                c /= b.outline.Count;
+                var local = new List<Vector2>(b.outline.Count);
+                foreach (var p in b.outline) local.Add(new Vector2(p.X - c.X, p.Y - c.Y));
+                var pos = new Vector3(c.X, b.ground, c.Y);
+                string name = string.IsNullOrEmpty(b.name) ? "Palace building" : b.name;
+                int s = seed++;
+                if (b.classical == OsmCity.RowHouse)
+                {
+                    // Street front: the edge whose midpoint lies nearest to a street.
+                    int front = 0;
+                    float near = float.MaxValue;
+                    for (int i = 0; i < b.outline.Count; i++)
+                    {
+                        var m = (b.outline[i] + b.outline[(i + 1) % b.outline.Count]) * 0.5f;
+                        float d = osm.StreetDistance(m.X, m.Y);
+                        if (d < near) { near = d; front = i; }
+                    }
+                    float h = b.height;
+                    PlaceDetailed(palaceRoot, "osm_classical_" + s, "Akaretler row house", h, g => g.RowHouse(local, h, front, s), pos, 0f, RowLods);
+                }
+                else if (b.classical == OsmCity.ClockTower)
+                {
+                    // Faces square to the longest footprint edge.
+                    float best = 0f, yaw = 0f;
+                    for (int i = 0; i < local.Count; i++)
+                    {
+                        var d = local[(i + 1) % local.Count] - local[i];
+                        if (d.magnitude > best) { best = d.magnitude; yaw = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; }
+                    }
+                    PlaceDetailed(palaceRoot, LandmarkAssets.DolmabahceClockTowerId, name, 27f, g => g.ClockTowerDetailed(), pos + Vector3.up * 0.6f, yaw, PalaceLods);
+                }
+                else
+                {
+                    bool palace = b.classical == OsmCity.PalaceWing;
+                    bool hall = b.name != null && b.name.Contains("Muayede");
+                    float h = b.height;
+                    PlaceDetailed(palaceRoot, "osm_classical_" + s, name, h, g =>
+                    {
+                        g.ClassicalBuilding(local, h, s, palace);
+                        if (hall) g.HallDome(h, 11f);
+                    }, pos, 0f, PalaceLods);
+                }
+                count++;
+            }
+            Debug.Log($"[Apex] Palaces: {count} classical buildings on their OSM footprints.");
+        }
+
+        /// <summary>The OSM buildings in chunks with two LODs (detailed: cornices, parapets, roof tanks).</summary>
+        static void BuildOsmCity(Transform root, OsmCity osm)
+        {
+            var cityRoot = new GameObject("RealCity").transform;
+            cityRoot.SetParent(root, false);
+            var chunks = new Dictionary<(int, int), List<OsmCity.Building>>();
+            const float size = 192f;
+            BuildClassical(root, osm);
+            foreach (var b in osm.buildings)
+            {
+                if (b.classical != OsmCity.NotClassical) continue;
+                var p = b.outline[0];
+                var key = (Mathf.FloorToInt(p.X / size), Mathf.FloorToInt(p.Y / size));
+                if (!chunks.TryGetValue(key, out var list)) chunks[key] = list = new List<OsmCity.Building>();
+                list.Add(b);
+            }
+            foreach (var kv in chunks)
+            {
+                var detailed = new PartSet();
+                var simple = new PartSet();
+                foreach (var b in kv.Value)
+                {
+                    EnvironmentGeometry.FootprintBuilding(detailed.B, b, true);
+                    EnvironmentGeometry.FootprintBuilding(simple.B, b, false);
+                }
+                var group = new GameObject($"Real_{kv.Key.Item1}_{kv.Key.Item2}");
+                group.transform.SetParent(cityRoot, false);
+                var lod0 = AddMeshObject(group.transform, "LOD0", detailed.parts, true);
+                var lod1 = AddMeshObject(group.transform, "LOD1", simple.parts, true);
+                var lg = group.AddComponent<LODGroup>();
+                lg.SetLODs(new[]
+                {
+                    new LOD(0.12f, new Renderer[] { lod0.GetComponent<Renderer>() }),
+                    new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
+                });
+                lg.RecalculateBounds();
+            }
+        }
+
         static void BuildTrees(Transform root, EnvironmentInstance env, CityLayout city)
         {
             var go = new GameObject("Trees");
@@ -265,6 +422,33 @@ namespace Apex.Game
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
         }
 
+        /// <summary>LOD screen heights of the detailed mosque (40 m tall: LOD0 to about 140 m, LOD1 to about 580 m at 60° FOV).</summary>
+        static readonly float[] OrtakoyLods = { 0.25f, 0.06f, 0.004f };
+
+        /// <summary>
+        /// Places an in-house detailed landmark (LandmarkModels) with three LODs built from the same code at
+        /// detail 0, 1 and 2, unless an authored model exists under Resources/Landmarks/&lt;id&gt;.
+        /// </summary>
+        static void PlaceDetailed(Transform root, string id, string name, float refHeight, System.Action<LandmarkGeometry> build, Vector3 pos, float yawDeg, float[] screenHeights)
+        {
+            if (PlaceAuthored(root, id, name, refHeight, pos, yawDeg)) return;
+            var go = new GameObject(name);
+            go.transform.SetParent(root, false);
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
+            go.isStatic = true;
+            var lods = new LOD[3];
+            for (int d = 0; d < 3; d++)
+            {
+                var lg = new LandmarkGeometry(d);
+                build(lg);
+                var child = AddMeshObject(go.transform, name + "_LOD" + d, lg.parts, d < 2);
+                lods[d] = new LOD(screenHeights[d], new Renderer[] { child.GetComponent<Renderer>() });
+            }
+            var group = go.AddComponent<LODGroup>();
+            group.SetLODs(lods);
+            group.RecalculateBounds();
+        }
+
         static bool PlaceAuthored(Transform root, string id, string name, float refHeight, Vector3 pos, float yawDeg)
         {
             var prefab = Resources.Load<GameObject>(LandmarkAssets.ResourceFolder + "/" + id);
@@ -291,7 +475,7 @@ namespace Apex.Game
             return Mathf.Atan2(b - a, 120f) * Mathf.Rad2Deg;
         }
 
-        static void BuildLandmarks(Transform root, EnvironmentInstance env, CircuitInstance ci)
+        static void BuildLandmarks(Transform root, EnvironmentInstance env, CircuitInstance ci, bool realCity)
         {
             var def = ci.Definition;
             var field = ci.Terrain;
@@ -313,12 +497,34 @@ namespace Apex.Game
                     lg.Bridge(a, b, WaterY);
                     AddMeshObject(lmRoot, "Bridge_15Temmuz", lg.parts, true);
                 }
-                // Night lighting (also with an authored model): small lamps along both deck edges and on the tower tops.
+                // Night lighting in red and white (LandmarkGeometry.BridgeIllumination; also with an authored model,
+                // which shares the bridge's real dimensions): red cables, white hangers, tower bands and deck dots.
                 var lights = new MeshBuilder();
+                var red = new MeshBuilder();
+                var white = new MeshBuilder();
                 foreach (float lat in new[] { -17.2f, 17.2f })
                     foreach (var p in LandmarkGeometry.BridgeLightPath(a, b, WaterY, lat))
                         lights.Box(p + Vector3.up * 1.2f, new Vector3(0.9f, 0.5f, 0.9f));
-                AddMeshObject(lmRoot, "BridgeLights", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.BridgeLight] = lights }, false);
+                var wash = LandmarkGeometry.BridgeIllumination(a, b, WaterY, red, white);
+                AddMeshObject(lmRoot, "BridgeLights", new Dictionary<string, MeshBuilder>
+                {
+                    [EnvironmentGeometry.BridgeLight] = lights, [EnvironmentGeometry.BridgeRed] = red, [EnvironmentGeometry.BridgeWhite] = white,
+                }, false);
+                // Real lights: four white spots wash the tower legs from deck level (no shadows).
+                foreach (var w in wash)
+                {
+                    var go = new GameObject("BridgeTowerWash");
+                    go.transform.SetParent(lmRoot, false);
+                    go.transform.position = w;
+                    go.transform.rotation = Quaternion.LookRotation(Vector3.up, Vector3.forward);
+                    var l = go.AddComponent<Light>();
+                    l.type = LightType.Spot;
+                    l.spotAngle = 24f;
+                    l.range = 120f;
+                    l.color = new Color(1f, 0.97f, 0.92f);
+                    l.shadows = LightShadows.None;
+                    env.AddRealLight(l, BridgeWashIntensity);
+                }
             }
             foreach (var l in def.landmarks)
             {
@@ -327,28 +533,36 @@ namespace Apex.Game
                 switch (l.id)
                 {
                     case "ortakoy_mosque":
-                        lg.OrtakoyMosque();
-                        // Stone platform: the mosque stands on the quay at the water's edge.
-                        lg.B(LandmarkGeometry.Stone).Box(new Vector3(0f, -3f, 0f), new Vector3(46f, 6f, 46f));
-                        pos.y = Mathf.Max(pos.y, 1.6f);
-                        Place(lmRoot, l, lg, pos, qibla, true);
+                    {
+                        // In-house detailed model on its own quay terrace, axis and plan from the OSM footprint.
+                        float yaw = LandmarkGeometry.OrtakoyAxis;
+                        pos += Quaternion.Euler(0f, yaw, 0f) * LandmarkGeometry.OrtakoyHallOffset;
+                        pos.y = Mathf.Max(field.Height(pos.x, pos.z), 1.6f);
+                        PlaceDetailed(lmRoot, l.id, l.name, l.height, g => g.OrtakoyMosqueDetailed(), pos, yaw, OrtakoyLods);
                         break;
+                    }
                     case "dolmabahce":
                     {
+                        // The palace and its clock tower stand on their OSM footprints (BuildClassical); with the
+                        // procedural city (no OSM data) the simple massing remains.
                         float yaw = ShoreYaw(def.shoreline, l.north);
-                        lg.Palace(284f, 48f, 18f, true);
                         pos = OnLand(field, pos, Vector3.left, 40f);
                         pos.y = field.Height(pos.x, pos.z);
-                        Place(lmRoot, l, lg, pos, yaw, true);
-                        var tower = new LandmarkGeometry(0);
-                        tower.ClockTower(27f);
-                        var tp = OnLand(field, new Vector3(pos.x, 0f, pos.z - 170f), Vector3.left, 25f);
-                        tp.y = field.Height(tp.x, tp.z);
-                        Place(lmRoot, LandmarkAssets.DolmabahceClockTowerId, "Dolmabahçe-Uhrturm", 27f, tower, tp, yaw, true);
+                        if (!realCity)
+                        {
+                            lg.Palace(284f, 48f, 18f, true);
+                            Place(lmRoot, l, lg, pos, yaw, true);
+                            var tower = new LandmarkGeometry(0);
+                            tower.ClockTower(27f);
+                            var tp = OnLand(field, new Vector3(pos.x, 0f, pos.z - 170f), Vector3.left, 25f);
+                            tp.y = field.Height(tp.x, tp.z);
+                            Place(lmRoot, LandmarkAssets.DolmabahceClockTowerId, "Dolmabahçe-Uhrturm", 27f, tower, tp, yaw, true);
+                        }
                         env.flagSpots.Add((pos + Quaternion.Euler(0f, yaw, 0f) * new Vector3(30f, 0f, 0f), 5f, 24f, 0));
                         break;
                     }
                     case "ciragan":
+                        if (realCity) break;
                         lg.Palace(160f, 30f, 14f, false);
                         pos = OnLand(field, pos, Vector3.left, 28f);
                         pos.y = field.Height(pos.x, pos.z);
@@ -750,14 +964,14 @@ namespace Apex.Game
             }
         }
 
-        static void BuildAmbience(Transform root, EnvironmentInstance env, CircuitInstance ci, CityLayout city)
+        static void BuildAmbience(Transform root, EnvironmentInstance env, CircuitInstance ci, List<CityLayout.Lot> lots)
         {
             var g = ci.Geometry;
             var field = ci.Terrain;
             // Enclosure per track sample: tall blocks within 45 m on both sides make a street canyon.
             int step = Mathf.Max(1, Mathf.RoundToInt(20f / g.Spacing));
             var grid = new Dictionary<(int, int), int>();
-            foreach (var lot in city.lots)
+            foreach (var lot in lots)
             {
                 if (lot.band != 0 || lot.height < 9f) continue;
                 var key = (Mathf.FloorToInt(lot.x / 30f), Mathf.FloorToInt(lot.z / 30f));
@@ -811,7 +1025,7 @@ namespace Apex.Game
         };
 
         static readonly Dictionary<Color, Material> solids = new Dictionary<Color, Material>();
-        static Texture2D facadeAlbedo, facadeEmission, waterNormal, fenceTex, flagTex;
+        static Texture2D facadeAlbedo, facadeEmission, waterNormal, flagTex;
         public static Material Flag { get; private set; }
 
         public static Material Solid(Color c)
@@ -945,23 +1159,6 @@ namespace Apex.Game
             return water;
         }
 
-        static void BuildFenceTexture()
-        {
-            const int n = 64;
-            fenceTex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "CatchFence", wrapMode = TextureWrapMode.Repeat };
-            var px = new Color[n * n];
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
-                {
-                    // Diamond mesh: wires along both diagonals, plus a horizontal cable.
-                    int d1 = (x + y) % 16, d2 = (x - y + 64) % 16;
-                    bool wire = d1 < 2 || d2 < 2 || y < 2;
-                    px[y * n + x] = wire ? new Color(0.62f, 0.64f, 0.66f, 1f) : new Color(0f, 0f, 0f, 0f);
-                }
-            fenceTex.SetPixels(px);
-            fenceTex.Apply(true);
-        }
-
         static void BuildFlag()
         {
             const int h = 128;
@@ -984,7 +1181,6 @@ namespace Apex.Game
         {
             if (facadeAlbedo == null) BuildFacadeTextures();
             if (waterNormal == null) BuildWaterNormal();
-            if (fenceTex == null) BuildFenceTexture();
             if (flagTex == null) BuildFlag();
             for (int i = 0; i < CityLayout.Styles; i++)
             {
@@ -999,17 +1195,14 @@ namespace Apex.Game
                 env.AddWettable(m);
             }
             ApexMaterials.Register("EnvWater", WaterMaterial());
-            var fence = new Material(ApexMaterials.LitShader()) { name = "Env_CatchFence", enableInstancing = true };
-            SetTexture(fence, "_BaseMap", "_MainTex", fenceTex);
-            SetColour(fence, Color.white);
-            if (fence.HasProperty("_AlphaClip")) fence.SetFloat("_AlphaClip", 1f);
-            if (fence.HasProperty("_Cutoff")) fence.SetFloat("_Cutoff", 0.5f);
-            fence.EnableKeyword("_ALPHATEST_ON");
-            fence.renderQueue = (int)RenderQueue.AlphaTest;
+            var fence = TrackInfrastructureBuilder.CatchFenceMaterial("Env_CatchFence");
             ApexMaterials.Register(EnvironmentGeometry.CatchFence, fence);
             // Night lights (moderate intensities: no neon, no blown-out bloom).
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.LampHead), new Color(1f, 0.82f, 0.58f) * 2.2f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeLight), new Color(0.85f, 0.9f, 1f) * 2f);
+            // Turkish red (#E30A17) and white. Red stays at 1.3: brighter saturated red bleaches to pink under ACES.
+            env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeRed), new Color(0.89f, 0.04f, 0.09f) * 1.3f);
+            env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeWhite), new Color(1f, 0.97f, 0.92f) * 2.4f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.TowerGlass), new Color(0.32f, 0.33f, 0.3f));
             foreach (var key in new[] { LandmarkGeometry.Stone, LandmarkGeometry.Marble, LandmarkGeometry.HagiaPlaster })
                 env.AddLight(ApexMaterials.Get(key), new Color(0.32f, 0.27f, 0.2f));

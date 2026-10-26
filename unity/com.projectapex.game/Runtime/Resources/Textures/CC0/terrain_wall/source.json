@@ -1,0 +1,17 @@
+{
+  "name": "terrain_wall",
+  "metres": 2.0,
+  "meanSmoothness": 0.0633,
+  "meanAlbedoLinear": 0.1987,
+  "source": "https://polyhaven.com/a/old_stone_wall",
+  "author": "Charlotte Baglioni",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "ac7e02f9f2cdae8dec627acb9cc2c720bb2cb47db3a15a3d66f6bbc26c497ae0",
+    "Normal.png": "12dc285a6d4f72293038c76291c1ae7d7547b31995b98366b22bd1a8541617ee",
+    "MetallicSmoothness.png": "3c8b116f7cb9a1ad5acf0b97084e7339956c9713d4feefc82a2ac74c0555af21",
+    "Occlusion.jpg": "e08436759b3bc9e3efaca7582898e5c5a5af5bdef144c2991da5570119595d49"
+  }
+}

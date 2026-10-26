@@ -19,6 +19,10 @@ namespace Apex.Environment
         public const float NearCell = 12f;
         public const float FarCell = 96f;
         public const float Margin = 400f;
+        /// <summary>Street-level band beside the centreline (m) before the hillside starts.</summary>
+        public const float PlateauWidth = 30f;
+        /// <summary>Steepest mean hillside the near terrain makes (rise per metre, ~18°).</summary>
+        public const float MaxHillGradient = 0.32f;
         const float Blend = 260f;
 
         readonly List<Vector3> samples = new List<Vector3>();
@@ -153,11 +157,16 @@ namespace Apex.Environment
             float h = hsum / wsum - 1.2f;
             if (land.HasHeightGrid)
             {
-                // Real terrain, with a verge that follows the road within 25 m and blends out by 60 m.
+                // Real terrain seen from the road: a street-level band (pavements, frontages) of PlateauWidth,
+                // then the real hill, but never steeper than MaxHillGradient from the road. The coarse DEM grid
+                // would otherwise put a 40 m hill within 35 m of the kerb (grey "walls"); Istanbul's hillside
+                // quarters rise at 10-20° on average, the steep parts being terraces and retaining walls.
                 float dem = land.Height(x, z);
                 float dist = MathF.Sqrt(nearest);
+                float reach = MathF.Max(0f, dist - PlateauWidth) * MaxHillGradient;
+                float target = ApexMath.Clamp(dem - 0.3f, nearestY - 1.0f - reach, nearestY - 1.0f + reach);
                 float t = ApexMath.Clamp01((dist - 25f) / 35f);
-                h = ApexMath.Lerp(nearestY - 1.0f, dem - 0.3f, t);
+                h = ApexMath.Lerp(nearestY - 1.0f, target, t);
                 if (dist < 40f) h = MathF.Min(h, nearestY - 1.0f);
                 return h;
             }

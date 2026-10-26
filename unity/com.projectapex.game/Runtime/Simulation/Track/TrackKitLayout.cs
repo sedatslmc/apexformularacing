@@ -67,6 +67,9 @@ namespace Apex.Tracks
         readonly TrackInfrastructurePlan plan;
         readonly float[] wallLeft, wallRight;
         readonly List<(float distance, int side)> gates = new List<(float, int)>();
+        Func<int, int, bool> fenceNeeded;
+        /// <summary>Fenced on both sides within this distance of the start line (main grandstands).</summary>
+        public const float MainStandReach = 350f;
 
         public TrackKitLayout(TrackGeometry geometry, TrackInfrastructurePlan plan, RoadSurface surface)
         {
@@ -79,7 +82,17 @@ namespace Apex.Tracks
             int n = g.Count;
             var banner = BannerMask(plan);
             // Gates alternate sides; a gate moves to the other side where its side has no fence.
-            bool FenceSide(int i, int side) => !(side == pitSide && pitMask != null && pitMask[i]) && plan.RunoffAt(i, side) >= 1.0f;
+            // Main grandstands line the start/finish straight: fenced on both sides there.
+            float startLine = surface.definition.startLineDistance;
+            bool Needed(int i, int side)
+            {
+                float fromStart = ApexMath.PosMod(g.Distances[i] - startLine, g.Length);
+                if (MathF.Min(fromStart, g.Length - fromStart) < MainStandReach) return true;
+                var need = side < 0 ? plan.fenceLeft : plan.fenceRight;
+                return need == null || need[i];
+            }
+            fenceNeeded = Needed;
+            bool FenceSide(int i, int side) => !(side == pitSide && pitMask != null && pitMask[i]) && plan.RunoffAt(i, side) >= 1.0f && Needed(i, side);
             for (int k = 0; k < plan.gates.Count; k++)
             {
                 int i = g.IndexAt(plan.gates[k]);
@@ -265,7 +278,25 @@ namespace Apex.Tracks
             placements.Add(new Placement { module = m, position = (a + b) * 0.5f, forward = fwd, outward = outward, length = length, distance = distance, side = side, variant = variant, transverse = transverse });
         }
 
+        /// <summary>Fence over the parts of a barrier run that need one (<see cref="TrackInfrastructurePlan.fenceLeft"/>).</summary>
         void Fence(int side, float from, float len, bool[] bannerMask, int mount)
+        {
+            float runFrom = -1f;
+            for (float d = 0f; d < len; d += g.Spacing)
+            {
+                bool need = fenceNeeded(g.IndexAt(g.Wrap(from + d)), side);
+                if (need && runFrom < 0f) runFrom = d;
+                if (!need && runFrom >= 0f)
+                {
+                    FenceRun(side, g.Wrap(from + runFrom), d - runFrom, bannerMask, mount);
+                    runFrom = -1f;
+                }
+            }
+            // A fenced stretch reaching the end of the barrier run.
+            if (runFrom >= 0f) FenceRun(side, g.Wrap(from + runFrom), len - runFrom, bannerMask, mount);
+        }
+
+        void FenceRun(int side, float from, float len, bool[] bannerMask, int mount)
         {
             if (len < FencePostSpacing) return;
             // A gate replaces the posts and panels over its width.

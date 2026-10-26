@@ -7,7 +7,7 @@ namespace Apex.Environment
 {
     /// <summary>
     /// Roadside dressing behind the barriers: the pavement strip (kerbstone to 4.3 m behind the
-    /// barrier face), street lamps every 45 m (70 m at low detail) and spots for signs. Every piece is
+    /// barrier face), street lamps every 34 m (52 m at low detail; about 3.7 mounting heights, as on lit main roads) and spots for signs. Every piece is
     /// checked against the whole circuit's keep-out envelope (<see cref="TrackClearance"/>), not only
     /// against the part it was laid out from: where a hairpin, a parallel stretch or the pit lane runs
     /// behind the barrier, the lamp or pavement piece is left out instead of standing on the track.
@@ -51,7 +51,7 @@ namespace Apex.Environment
             this.wallRight = wallRight;
             int n = g.Count;
             int step = Math.Max(1, (int)MathF.Round(8f / g.Spacing));
-            float lampSpacing = quality == 0 ? 70f : 45f;
+            float lampSpacing = quality == 0 ? 52f : 34f;
             foreach (int side in new[] { -1, 1 })
             {
                 float[] wall = side < 0 ? wallLeft : wallRight;

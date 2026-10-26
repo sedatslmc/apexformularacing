@@ -11,7 +11,7 @@ namespace Apex.Game
     /// at racing distances. These are placeholders, not photorealistic hero assets.
     /// Local frame: origin at the base, +y up, +z along the building's main axis.
     /// </summary>
-    public sealed class LandmarkGeometry
+    public sealed partial class LandmarkGeometry
     {
         public const string Stone = "Stone";
         public const string Marble = "Marble";
@@ -145,16 +145,139 @@ namespace Apex.Game
                 path.Add(P(tAs, topY, s * (halfWidth + 1.5f)));
                 path.Add(P(total, asEnd.y + 6f, s * (halfWidth + 1.5f)));
                 B(Cable).TubePath(path, detail == 0 ? 0.7f : 1.1f, detail == 0 ? 6 : 4, true);
-                // Hangers every 18 m in the main span (visible from the near shore only).
+                // Inclined hangers (the bridge's zig-zag pattern, pairs meeting at the deck), near view only.
                 if (detail != 0) continue;
-                for (float t = tEu + 18f; t < tAs - 9f; t += 18f)
+                foreach (var (deckPt, cablePt) in Hangers(total, tEu, tAs, deckY, topY, lowY, P, s * (halfWidth + 1.5f)))
+                    B(Cable).Tube(deckPt, cablePt, 0.18f, 4, false);
+            }
+            // Cable anchorages (concrete blocks where the backstays meet the ground).
+            foreach (var (t, y) in new[] { (0f, euEnd.y), (total, asEnd.y) })
+                B(Stone).Box(P(t, y + 3f, 0f), new Vector3(46f, 14f, 34f), Quaternion.LookRotation(dir));
+            if (detail != 0) return;
+            // Saddle housings on the tower tops.
+            foreach (float t in new[] { tEu, tAs })
+                foreach (float s in new[] { -1f, 1f })
+                    B(Steel).Box(P(t, topY + 1.6f, s * (halfWidth + 1.5f)), new Vector3(4.2f, 3.2f, 7f), Quaternion.LookRotation(dir));
+            // Deck furniture: three lanes each way with dashed markings, edge lines, a median barrier, walkway
+            // railings and lamp posts on the median every 36 m (lamp heads glow at night).
+            float Surface(float t, float lateral) => deckY + 4f * Mathf.Sin(Mathf.PI * t / total) + 0.4f * (1f - Mathf.Abs(lateral) / halfWidth) + 0.03f;
+            var road = B(BridgeRoad);
+            var line = B("Line");
+            const float step = 12f;
+            for (float t = 0f; t < total - 0.1f; t += step)
+            {
+                float t1 = Mathf.Min(total, t + step);
+                // Carriageway surface (both directions) just above the girder top.
+                foreach (float s in new[] { -1f, 1f })
                 {
-                    float u = (t - tEu) / (tAs - tEu);
-                    float y = lowY + (topY - lowY) * (2f * u - 1f) * (2f * u - 1f);
-                    float camber = 4f * Mathf.Sin(Mathf.PI * t / total);
-                    B(Cable).Tube(P(t, deckY + camber + 0.5f, s * (halfWidth + 1.5f)), P(t, y, s * (halfWidth + 1.5f)), 0.18f, 4, false);
+                    float a = s * 0.9f, b = s * 11.6f;
+                    road.QuadFacing(P(t, Surface(t, a), a), P(t1, Surface(t1, a), a), P(t1, Surface(t1, b), b), P(t, Surface(t, b), b), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                    foreach (float lane in new[] { 4.5f, 8.1f, 11.4f })
+                    {
+                        bool solid = lane > 11f;
+                        float tt1 = solid ? t1 : t + 4.5f;
+                        float l = s * lane;
+                        line.QuadFacing(P(t, Surface(t, l) + 0.01f, l - 0.08f), P(tt1, Surface(tt1, l) + 0.01f, l - 0.08f), P(tt1, Surface(tt1, l) + 0.01f, l + 0.08f), P(t, Surface(t, l) + 0.01f, l + 0.08f), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                    }
+                    // Walkway railing: top rail along the step, one post per step.
+                    float r = s * (halfWidth - 0.4f);
+                    B(Steel).Tube(P(t, Surface(t, r) + 1.1f, r), P(t1, Surface(t1, r) + 1.1f, r), 0.05f, 4, false);
+                    B(Steel).Tube(P(t, Surface(t, r) + 0.5f, r), P(t1, Surface(t1, r) + 0.5f, r), 0.03f, 4, false);
+                    B(Steel).Box(P(t, Surface(t, r) + 0.55f, r), new Vector3(0.08f, 1.1f, 0.08f));
+                    // Traffic barrier between carriageway and walkway.
+                    float g = s * 12.1f;
+                    B(Steel).Tube(P(t, Surface(t, g) + 0.7f, g), P(t1, Surface(t1, g) + 0.7f, g), 0.12f, 4, false);
+                }
+                B(EnvironmentGeometry.Concrete).Box(P(t + step * 0.5f, Surface(t + step * 0.5f, 0f) + 0.45f, 0f), new Vector3(0.6f, 0.9f, step), Quaternion.LookRotation(dir));
+                if (Mathf.Repeat(t, 36f) < 0.1f)
+                {
+                    var foot = P(t, Surface(t, 0f) + 0.9f, 0f);
+                    B(Steel).Tube(foot, foot + Vector3.up * 11f, 0.12f, 6, true);
+                    foreach (float s in new[] { -1f, 1f })
+                    {
+                        var arm = foot + Vector3.up * 11f + side * s * 2.2f;
+                        B(Steel).Tube(foot + Vector3.up * 10.6f, arm, 0.07f, 4, false);
+                        B(EnvironmentGeometry.LampHead).Box(arm - Vector3.up * 0.15f, new Vector3(0.9f, 0.25f, 0.45f), Quaternion.LookRotation(dir));
+                    }
                 }
             }
+        }
+
+        public const string BridgeRoad = "BridgeRoad";
+
+        /// <summary>
+        /// Hanger end points on one cable plane: every 18 m along the main span, inclined so that consecutive
+        /// hangers meet at the deck (V pairs), like the bridge's real zig-zag hangers.
+        /// </summary>
+        static List<(Vector3 deck, Vector3 cable)> Hangers(float total, float tEu, float tAs, float deckY, float topY, float lowY, System.Func<float, float, float, Vector3> P, float lateral)
+        {
+            var r = new List<(Vector3, Vector3)>();
+            int k = 0;
+            for (float t = tEu + 18f; t < tAs - 9f; t += 18f, k++)
+            {
+                float u = (t - tEu) / (tAs - tEu);
+                float y = lowY + (topY - lowY) * (2f * u - 1f) * (2f * u - 1f);
+                float td = Mathf.Clamp(t + (k % 2 == 0 ? 9f : -9f), tEu + 4f, tAs - 4f);
+                float camber = 4f * Mathf.Sin(Mathf.PI * td / total);
+                r.Add((P(td, deckY + camber + 0.5f, lateral), P(t, y, lateral)));
+            }
+            return r;
+        }
+
+        /// <summary>
+        /// Architectural night lighting of the 15 July Martyrs Bridge in the national colours, laid on the same
+        /// parametric frame as <see cref="Bridge"/>: red LED lines along both main cables (the silhouette), white
+        /// on the hangers, on the inner edges of the tower legs and on the top cross beams. Not a uniformly
+        /// glowing bridge: the steel stays dark between the lines. Returns the four tower-wash light positions
+        /// (foot of each leg at deck level) for real spot lights.
+        /// </summary>
+        public static List<Vector3> BridgeIllumination(Vector3 euEnd, Vector3 asEnd, float waterY, MeshBuilder red, MeshBuilder white)
+        {
+            Vector3 flat = asEnd - euEnd;
+            flat.y = 0f;
+            float total = flat.magnitude;
+            Vector3 dir = flat / total;
+            Vector3 side = Vector3.Cross(Vector3.up, dir).normalized;
+            float scale = total / 1560f;
+            float tEu = 231f * scale, tAs = total - 255f * scale;
+            float deckY = waterY + 64f + 1.5f;
+            const float halfWidth = 16.7f;
+            float topY = waterY + 165f, lowY = deckY + 4f;
+            Vector3 P(float t, float y, float lateral) => new Vector3(euEnd.x, 0f, euEnd.z) + dir * t + side * lateral + Vector3.up * y;
+            var wash = new List<Vector3>();
+            foreach (float s in new[] { -1f, 1f })
+            {
+                float lat = s * (halfWidth + 1.5f);
+                // Red line on the cable (slightly larger than the 0.7 m cable so it reads at night).
+                var path = new List<Vector3> { P(0f, euEnd.y + 6f, lat), P(tEu, topY, lat) };
+                for (int i = 1; i < 40; i++)
+                {
+                    float u = i / 40f;
+                    path.Add(P(Mathf.Lerp(tEu, tAs, u), lowY + (topY - lowY) * (2f * u - 1f) * (2f * u - 1f), lat));
+                }
+                path.Add(P(tAs, topY, lat));
+                path.Add(P(total, asEnd.y + 6f, lat));
+                red.TubePath(path, 0.85f, 6, true);
+                // White light on the inclined hangers (same end points as the steel hangers).
+                foreach (var (deckPt, cablePt) in Hangers(total, tEu, tAs, deckY, topY, lowY, P, lat))
+                    white.Tube(deckPt, cablePt, 0.28f, 4, false);
+                // White light bands on the inner edges of each tower leg, from the deck to the top.
+                foreach (float t in new[] { tEu, tAs })
+                {
+                    // On the leg's inner corners (the leg tapers from 3 x 1.8 m half size at the deck to 2.4 x 1.44 m at the top).
+                    foreach (float e in new[] { -1f, 1f })
+                    {
+                        var a = P(t + e * 3.25f, deckY + 2f, lat - s * 2.0f);
+                        var b = P(t + e * 2.65f, topY - 3f, lat - s * 1.65f);
+                        white.Tube(a, b, 0.35f, 4, false);
+                    }
+                    wash.Add(P(t, deckY + 1.5f, lat - s * 4f));
+                }
+            }
+            // White crown on the top cross beams.
+            foreach (float t in new[] { tEu, tAs })
+                white.Tube(P(t, waterY + 160f + 2.7f, -(halfWidth + 1.5f)), P(t, waterY + 160f + 2.7f, halfWidth + 1.5f), 0.45f, 6, true);
+            return wash;
         }
 
         /// <summary>Points along the bridge deck edges (for night lighting strips).</summary>

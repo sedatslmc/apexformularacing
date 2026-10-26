@@ -108,6 +108,7 @@ namespace Apex.Game
             AddSurface(root.transform, surface.runoff, g.RunoffLeft != null ? "RunoffAsphalt" : "Grass");
             // Collision walls; the visible barriers come from TrackInfrastructureBuilder.
             AddSurface(root.transform, surface.barriers, "Wall", "WallStripe").GetComponent<MeshRenderer>().enabled = false;
+            TerrainSurface.Register();
             AddSurface(root.transform, surface.skirt, "Ground");
             ci.WallLeft = surface.wallLeft;
             ci.WallRight = surface.wallRight;
@@ -209,7 +210,7 @@ namespace Apex.Game
         }
 
         /// <summary>Unity mesh (visual) and MeshCollider (when the surface has a physical type) from a SurfaceMesh, vertex for vertex.</summary>
-        static GameObject AddSurface(Transform parent, SurfaceMesh sm, params string[] materials)
+        internal static GameObject AddSurface(Transform parent, SurfaceMesh sm, params string[] materials)
         {
             var m = new Mesh { name = sm.name, indexFormat = IndexFormat.UInt32 };
             var v = new List<Vector3>(sm.vertices.Count);

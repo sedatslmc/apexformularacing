@@ -69,6 +69,8 @@
 ### Phase 1 – Fundament
 | Aufgabe | Art | Status |
 |---|---|---|
+| Graue Geländewände ersetzen: Hangform (Plateau + max. ~18°), Gelände-Shader Gras/Erde/Bruchstein (`TERRAIN.md`) | Code + Shader + Assets (frei) | **implementiert, getestet (63 % → 6 % Wandprofile)**; Shader nicht kompiliert, Editor-Prüfung offen |
+| Fangzaun nur wo nötig (Kurvenaußen, > 234 km/h, Start/Ziel), echtes 100-mm-Gewebe, transparent | Code | **implementiert, getestet (93 % → 71 % der Barrierenlänge)**; Editor-Prüfung offen |
 | Laternen, Gehwege, Schilder, Flaggen gegen die Sperrzone prüfen | Code | **getestet** |
 | Validierung auf alle weiteren Objekte ausdehnen (Ampeln, Poller, Bänke, Bäume an Straßen, Werbetafeln), sobald es sie gibt; ein gemeinsamer Test pro Objektart | Code | geplant |
 | Bodenhaftung: jedes Objekt am Gelände bzw. der Straße ausrichten (kein Schweben), automatischer Test über alle Platzierungen | Code | geplant |
@@ -95,6 +97,11 @@
 - **Aufgaben:** Dolmabahçe mit Uhrturm, Çırağan, Akaretler-Reihenhäuser, Brücke; Fernwahrzeichen (Galata, Leanderturm, Hagia Sophia, Sultan Ahmed, Beylerbeyi) als hochwertige Impostors.
 - **Weg:** externe Produktion bzw. Kauf über den vorhandenen Drop-in (`Resources/Landmarks/<id>`, Höhen-Plausibilitätsprüfung).
 
+- **Umgesetzt (2026-10-26, `LANDMARK_MODELS.md`; Overhaul-Phase 4):** eigene detaillierte Modelle mit drei LOD-Stufen
+  - Ortaköy-Moschee, Dolmabahçe (OSM-Grundrisse, Kuppel des Muayede-Saals, Uhrturm), Çırağan, Akaretler-Reihenhäuser
+  - Brücke mit Zickzack-Hängern und Fahrbahnausstattung
+  - **Status:** implementiert, getestet, offline gerendert; in Unity nicht gesehen; nicht fotorealistisch
+
 ### Phase 4 – Stadt entlang der ganzen Runde
 - **Gebäudekits je Viertel:**
   - Beşiktaş/Ortaköy: gemischt, Läden
@@ -104,6 +111,12 @@
 - **Regelbasierte Zuordnung:** Viertel und Straßentyp bestimmen den Kit, Varianten über Masken. Keine identischen Fassaden nebeneinander (Test).
 - **Straßenraum:** Gehwege mit Bordstein, Querstraßen, Treppen, Stützmauern statt grauer Wände, Höfe, geparkte Autos nur außerhalb der Sperrzone.
 - **Fenster:** Interior-Mapping statt dunkler Flächen.
+
+- **Umgesetzt (2026-10-26, `CITY_FROM_OSM.md`; Overhaul-Phasen 2 und 3):**
+  - echte OSM-Stadt (Grundrisse, Höhen), Seitenstraßen mit Gehwegen, Bordsteinen und Treppen, die an den Barrieren enden
+  - Straßenmöbel und geparkte Autos
+  - Fußgänger und Stadtverkehr (instanziert, ein Drittel Taxis)
+  - **Status:** implementiert und getestet (Simulation); Low-Poly-Platzhalter-Modelle, in Unity nicht gesehen
 
 ### Phase 5 – Türkische Identität & Event
 - **Flaggen:** Monumentalflagge, Dachflaggen und Tribünenflaggen sind da. Ergänzen:
@@ -123,6 +136,10 @@
 - **Leben:** Streckenposten, Fotografen, Sicherheitspersonal (Figuren-Assets nötig), Kamerablitze, Bewegung in der Ferne.
 
 ### Phase 6 – Wetter & Nacht
+- **Umgesetzt (2026-10-26, `NIGHT_LIGHTING.md`):**
+  - Lichtpool echter Laternen-Spots (8–48 je Stufe), Laternenabstand 34 m
+  - Bosporus-Brücke in Rot-Weiß: rote Tragseile, weiße Hänger, Pylonbänder und -anstrahlung
+  - **Status:** implementiert und getestet bzw. offline gesehen; Unity-Prüfung offen
 - **Regen:** nasser Asphalt mit Pfützenmaske, Gischt hinter Autos.
 - **Nacht:**
   - Flutlicht, beleuchtete Brücke, Schaufenster, LED-Werbung

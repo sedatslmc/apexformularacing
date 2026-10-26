@@ -31,6 +31,40 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void TheTerrainBesideTheTrackIsNoLongerAGreyCanyon()
+        {
+            // Audit of 2026-10-26: 63 % of the side profiles had a "wall" (> 4 m rise, > 30° over 6 m) within
+            // 80 m of the barrier, up to 59 m high. The hillside envelope (TerrainField.PlateauWidth,
+            // MaxHillGradient) brought that to ~6 %; the rest are places where two parts of the circuit run
+            // side by side at different heights (real retaining walls, drawn as masonry by Apex/Terrain).
+            var (_, g, surface, _, field) = World();
+            int profiles = 0, walls = 0;
+            for (float d = 0f; d < g.Length; d += 20f)
+            {
+                int i = g.IndexAt(d);
+                foreach (int side in new[] { -1, 1 })
+                {
+                    float wall = side < 0 ? surface.wallLeft[i] : surface.wallRight[i];
+                    var p0 = g.Positions[i];
+                    float rise = 0f, steep = 0f, prev = float.NaN;
+                    for (float o = 1f; o <= 80f; o += 6f)
+                    {
+                        var q = p0 + g.Rights[i] * (side * (wall + o));
+                        if (field.IsWater(q.X, q.Z)) break;
+                        float h = field.Height(q.X, q.Z) - p0.Y;
+                        rise = MathF.Max(rise, h);
+                        if (!float.IsNaN(prev)) steep = MathF.Max(steep, MathF.Atan2(MathF.Abs(h - prev), 6f) * 180f / MathF.PI);
+                        prev = h;
+                    }
+                    profiles++;
+                    if (rise > 4f && steep > 30f) walls++;
+                }
+            }
+            TestContext.WriteLine($"{walls} of {profiles} side profiles with a wall");
+            Assert.That(walls / (float)profiles, Is.LessThan(0.1f));
+        }
+
+        [Test]
         public void ClearanceEnvelopeCoversRoadRunoffAndPitLane()
         {
             var (_, g, surface, clear, _) = World();

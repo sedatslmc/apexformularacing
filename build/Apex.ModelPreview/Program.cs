@@ -48,9 +48,10 @@ if (Array.IndexOf(args, "--art") >= 0)
 if (Array.IndexOf(args, "--landmarks") >= 0)
 {
     // One OBJ per landmark, each at the origin, for inspection renders.
-    void Export(string name, System.Action<LandmarkGeometry> build)
+    void Export(string name, System.Action<LandmarkGeometry> build) => ExportD(name, 0, build);
+    void ExportD(string name, int detail, System.Action<LandmarkGeometry> build)
     {
-        var lg = new LandmarkGeometry();
+        var lg = new LandmarkGeometry(detail);
         build(lg);
         var sbl = new StringBuilder();
         int vb = 1, tr = 0;
@@ -72,14 +73,117 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
         Console.WriteLine($"{name}: {tr} triangles");
     }
     Export("bridge", l => l.Bridge(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f));
+    Export("bridge_night", l =>
+    {
+        l.Bridge(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f);
+        LandmarkGeometry.BridgeIllumination(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f, l.B("BridgeRed"), l.B("BridgeWhite"));
+    });
     Export("ortakoy", l => l.OrtakoyMosque());
+    for (int d = 0; d < 3; d++) { int dd = d; ExportD("ortakoy_lod" + d, dd, l => l.OrtakoyMosqueDetailed()); }
     Export("dolmabahce", l => { l.Palace(284f, 48f, 18f, true); });
+    for (int d = 0; d < 3; d++) { int dd = d; ExportD("clocktower_lod" + d, dd, l => l.ClockTowerDetailed()); }
+    {
+        // Palace ensembles from the OSM footprints (ground at 0; around Dolmabahçe and Çırağan).
+        string cityFile = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/City/bosphorus_a.json");
+        var city = Apex.Environment.CityData.FromJson(File.ReadAllText(cityFile));
+        for (int d = 0; d < 3; d++)
+        {
+            int dd = d;
+            ExportD("akaretler_lod" + d, dd, l =>
+            {
+                int seed = 0;
+                foreach (var b in city.buildings)
+                {
+                    if (Apex.Environment.OsmCity.ClassicalKind(b) != Apex.Environment.OsmCity.RowHouse) continue;
+                    var o = new List<Vector2>();
+                    foreach (var p in b.outline) o.Add(new Vector2(p.X - 121f, p.Y - 315f));
+                    float area = 0f;
+                    for (int i = 0; i < o.Count; i++) area += o[i].x * o[(i + 1) % o.Count].y - o[(i + 1) % o.Count].x * o[i].y;
+                    if (area < 0f) o.Reverse();
+                    int front = 0; float near = float.MaxValue;
+                    for (int i = 0; i < o.Count; i++)
+                    {
+                        var m = (o[i] + o[(i + 1) % o.Count]) * 0.5f;
+                        foreach (var s in city.streets)
+                            foreach (var q in s.points)
+                            {
+                                float dx = q.X - 121f - m.x, dz = q.Y - 315f - m.y, d2 = dx * dx + dz * dz;
+                                if (d2 < near) { near = d2; front = i; }
+                            }
+                    }
+                    l.RowHouse(o, b.height, front, seed++);
+                }
+            });
+        }
+        foreach (var (name, cx, cz, radius) in new[] { ("dolmabahce_osm", -100f, 0f, 260f), ("ciragan_osm", 1150f, 433f, 120f) })
+            for (int d = 0; d < 2; d++)
+            {
+                int dd = d;
+                ExportD(name + "_lod" + d, dd, l =>
+                {
+                    int seed = 0;
+                    foreach (var b in city.buildings)
+                    {
+                        int kind = Apex.Environment.OsmCity.ClassicalKind(b);
+                        if (kind == 0 || kind == 3) continue;
+                        var o = new List<Vector2>();
+                        foreach (var p in b.outline) o.Add(new Vector2(p.X - cx, p.Y - cz));
+                        float area = 0f;
+                        for (int i = 0; i < o.Count; i++) area += o[i].x * o[(i + 1) % o.Count].y - o[(i + 1) % o.Count].x * o[i].y;
+                        if (area < 0f) o.Reverse();
+                        var c = Vector2.zero; foreach (var p in o) c += p; c /= o.Count;
+                        if (c.x * c.x + c.y * c.y > radius * radius) continue;
+                        float h = Apex.Environment.OsmCity.ClassicalHeight(b, kind);
+                        l.ClassicalBuilding(o, h, seed++, kind == 1);
+                        if (b.name.Contains("Muayede")) l.InFrame(new Vector3(c.x, 0f, c.y), 0f, () => l.HallDome(h, 11f));
+                    }
+                });
+            }
+    }
     Export("galata", l => l.GalataTower(63f));
     Export("maiden", l => l.MaidensTower());
     Export("sultanahmet", l => l.ImperialMosque(11.7f, 26f, 6, 64f, LandmarkGeometry.Stone));
     Export("hagiasophia", l => l.ImperialMosque(15.5f, 34f, 4, 60f, LandmarkGeometry.HagiaPlaster));
     Export("ferry", l => l.Ferry());
     Export("freighter", l => l.Freighter());
+    return;
+}
+if (Array.IndexOf(args, "--citylife") >= 0)
+{
+    // City life lineup (vehicles, props, both pedestrian strides) in one OBJ for inspection renders.
+    var parts = new Dictionary<string, MeshBuilder>();
+    var at = Matrix4x4.identity;
+    MeshBuilder B(string m) { if (!parts.TryGetValue(m, out var mb)) parts[m] = mb = new MeshBuilder(); mb.matrix = at; return mb; }
+    float x = 0f;
+    void Put(float width, Action<EnvironmentGeometry.Parts> build, float z = 0f)
+    {
+        at = new Matrix4x4 { offset = new Vector3(x + width * 0.5f, 0f, z) };
+        build(B);
+        x += width + 1f;
+    }
+    Put(2.5f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Car, "CityCar0"));
+    Put(2.5f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Taxi, "CityTaxi"));
+    Put(2.8f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Van, "CityCar4"));
+    Put(1.2f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Scooter, "CityCar5"));
+    Put(4f, b => EnvironmentGeometry.CityVehicle(b, Apex.Environment.CityLife.Vehicle.Bus, "CityBus"));
+    x = 0f;
+    foreach (Apex.Environment.CityLife.Prop k in Enum.GetValues(typeof(Apex.Environment.CityLife.Prop)))
+        Put(k == Apex.Environment.CityLife.Prop.BusShelter ? 4.5f : 1.8f, b => EnvironmentGeometry.StreetProp(b, k), 9f);
+    for (int i = 0; i < 4; i++) { int st = i & 1; Put(0.6f, b => EnvironmentGeometry.Pedestrian(b, "CityShirt" + (i / 2), "CityTrousers0", st), 9f); }
+    var sbl = new StringBuilder();
+    int vb = 1, tr = 0;
+    foreach (var kv in parts)
+    {
+        sbl.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+        var mbx = kv.Value;
+        foreach (var v in mbx.Vertices) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F3} {1:F3} {2:F3}", v.x, v.y, v.z));
+        var ts = mbx.Triangles;
+        for (int i = 0; i < ts.Count; i += 3) sbl.AppendLine($"f {ts[i] + vb} {ts[i + 1] + vb} {ts[i + 2] + vb}");
+        vb += mbx.VertexCount;
+        tr += ts.Count / 3;
+    }
+    File.WriteAllText(Path.Combine(outDir, "citylife.obj"), sbl.ToString());
+    Console.WriteLine($"citylife: {tr} triangles");
     return;
 }
 if (Array.IndexOf(args, "--monument") >= 0)
@@ -229,6 +333,20 @@ if (Array.IndexOf(args, "--kit") >= 0)
                     mb.TriangleFacing(Local(a), Local(b), Local(c), new Vector2(sm.uvs[tri[i]].X, sm.uvs[tri[i]].Y), new Vector2(sm.uvs[tri[i + 1]].X, sm.uvs[tri[i + 1]].Y), new Vector2(sm.uvs[tri[i + 2]].X, sm.uvs[tri[i + 2]].Y), Vector3.up);
                 }
             }
+        // Terrain around the window (the RoadSurface terrain triangles within 320 m of the T1 centre).
+        if (lod == 0)
+        {
+            var terrainMesh = surface.BuildTerrain(new Apex.Environment.TerrainField(g, def));
+            var tmb = Get(parts, "FarGround");
+            var tri0 = terrainMesh.triangles[0];
+            for (int i = 0; i < tri0.Count; i += 3)
+            {
+                var a = terrainMesh.vertices[tri0[i]]; var b = terrainMesh.vertices[tri0[i + 1]]; var c = terrainMesh.vertices[tri0[i + 2]];
+                var m = (a + b + c) / 3f;
+                if ((m.X - c0.X) * (m.X - c0.X) + (m.Z - c0.Z) * (m.Z - c0.Z) > 320f * 320f) continue;
+                tmb.TriangleFacing(Local(a), Local(b), Local(c), new Vector2(a.X / 40f, a.Z / 40f), new Vector2(b.X / 40f, b.Z / 40f), new Vector2(c.X / 40f, c.Z / 40f), Vector3.up);
+            }
+        }
         // Rubber strips (racing-line tracks, groove and lock-up streaks) inside the window.
         {
             var rub = new MeshBuilder();
@@ -264,7 +382,24 @@ if (Array.IndexOf(args, "--environment") >= 0)
     var parts = new Dictionary<string, MeshBuilder>();
     MeshBuilder B(string k) { if (!parts.TryGetValue(k, out var m)) parts[k] = m = new MeshBuilder(); return m; }
     var sw = System.Diagnostics.Stopwatch.StartNew();
-    var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality });
+    // --real: the OSM city (Resources/City/<track>.json) near the track, generic blocks beyond (as the game).
+    Apex.Environment.OsmCity osm = null;
+    float realRadius = 0f;
+    string cityPath = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/City/" + trackId + ".json");
+    if (Array.IndexOf(args, "--real") >= 0 && File.Exists(cityPath))
+    {
+        var data = Apex.Environment.CityData.FromJson(File.ReadAllText(cityPath));
+        var su = new Apex.Vehicle.VehicleSetup();
+        var rl = new Apex.AI.RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
+        var pl = new Apex.Tracks.TrackInfrastructurePlan(g, g.CornersFor(def), rl.offsets, rl.speed);
+        var rs = new Apex.Tracks.RoadSurface(g, def, pl.kerbs.left, pl.kerbs.right, pl.kerbs.height);
+        osm = new Apex.Environment.OsmCity(data, field, new Apex.Tracks.TrackClearance(rs), def, null, quality);
+        realRadius = data.radius;
+        foreach (var b in osm.buildings) EnvironmentGeometry.FootprintBuilding(B, b, true);
+        Console.WriteLine($"real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees");
+    }
+    var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality, realCityRadius = realRadius });
+    if (osm != null) city.trees.AddRange(osm.trees);
     Console.WriteLine($"city: {city.lots.Count} lots, {city.trees.Count} trees, {sw.ElapsedMilliseconds} ms");
     int[] bands = new int[3];
     foreach (var lot in city.lots) { bands[lot.band]++; EnvironmentGeometry.Building(B, lot, lot.band == 0); }

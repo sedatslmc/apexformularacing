@@ -189,6 +189,7 @@ namespace Apex.EditorTools
                 ["ScannedDry"] = new[] { "_NORMALMAP", "_METALLICSPECGLOSSMAP", "_OCCLUSIONMAP" },
                 ["ScannedWet"] = new[] { "_NORMALMAP", "_OCCLUSIONMAP" },
                 ["ScannedTransparent"] = new[] { "_NORMALMAP", "_SURFACE_TYPE_TRANSPARENT" },
+                ["Transparent"] = new[] { "_SURFACE_TYPE_TRANSPARENT" },
                 ["Detail"] = new[] { "_DETAIL_MULX2" },
                 ["DetailNormal"] = new[] { "_DETAIL_MULX2", "_NORMALMAP" },
             };

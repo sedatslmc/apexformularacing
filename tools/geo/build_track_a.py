@@ -232,7 +232,7 @@ def main():
     # Monumental Turkish flag on the Yıldız slope above the Bosphorus straight: site chosen by
     # `cd build/Apex.Tuning && dotnet run -c Release -- flagsite bosphorus_a` (MonumentalFlagSite:
     # on land, clear of every track part, best terrain visibility from the lap). Game frame (east, north).
-    data["monumental_flag"] = {"game": [993.3, 536.5], "source": "MonumentalFlagSite (Projektentscheidung, kein realer Standort)"}
+    data["monumental_flag"] = {"game": [903.3, 786.5], "source": "MonumentalFlagSite (Projektentscheidung, kein realer Standort)"}
     # Signature sightline: Çırağan Cd. before Ortaköy towards mosque and bridge.
     bridge_mid = dem.enu(41.0455, 29.0343)
     for label, frm, tgt in (("Ortaköy-Moschee", (1500, 720), OSM_POS["ortakoy_mosque"]),
