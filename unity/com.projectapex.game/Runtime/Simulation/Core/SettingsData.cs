@@ -61,6 +61,8 @@ namespace Apex.Core
         public float hudScale = 1f;
         /// <summary>Environment density: 0 = low (mobile), 1 = medium, 2 = high.</summary>
         public int environmentDetail = 1;
+        /// <summary>URP post-processing (tonemapping, colour grade, bloom, FXAA); only offered with URP.</summary>
+        public bool postProcessing = true;
         public string bestLapsJson = "";
 
         /// <summary>Upgrades older versions and clamps out-of-range values. Returns true if changed.</summary>
