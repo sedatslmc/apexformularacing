@@ -1,0 +1,18 @@
+{
+  "name": "barrier",
+  "metres": 2.7100000381469727,
+  "meanSmoothness": 0.2631,
+  "meanAlbedoLinear": 0.2379,
+  "source": "https://polyhaven.com/a/concrete_wall_008",
+  "author": "Dario Barresi, Charlotte Baglioni",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "074f7bdfcf574596fe2e0165aab10779c805e0ca23820498e749fc40a2fc31b7",
+    "Detail.jpg": "b61e47acc4fe6a52fcffd5be11c54a9f7ed74e8b03f0186c40a69fd6fbe077b8",
+    "Normal.png": "c65d56698431028aacaa81c0b51cbe3ca29799bd598f31647305127b848a4d27",
+    "MetallicSmoothness.png": "13287a7eddd99f076531a8dc5e41eebd0f34b6facdf21dccd0e21849199de2a6",
+    "Occlusion.jpg": "f0d22125a1492d46854fc6dada3e6e7e8df78f63cb3f8c6f78437f6718f73c8c"
+  }
+}

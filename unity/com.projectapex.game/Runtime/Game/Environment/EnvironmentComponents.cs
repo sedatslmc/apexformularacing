@@ -18,6 +18,10 @@ namespace Apex.Game
         public float ambienceVolume = 0.5f;
         public readonly List<(Vector3 pos, float length, float pole, int detail)> flagSpots = new List<(Vector3, float, float, int)>();
         public readonly List<Vector3> grandstandCentres = new List<Vector3>();
+        /// <summary>Street-lamp heads (world positions) for their reflections on the water.</summary>
+        public readonly List<Vector3> lampHeads = new List<Vector3>();
+        /// <summary>Current street/window light level 0..1.</summary>
+        public float ArtificialLight => Mathf.Max(0f, artificial);
 
         public float WindSpeed { get; private set; }
         /// <summary>Rain intensity 0..1 (set by WeatherVisuals; roughens the water).</summary>
@@ -478,6 +482,9 @@ namespace Apex.Game
         Vector4 coastRect;
         static readonly int[] WaveIds = { Shader.PropertyToID("_WaveA"), Shader.PropertyToID("_WaveB"), Shader.PropertyToID("_WaveC") };
         static readonly int RoughnessId = Shader.PropertyToID("_Roughness");
+        static readonly int LampsId = Shader.PropertyToID("_ApexWaterLamps"), LampColorId = Shader.PropertyToID("_ApexWaterLampColor");
+        readonly Vector4[] lamps = new Vector4[WaterOptics.MaxLamps];
+        float nextLampPick;
 
         /// <summary>Coast-distance texture and its world rectangle (minX, minZ, 1/sizeX, 1/sizeZ); owned by this component.</summary>
         public void SetCoast(Texture2D tex, Vector4 rect)
@@ -520,6 +527,7 @@ namespace Apex.Game
                     mat.SetVector(WaveIds[i], new Vector4(o.x, o.y, 1f / l.tile, l.strength));
                 }
                 mat.SetFloat(RoughnessId, WaterOptics.Roughness(speed, env != null ? env.RainIntensity : 0f));
+                UpdateLamps();
                 return;
             }
             // Wavelets drift downwind at roughly 0.1 x wind speed (uv unit = 24 m).
@@ -529,9 +537,36 @@ namespace Apex.Game
             if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", Mathf.Lerp(0.35f, 1f, Mathf.Clamp01(speed / 10f)));
         }
 
+        /// <summary>
+        /// The street lamps nearest the camera as point lights for the water's glitter only (globals, so the
+        /// material stays SRP-batcher compatible); rough water stretches them into the familiar light paths.
+        /// </summary>
+        void UpdateLamps()
+        {
+            float level = env != null ? env.ArtificialLight : 0f;
+            var cam = Camera.main;
+            if (level < 0.01f || env == null || env.lampHeads.Count == 0 || cam == null)
+            {
+                Shader.SetGlobalVector(LampColorId, Vector4.zero);
+                return;
+            }
+            var c = WaterOptics.LampColor;
+            Shader.SetGlobalVector(LampColorId, new Vector4(c[0], c[1], c[2], 0f) * (level * WaterOptics.LampIntensity));
+            if (Time.unscaledTime < nextLampPick) return;
+            nextLampPick = Time.unscaledTime + 0.25f;
+            var p = cam.transform.position;
+            int count = WaterOptics.NearestLamps(env.lampHeads.Count, i => (env.lampHeads[i] - p).sqrMagnitude, picked);
+            for (int k = 0; k < lamps.Length; k++)
+                lamps[k] = k < count ? (Vector4)env.lampHeads[picked[k]] + new Vector4(0f, 0f, 0f, 1f) : Vector4.zero;
+            Shader.SetGlobalVectorArray(LampsId, lamps);
+        }
+
+        readonly int[] picked = new int[WaterOptics.MaxLamps];
+
         void OnDestroy()
         {
             if (coast != null) Destroy(coast);
+            Shader.SetGlobalVector(LampColorId, Vector4.zero);
         }
     }
 

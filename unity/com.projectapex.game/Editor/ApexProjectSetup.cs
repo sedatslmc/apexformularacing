@@ -106,6 +106,7 @@ namespace Apex.EditorTools
                     AssetDatabase.CreateAsset(rain, rainPath);
                 }
             }
+            CreateVariantKeepers();
             string skyPath = $"{MaterialFolder}/Sky.mat";
             if (AssetDatabase.LoadAssetAtPath<Material>(skyPath) == null)
             {
@@ -170,6 +171,35 @@ namespace Apex.EditorTools
 #else
             Debug.Log("[Apex] URP ist nicht installiert – Grafikstufen nutzen die Standard-Pipeline (ohne SSAO).");
 #endif
+        }
+
+        /// <summary>
+        /// The scanned CC0 sets switch URP Lit keywords on at runtime (normal, gloss, occlusion and detail maps;
+        /// wet roads switch the gloss map off again). Lit declares them as shader_feature, so a player build keeps
+        /// only the variants some material asset uses: these small materials in Resources keep each combination.
+        /// </summary>
+        static void CreateVariantKeepers()
+        {
+            var lit = Shader.Find("Universal Render Pipeline/Lit");
+            if (lit == null) return;
+            string folder = MaterialFolder + "/VariantKeepers";
+            Directory.CreateDirectory(folder);
+            var combos = new Dictionary<string, string[]>
+            {
+                ["ScannedDry"] = new[] { "_NORMALMAP", "_METALLICSPECGLOSSMAP", "_OCCLUSIONMAP" },
+                ["ScannedWet"] = new[] { "_NORMALMAP", "_OCCLUSIONMAP" },
+                ["ScannedTransparent"] = new[] { "_NORMALMAP", "_SURFACE_TYPE_TRANSPARENT" },
+                ["Detail"] = new[] { "_DETAIL_MULX2" },
+                ["DetailNormal"] = new[] { "_DETAIL_MULX2", "_NORMALMAP" },
+            };
+            foreach (var kv in combos)
+            {
+                string path = $"{folder}/{kv.Key}.mat";
+                if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) continue;
+                var m = new Material(lit) { name = "Keep_" + kv.Key };
+                foreach (var k in kv.Value) m.EnableKeyword(k);
+                AssetDatabase.CreateAsset(m, path);
+            }
         }
 
         [MenuItem("Project Apex/3. Boot-Szene erzeugen", priority = 22)]

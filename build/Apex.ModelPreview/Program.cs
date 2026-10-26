@@ -229,6 +229,13 @@ if (Array.IndexOf(args, "--kit") >= 0)
                     mb.TriangleFacing(Local(a), Local(b), Local(c), new Vector2(sm.uvs[tri[i]].X, sm.uvs[tri[i]].Y), new Vector2(sm.uvs[tri[i + 1]].X, sm.uvs[tri[i + 1]].Y), new Vector2(sm.uvs[tri[i + 2]].X, sm.uvs[tri[i + 2]].Y), Vector3.up);
                 }
             }
+        // Rubber strips (racing-line tracks, groove and lock-up streaks) inside the window.
+        {
+            var rub = new MeshBuilder();
+            foreach (var z in plan.rubber)
+                if (InWindow(z.from)) TrackInfrastructureGeometry.RubberStrip(rub, g, z, z.brakeMark ? 0.034f : z.width > 1.5f ? 0.028f : 0.031f);
+            Get(parts, TrackInfrastructureGeometry.Rubber).Append(rub, v => new Vector3(v.x - c0.X, v.y - c0.Y, v.z - c0.Z));
+        }
         if (lod == 0)
         {
             Console.WriteLine($"T1 window: {placed} module placements");
@@ -291,7 +298,7 @@ if (Array.IndexOf(args, "--environment") >= 0)
         var su = new VehicleSetup();
         var rl = new Apex.AI.RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
         var plan = new Apex.Tracks.TrackInfrastructurePlan(g, g.CornersFor(def), rl.offsets, rl.speed);
-        Console.WriteLine($"infrastructure: {plan.posts.Count} marshal posts/panels, {plan.protections.Count} protection zones ({plan.protections.FindAll(x => x.kind == Apex.Tracks.TrackInfrastructurePlan.ProtectionKind.TyreStack).Count} tyre), {plan.gates.Count} gates, {plan.rubber.Count} rubber zones, {plan.patches.Count} patches, {plan.manholes.Count} manholes, {plan.laneDashes.Count} lane dashes");
+        Console.WriteLine($"infrastructure: {plan.posts.Count} marshal posts/panels, {plan.protections.Count} protection zones ({plan.protections.FindAll(x => x.kind == Apex.Tracks.TrackInfrastructurePlan.ProtectionKind.TyreStack).Count} tyre), {plan.gates.Count} gates, {plan.rubber.Count} rubber strips, {plan.patches.Count} patches, {plan.manholes.Count} manholes, {plan.laneDashes.Count} lane dashes");
         int nS = g.Count;
         var wl = new float[nS]; var wr = new float[nS];
         bool InPit(int i) => def.pit != null && def.pit.Contains(g.Distances[i], g.Length);
@@ -341,7 +348,7 @@ if (Array.IndexOf(args, "--environment") >= 0)
         }
         foreach (var pa in plan.patches) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Patch), g, g.Wrap(pa.distance), g.Wrap(pa.distance + pa.length), pa.lateral - pa.width * 0.5f, pa.lateral + pa.width * 0.5f, 0.07f, 0f);
         foreach (var (f, t2, lat) in plan.laneDashes) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Dash), g, g.Wrap(f), g.Wrap(t2), lat - 0.07f, lat + 0.07f, 0.072f, 0f);
-        foreach (var z in plan.rubber) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Rubber), g, z.from, z.to, z.lateralFrom, z.lateralTo, 0.075f, 25f);
+        foreach (var z in plan.rubber) TrackInfrastructureGeometry.RubberStrip(B(TrackInfrastructureGeometry.Rubber), g, z, z.brakeMark ? 0.084f : z.width > 1.5f ? 0.078f : 0.081f);
         foreach (var (d, lat) in plan.manholes) TrackInfrastructureGeometry.ManholeCover(B(TrackInfrastructureGeometry.Manhole), Q(g.IndexAt(d), lat, 0.074f), 0.38f);
         foreach (var po in plan.posts)
         {

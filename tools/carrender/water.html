@@ -7,7 +7,8 @@
 // math in GLSL, the same procedural wave texture as EnvironmentBuilder.BuildWaterNormal and the same
 // constants as WaterOptics. Differences to Unity: the reflection is an analytic sky (no city in the probe),
 // the coast is a synthetic quay (x < 0 is land) with a pier, there is no shadow map. Not a game capture.
-// Parameters: &sky=<json from `dotnet run -- sky-json`>, &eye=x,y,z, &target=x,y,z, &fov, &wind=m/s, &t=seconds.
+// Parameters: &sky=<json from `dotnet run -- sky-json`>, &eye=x,y,z, &target=x,y,z, &fov, &wind=m/s, &t=seconds,
+// &lamps=1: street lamps every 30 m on the quay (game x = -2 m, 9 m high), reflected as in the shader.
 import * as THREE from 'three';
 
 const params = new URLSearchParams(location.search);
@@ -82,18 +83,26 @@ const mat = new THREE.ShaderMaterial({
     skyHorizon: { value: (() => { const c = lin(sky.fog); return new THREE.Vector3(c.r, c.g, c.b); })() },
     fogColor: { value: (() => { const c = lin(sky.fog); return new THREE.Vector3(c.r, c.g, c.b); })() },
     camPos: { value: new THREE.Vector3() },
+    lampPos: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+    lampColor: { value: new THREE.Vector3() },
   },
   vertexShader: `varying vec3 vPos; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vPos = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: `
     precision highp float;
     uniform sampler2D _NormalMap, _CoastTex; uniform vec4 _CoastRect, _WaveA, _WaveB, _WaveC;
     uniform float _Roughness, _F0, _FoamAlbedo, _FoamWidth, _ShallowWidth, _CoastMaxDistance, _DetailDistance;
-    uniform vec3 _DeepColor, _ShallowColor, lightDir, lightColor, ambientUp, skyZenith, skyHorizon, fogColor, camPos;
+    uniform vec3 _DeepColor, _ShallowColor, lightDir, lightColor, ambientUp, skyZenith, skyHorizon, fogColor, camPos, lampColor;
+    uniform vec4 lampPos[16];
     varying vec3 vPos;
     // Game coordinates: the scene is mirrored on x (as kit.html), so world x = -game x.
     vec2 gamePos(vec3 p) { return vec2(-p.x, p.z); }
     vec2 waveSlope(vec2 p, vec4 w) { vec3 n = texture2D(_NormalMap, p * w.z + w.xy).rgb * 2.0 - 1.0; return n.xy * w.w / max(n.z, 0.2); }
     float schlick(float f0, float c) { float m = 1.0 - clamp(c, 0.0, 1.0); float m2 = m * m; return f0 + (1.0 - f0) * m2 * m2 * m; }
+    float ggx(vec3 N, vec3 V, vec3 L, float alpha) {
+      vec3 H = normalize(L + V); float NdotH = clamp(dot(N, H), 0.0, 1.0), LdotH = clamp(dot(L, H), 0.0, 1.0);
+      float a2 = alpha * alpha; float d = NdotH * NdotH * (a2 - 1.0) + 1.00001;
+      return min(a2 / ((d * d) * max(0.1, LdotH * LdotH) * (alpha * 4.0 + 2.0)), 100.0) * schlick(_F0, LdotH);
+    }
     // Stand-in for the reflection probe: sky gradient plus a sun halo, blurred by roughness.
     vec3 envSky(vec3 r, float pr) {
       vec3 c = mix(skyHorizon, skyZenith, pow(clamp(r.y, 0.0, 1.0), 0.45));
@@ -120,6 +129,12 @@ const mat = new THREE.ShaderMaterial({
       float a2 = alpha * alpha; float d = NdotH * NdotH * (a2 - 1.0) + 1.00001;
       float spec = min(a2 / ((d * d) * max(0.1, LdotH * LdotH) * (alpha * 4.0 + 2.0)), 100.0);
       vec3 glitter = lightColor * (NdotL * spec * schlick(_F0, LdotH));
+      float lampAlpha = max(alpha * 0.7, 0.07);
+      for (int k = 0; k < 16; k++) {
+        vec4 lp = lampPos[k]; if (lp.w <= 0.0) continue;
+        vec3 tl = lp.xyz - vPos; float d2 = max(dot(tl, tl), 1.0); vec3 Ll = tl * inversesqrt(d2);
+        glitter += lampColor * (clamp(dot(N, Ll), 0.0, 1.0) / d2) * ggx(N, V, Ll, lampAlpha);
+      }
       vec3 incoming = ambientUp + lightColor * clamp(Lh.y, 0.0, 1.0);
       float shallow = 1.0 - clamp(coast / _ShallowWidth, 0.0, 1.0);
       vec3 body = mix(_DeepColor, _ShallowColor, shallow * shallow);
@@ -154,6 +169,17 @@ const cam = new THREE.PerspectiveCamera(+(params.get('fov') || 55), W / H, 0.1, 
 const e = (params.get('eye') || '6,2.5,-40').split(',').map(Number), t = (params.get('target') || '120,0,400').split(',').map(Number);
 cam.position.set(-e[0], e[1], e[2]); cam.lookAt(-t[0], t[1], t[2]);
 mat.uniforms.camPos.value.copy(cam.position);
+if (params.get('lamps')) {
+  // WaterOptics.LampColor x LampIntensity; the 16 lamps nearest the camera (three.js x mirrored).
+  mat.uniforms.lampColor.value.set(1.0, 0.72, 0.42).multiplyScalar(50);
+  const heads = [];
+  for (let z = -600; z <= 900; z += 30) heads.push(new THREE.Vector3(2, 9.5, z));
+  heads.sort((a, b) => a.distanceToSquared(cam.position) - b.distanceToSquared(cam.position));
+  heads.slice(0, 16).forEach((h, k) => mat.uniforms.lampPos.value[k].set(h.x, h.y, h.z, 1));
+  const headMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.0, 0.72, 0.42).multiplyScalar(2.2) });
+  for (const h of heads) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.5), headMat); m.position.copy(h); scene.add(m);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 9), stone); pole.position.set(h.x + 1.8, 5, h.z); scene.add(pole); }
+}
 renderer.render(scene, cam);
 window.renderDone = true;
 </script></body></html>

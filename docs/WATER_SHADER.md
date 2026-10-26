@@ -36,6 +36,16 @@
 - Ohne URP oder wenn der Shader nicht unterstützt wird, bleibt das bisherige glänzende Lit-Material mit wanderender Normal-Map.
 - Der Shader liegt in `Runtime/Resources/Shaders/` und wird deshalb in jeden Build aufgenommen.
 
+## Laternen bei Nacht
+- **Punktlichter:** Die 16 Straßenlaternen, die der Kamera am nächsten sind, gehen als Punktlichter nur in die Glanzberechnung des Wassers ein.
+  - Übergabe als globale Shader-Werte, damit das Material SRP-Batcher-tauglich bleibt; neu ausgewählt alle 0,25 s.
+  - Die Wellenrauheit zieht jede Laterne zu einer eigenen senkrechten Lichtbahn.
+- **Stärke:** 50 (Unity-Einheiten, warmweiß). Das ist ein in der Vorschau eingestellter Gestaltungswert, kein Messwert.
+  - Bei 150 wirkte das Wasser vor der Kamera flächig hell.
+- **Reflexionssonde:** wird jetzt auch neu aufgenommen, wenn sich das Kunstlicht (Fenster, Laternen) spürbar ändert.
+
+![Wasser bei Nacht](img/water_night.jpg)
+
 ## Offline-Vorschau
 GLSL-Portierung mit derselben Wellentextur und denselben Konstanten. Licht aus `SkyModel` (`sky-json`).
 
@@ -66,6 +76,5 @@ cd tools/carrender && APEX_PAGE=water.html APEX_VIEWS='glitter|400,3,0|-2000,0,-
 4. **Schaum an Kaimauern und Anlegern:**
    - Sitzt er an der richtigen Linie? Die Uferlinien sind Näherungen.
    - Ein Raster aus 5,9-m-Zellen darf nicht sichtbar werden.
-5. **Nacht:** Wasser fast schwarz mit Spiegelung der Lichter.
-   - Die Straßenlaternen spiegeln sich noch nicht direkt (keine Zusatzlichter im Shader); offen für Phase 6.
+5. **Nacht:** Lichtbahnen der Laternen am Kai, kein flächiges Aufhellen vor der Kamera; falls doch, `WaterOptics.LampIntensity` senken.
 6. **Mobil:** Kosten messen (3 Normal-Samples + 2 für Schaum, 1 Würfelkarten-Sample).

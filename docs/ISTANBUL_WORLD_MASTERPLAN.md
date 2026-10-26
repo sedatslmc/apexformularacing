@@ -77,8 +77,8 @@
 | Globale Echtzeit-Reflexionssonde nach Grafikstufe (nasse Straße, Lack, Glas) | Code | **implementiert, kompiliergeprüft**; Unity-Prüfung offen |
 | Asphalt, Auslauf und Kerbs mit gescannten CC0-Texturen (Poly Haven); Lizenzzeilen | Code + Assets (frei) | **importiert, offline geprüft**; Unity-Prüfung offen (`CC0_MATERIALS.md`) |
 | Ultra-Stufe: 4K-Sätze für PC, bei Bedarf geladen (`fetch_cc0.py --tier ultra`), A/B-Schalter in den Optionen | Code + Assets (frei) | **implementiert, offline geprüft**; kein sichtbarer Gewinn in der Vorschau, Unity-Prüfung offen |
-| Beton (Barrieren), Gehwege, Detail-Maps für Nahsicht | Code + Assets (frei) | geplant |
-| Reifenabrieb- und Bremsspur-Decals entlang der Ideallinie | Code + Textur | geplant |
+| Beton (Barrieren, als Detailkarte), Gehwege (Verbundpflaster), Detail-Maps für Nahsicht | Code + Assets (frei) | **importiert, kompiliergeprüft, offline gesehen**; Unity-Prüfung offen (`CC0_MATERIALS.md`) |
+| Reifenabrieb- und Bremsspur-Decals entlang der Ideallinie | Code + Textur | **implementiert, getestet, offline gesehen**; Unity-Prüfung offen |
 
 ### Phase 2 – Ortaköy T1 (300–500 m Vertical Slice)
 | Aufgabe | Art | Status |

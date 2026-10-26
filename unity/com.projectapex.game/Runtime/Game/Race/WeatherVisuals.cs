@@ -24,7 +24,7 @@ namespace Apex.Game
         /// <summary>Settings switch for the URP post-processing volume (applied live).</summary>
         public bool postProcessing = true;
         SkyModel.Lighting light;
-        float lightCloud = -1f, reflectedCloud = -1f, reflectedWet = -1f;
+        float lightCloud = -1f, reflectedCloud = -1f, reflectedWet = -1f, reflectedArtificial = -1f;
         PostFxStack postFx;
         EnvironmentReflections reflections;
         Material skyMaterial;
@@ -151,11 +151,14 @@ namespace Apex.Game
             float rainI = weather.RainIntensity;
             float wet = weather.TrackWetness;
             if (Mathf.Abs(cloud - lightCloud) > 0.005f) ApplyLighting(cloud);
-            if (reflections != null && (Mathf.Abs(cloud - reflectedCloud) > 0.08f || Mathf.Abs(wet - reflectedWet) > 0.15f))
+            float artificial = Mathf.Max(light.artificial, cloud * 0.35f);
+            if (reflections != null && (Mathf.Abs(cloud - reflectedCloud) > 0.08f || Mathf.Abs(wet - reflectedWet) > 0.15f
+                || Mathf.Abs(artificial - reflectedArtificial) > 0.1f))
             {
-                // Sky and wet surfaces look different enough to capture the surroundings again.
+                // Sky, wet surfaces or the lit windows and lamps changed enough to capture the surroundings again.
                 reflectedCloud = cloud;
                 reflectedWet = wet;
+                reflectedArtificial = artificial;
                 reflections.Invalidate();
             }
             RenderSettings.fogStartDistance = Mathf.Lerp(600f, 60f, rainI);
@@ -170,7 +173,7 @@ namespace Apex.Game
                 environment.SetWetness(wet);
                 environment.RainIntensity = rainI;
                 // Heavy overcast and rain switch some lights on early.
-                environment.SetArtificialLight(Mathf.Max(light.artificial, cloud * 0.35f));
+                environment.SetArtificialLight(artificial);
             }
             if (rain != null && cameraTransform != null)
             {
