@@ -1,0 +1,17 @@
+{
+  "name": "asphalt",
+  "metres": 2.0,
+  "meanSmoothness": 0.1707,
+  "meanAlbedoLinear": 0.014,
+  "source": "https://polyhaven.com/a/asphalt_track",
+  "author": "Dimitrios Savva",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "2da0b8387834871c1fe12338e573c920484b27c520901e6015f9d0d4207faf16",
+    "Normal.png": "f393354adb8e82b8c38405134eee68d20252e89b79b37e95c7324eb3757c25e3",
+    "MetallicSmoothness.png": "300cc4e8c71646a08b4471375b26f175342a0b12a3937e94b6fe81dab71d1021",
+    "Occlusion.jpg": "edfee5792409fa3fcae7660dbae9db7af5f77c1f65d7716ff050eb384e27f7e5"
+  }
+}

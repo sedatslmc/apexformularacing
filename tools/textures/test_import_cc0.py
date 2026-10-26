@@ -32,7 +32,9 @@ class ImportCC0Test(unittest.TestCase):
             meta = json.load(open(os.path.join(d, "source.json")))
             self.assertEqual(meta["metres"], 3)
             self.assertAlmostEqual(meta["meanSmoothness"], 1 - 179 / 255, places=3)
-            for f in ("BaseColor.png", "PaintBase.png", "Normal.png", "MetallicSmoothness.png", "Occlusion.png"):
+            self.assertGreater(meta["meanAlbedoLinear"], 0.04)   # sRGB 60..140 -> linear about 0.05..0.26
+            self.assertLess(meta["meanAlbedoLinear"], 0.2)
+            for f in ("BaseColor.jpg", "PaintBase.jpg", "Normal.png", "MetallicSmoothness.png", "Occlusion.jpg"):
                 self.assertIn(f, meta["files"])
             nrm = np.asarray(Image.open(os.path.join(d, "Normal.png")))
             self.assertEqual(nrm[0, 0, 1], 155, "DirectX green flipped to OpenGL")
@@ -40,7 +42,7 @@ class ImportCC0Test(unittest.TestCase):
             self.assertEqual(ms.shape[2], 4)
             self.assertEqual(ms[..., 0].max(), 0, "not metallic")
             self.assertAlmostEqual(ms[..., 3].mean() / 255, 1 - 179 / 255, places=2)
-            paint = np.asarray(Image.open(os.path.join(d, "PaintBase.png")).convert("L"))
+            paint = np.asarray(Image.open(os.path.join(d, "PaintBase.jpg")).convert("L"))
             self.assertAlmostEqual(paint.mean() / 255, 0.82, places=2)
 
 

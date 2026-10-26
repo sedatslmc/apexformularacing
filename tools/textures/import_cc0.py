@@ -11,12 +11,13 @@ Recognised maps (case-insensitive):
   ARM          *_arm_* (AO, roughness, metal packed in R, G, B; used when single maps are missing)
 
 Output: unity/com.projectapex.game/Runtime/Resources/Textures/CC0/<name>/
-  BaseColor.png          sRGB albedo
-  PaintBase.png          (--paint-base) desaturated albedo normalised to a light mean, for tinted paint (kerbs)
+  BaseColor.jpg          sRGB albedo (JPG q95 by default, --color-format png for lossless)
+  PaintBase.jpg          (--paint-base) desaturated albedo normalised to a light mean, for tinted paint (kerbs)
   Normal.png             OpenGL tangent-space normal (Unity's convention)
   MetallicSmoothness.png URP Lit metallic/smoothness map: R = metallic (0), A = smoothness (1 - roughness)
-  Occlusion.png          grey AO
-  source.json            name, real-world size, source, author, licence, mean smoothness, SHA-256 of the outputs
+  Occlusion.jpg          grey AO
+  source.json            name, real-world size, source, author, licence, mean smoothness, mean linear albedo,
+                         SHA-256 of the outputs
 
 Usage:
   python3 tools/textures/import_cc0.py <folder|zip> --name asphalt --metres 4 --source-url <page> --author "<name>"
@@ -92,7 +93,10 @@ def load(opener, mode, size):
 
 
 def write(img, path):
-    img.save(path, optimize=True)
+    if path.endswith(".jpg"):
+        img.convert("RGB").save(path, quality=95, subsampling=0, optimize=True)
+    else:
+        img.save(path, optimize=True)
     with open(path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
 
@@ -136,6 +140,8 @@ def main(argv=None):
     ap.add_argument("--max-size", type=int, default=2048, help="largest output size (px); platform limits are set on import")
     ap.add_argument("--paint-base", action="store_true", help="also write PaintBase.png (desaturated, for tinted paint)")
     ap.add_argument("--out-root", default=OUT_ROOT)
+    ap.add_argument("--color-format", choices=("jpg", "png"), default="jpg",
+                    help="colour, paint base and AO as high-quality JPG (default, small repo) or PNG; normal and smoothness are always PNG")
     a = ap.parse_args(argv)
 
     tmp = None
@@ -164,13 +170,22 @@ def main(argv=None):
 
     color = load(maps["color"], "RGB", size)
     size = color.size[0]
-    hashes["BaseColor.png"] = write(color, os.path.join(out, "BaseColor.png"))
+    # Mean linear albedo (sRGB decoded, Rec. 709 luminance): the game calibrates tints against it.
+    srgb = np.asarray(color, dtype=np.float32) / 255.0
+    lin = np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4)
+    mean_albedo = float((lin @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)).mean())
+    cext = "." + a.color_format
+    for old in ("BaseColor", "PaintBase", "Occlusion"):   # a re-import in the other format must not leave both
+        for ext in (".png", ".jpg"):
+            if ext != cext and os.path.exists(os.path.join(out, old + ext)):
+                os.remove(os.path.join(out, old + ext))
+    hashes["BaseColor" + cext] = write(color, os.path.join(out, "BaseColor" + cext))
 
     if a.paint_base:
         lum = np.asarray(color.convert("L"), dtype=np.float32) / 255.0
         # Keep the variation, move the mean to 0.82 so a tint gives the paint colour with wear and grain.
         lum = (lum - lum.mean()) * 0.6 + 0.82
-        hashes["PaintBase.png"] = write(Image.fromarray((lum.clip(0, 1) * 255).astype(np.uint8)).convert("RGB"), os.path.join(out, "PaintBase.png"))
+        hashes["PaintBase" + cext] = write(Image.fromarray((lum.clip(0, 1) * 255).astype(np.uint8)).convert("RGB"), os.path.join(out, "PaintBase" + cext))
 
     if "normal_gl" in maps or "normal_dx" in maps:
         n = np.asarray(load(maps.get("normal_gl") or maps["normal_dx"], "RGB", size), dtype=np.uint8).copy()
@@ -199,12 +214,13 @@ def main(argv=None):
     else:
         ao = None
     if ao is not None:
-        hashes["Occlusion.png"] = write(ao.convert("RGB"), os.path.join(out, "Occlusion.png"))
+        hashes["Occlusion" + cext] = write(ao.convert("RGB"), os.path.join(out, "Occlusion" + cext))
 
     meta = {
         "name": a.name,
         "metres": metres,
         "meanSmoothness": round(mean_smooth, 4) if mean_smooth is not None else -1,
+        "meanAlbedoLinear": round(mean_albedo, 4),
         "source": source_url,
         "author": author,
         "licence": a.licence,
