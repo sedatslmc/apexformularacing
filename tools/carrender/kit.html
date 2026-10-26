@@ -98,6 +98,21 @@ const mats = {
   Ground: M({ color: 0x5f6b45, roughness: 1 }),
   TurkishFlag: M({ map: new THREE.TextureLoader().load('/flag_tex.png', (t) => { t.colorSpace = THREE.SRGBColorSpace; }), side: THREE.DoubleSide, roughness: 0.75 }),
 };
+// Optional scanned CC0 sets (&cc0=1): files prepared in ./cc0/ from Resources/Textures/CC0 (gitignored);
+// UVs of road, kerbs and run-off are metric (10 m per unit), so repeat = 10 / tile size.
+if (params.get('cc0')) {
+  const L = new THREE.TextureLoader();
+  const tex = (f, rep, srgb) => { const t = L.load('/cc0/' + f); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 16; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const set = (name, metres, paint, color) => M({
+    map: tex(name + (paint ? '_paint.jpg' : '_color.jpg'), 10 / metres, true), color: color ?? 0xffffff,
+    normalMap: tex(name + '_normal.png', 10 / metres, false), roughnessMap: tex(name + '_rough.png', 10 / metres, false), roughness: 1, metalness: 0,
+  });
+  // Linear albedo calibration as in the game (SurfaceTextures.AlbedoTint): target / mean of the scan.
+  mats.Asphalt = set('asphalt', 2.0); mats.Asphalt.color.setScalar(+(params.get('asphaltTint') || 5.0));
+  mats.RunoffAsphalt = set('runoff', 2.1); mats.RunoffAsphalt.color.setScalar(+(params.get('runoffTint') || 1.49));
+  mats.KerbRed = set('kerb', 3.0, true, 0xc71a14);
+  mats.KerbWhite = set('kerb', 3.0, true, 0xf0f0f0);
+}
 const fallback = M({ color: 0xff00ff });
 
 // Golden hour: sun at 252° true, 11° elevation, true north 308° in the game frame (SunModel).

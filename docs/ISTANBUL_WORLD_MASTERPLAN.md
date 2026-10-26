@@ -73,7 +73,7 @@
 | Validierung auf alle weiteren Objekte ausdehnen (Ampeln, Poller, Bänke, Bäume an Straßen, Werbetafeln), sobald es sie gibt; ein gemeinsamer Test pro Objektart | Code | geplant |
 | Bodenhaftung: jedes Objekt am Gelände bzw. der Straße ausrichten (kein Schweben), automatischer Test über alle Platzierungen | Code | geplant |
 | URP-Asset Ultra/Hoch/Mittel/Mobil (Schatten, Kaskaden, Render-Scale, MSAA bzw. TAA, SSAO nur ab Hoch) | Editor | geplant |
-| Asphalt und Kerbs mit gescannten CC0-Texturen (Poly Haven, ambientCG); Lizenzzeilen | Code + Assets (frei) | **Pipeline getestet**, Texturen fehlen (Download gesperrt), siehe `CC0_MATERIALS.md` |
+| Asphalt, Auslauf und Kerbs mit gescannten CC0-Texturen (Poly Haven); Lizenzzeilen | Code + Assets (frei) | **importiert, offline geprüft**; Unity-Prüfung offen (`CC0_MATERIALS.md`) |
 | Beton (Barrieren), Gehwege, Detail-Maps für Nahsicht | Code + Assets (frei) | geplant |
 | Reifenabrieb- und Bremsspur-Decals entlang der Ideallinie | Code + Textur | geplant |
 

@@ -33,3 +33,4 @@ data/geo/osm/*.osm
 
 data/geo/osm/bosphorus_osm.json
 tools/carrender/flag_tex.png
+tools/carrender/cc0/
