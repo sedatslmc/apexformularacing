@@ -5,6 +5,10 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+#if APEX_URP
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+#endif
 
 namespace Apex.EditorTools
 {
@@ -25,6 +29,7 @@ namespace Apex.EditorTools
             ApplyPlayerSettings();
             CreateMaterials();
             CreateBootScene();
+            SetupGraphics();
             Debug.Log("[Apex] Projekt eingerichtet. Szene: " + ScenePath + " – Play drücken.");
         }
 
@@ -116,6 +121,55 @@ namespace Apex.EditorTools
             }
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
+        }
+
+        /// <summary>
+        /// Adds the SSAO renderer feature (inactive) to every URP renderer used by the project, so the High and
+        /// Ultra tiers can switch it on at runtime (<see cref="GraphicsQuality"/>). The PC renderer of the
+        /// "Universal 3D" template already has it; the mobile renderer usually not. Done the way URP's own
+        /// renderer inspector adds a feature: sub-asset plus list and file-id map entry.
+        /// </summary>
+        [MenuItem("Project Apex/4. Grafik einrichten (URP: SSAO)", priority = 23)]
+        public static void SetupGraphics()
+        {
+#if APEX_URP
+            var assets = new List<UniversalRenderPipelineAsset>();
+            if (GraphicsSettings.defaultRenderPipeline is UniversalRenderPipelineAsset d) assets.Add(d);
+            for (int i = 0; i < QualitySettings.names.Length; i++)
+                if (QualitySettings.GetRenderPipelineAssetAt(i) is UniversalRenderPipelineAsset q && !assets.Contains(q)) assets.Add(q);
+            int added = 0;
+            var seen = new HashSet<ScriptableRendererData>();
+            foreach (var asset in assets)
+                foreach (var data in asset.rendererDataList)
+                {
+                    if (data == null || !seen.Add(data) || data.TryGetRendererFeature(out ScreenSpaceAmbientOcclusion _)) continue;
+                    if (string.IsNullOrEmpty(AssetDatabase.GetAssetPath(data))) continue;
+                    var feature = ScriptableObject.CreateInstance<ScreenSpaceAmbientOcclusion>();
+                    feature.name = "ScreenSpaceAmbientOcclusion";
+                    feature.SetActive(false);   // the graphics tier switches it on
+                    AssetDatabase.AddObjectToAsset(feature, data);
+                    var so = new SerializedObject(data);
+                    var list = so.FindProperty("m_RendererFeatures");
+                    var map = so.FindProperty("m_RendererFeatureMap");
+                    list.arraySize++;
+                    list.GetArrayElementAtIndex(list.arraySize - 1).objectReferenceValue = feature;
+                    if (map != null && AssetDatabase.TryGetGUIDAndLocalFileIdentifier(feature, out string _, out long id))
+                    {
+                        map.arraySize++;
+                        map.GetArrayElementAtIndex(map.arraySize - 1).longValue = id;
+                    }
+                    so.ApplyModifiedProperties();
+                    data.SetDirty();
+                    EditorUtility.SetDirty(data);
+                    added++;
+                }
+            AssetDatabase.SaveAssets();
+            Debug.Log(assets.Count == 0
+                ? "[Apex] Kein URP-Asset aktiv – Grafikstufen laufen mit der Standard-Pipeline (ohne SSAO, ohne URP-Kantenglättung)."
+                : $"[Apex] Grafik eingerichtet: SSAO bei {added} Renderer(n) ergänzt ({assets.Count} URP-Asset(s) geprüft).");
+#else
+            Debug.Log("[Apex] URP ist nicht installiert – Grafikstufen nutzen die Standard-Pipeline (ohne SSAO).");
+#endif
         }
 
         [MenuItem("Project Apex/3. Boot-Szene erzeugen", priority = 22)]

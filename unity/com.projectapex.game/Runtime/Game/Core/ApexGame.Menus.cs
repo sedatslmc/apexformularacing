@@ -510,7 +510,16 @@ namespace Apex.Game
                 new Row { label = "HUD-Größe", value = () => $"{s.hudScale * 100f:0} %", change = d => s.hudScale += (d == 0 ? 1 : d) * 0.05f },
                 new Row { label = "Geschwindigkeit", value = () => s.speedInMph ? "mph" : "km/h", change = d => s.speedInMph = !s.speedInMph },
                 new Row { label = "Reduzierte Bewegung", value = () => OnOff(s.reducedMotion), change = d => s.reducedMotion = !s.reducedMotion },
-                new Row { label = "Umgebungsdetails", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
+                new Row { label = "Grafikstufe", value = () => GraphicsTierLabel(s.graphicsTier),
+                    change = d =>
+                    {
+                        // -1 (Auto) .. Ultra; the tier also sets its environment density and road textures.
+                        s.graphicsTier = Wrap(s.graphicsTier + 1 + (d < 0 ? -1 : 1), GraphicsPreset.TierCount + 1) - 1;
+                        var p = GraphicsPreset.For(GraphicsQuality.Resolve(s.graphicsTier));
+                        s.environmentDetail = p.environmentDetail;
+                        s.ultraTextures = p.ultraTextures;
+                    } },
+                new Row { label = "Umgebungsdetails (ab nächster Session)", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
                     change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
@@ -520,8 +529,17 @@ namespace Apex.Game
                     change = d => s.ultraTextures = !s.ultraTextures });
             // Only with URP: the built-in pipeline has no post-processing stack here.
             if (PostFxStack.Supported)
-                rows.Insert(rows.Count - 1, new Row { label = "Nachbearbeitung (Farbe, Bloom, FXAA)", value = () => OnOff(s.postProcessing), change = d => s.postProcessing = !s.postProcessing });
+                rows.Insert(rows.Count - 1, new Row { label = "Nachbearbeitung (Farbe, Bloom)", value = () => OnOff(s.postProcessing), change = d => s.postProcessing = !s.postProcessing });
             return rows;
+        }
+
+        static string GraphicsTierLabel(int setting)
+        {
+            string name = GraphicsPreset.Name(GraphicsQuality.Resolve(setting));
+            string label = setting < 0 ? "Auto (" + name + ")" : name;
+            // Honest label: the tier asks for SSAO, but this renderer has no SSAO feature.
+            if (GraphicsQuality.Current.ssao && !GraphicsQuality.SsaoAvailable && PostFxStack.Supported) label += ", ohne SSAO";
+            return label;
         }
 
         void DrawSettings()
@@ -569,6 +587,7 @@ namespace Apex.Game
             input.ApplySettings(Settings);
             ApplyAssists();
             if (weatherVisuals != null) weatherVisuals.postProcessing = Settings.postProcessing;
+            ApplyGraphics();
             SaveService.SaveSettings(Settings);
         }
 

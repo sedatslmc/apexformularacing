@@ -14,7 +14,7 @@
 | Gebäude | `CityLayout` + `EnvironmentGeometry.Building`: **Quader** mit 6 prozeduralen Fassadentexturen, Walm- oder Flachdach, 3 Entfernungsbänder (z. B. 2.863 nahe Gebäude bei niedriger Qualität) | Größter Bruch zum Ziel: „Boxen mit gemalten Fenstern“, gleiche Fassaden wiederholen sich, keine Tiefe (Fenster, Gesimse, Balkone) | **1** |
 | Wahrzeichen | `LandmarkGeometry`: Silhouetten aus Grundkörpern (Moschee, Paläste, Brücke, Galata, Leanderturm, Sultan-Ahmed, Hagia Sophia); Drop-in für Prefabs vorhanden | Auf Distanz erkennbar, aus der Nähe Platzhalter | **2** |
 | Material | URP Lit mit Farbe und einigen prozeduralen Texturen (Asphalt mit Normal-Map, Beton, Fassaden, Gitter); keine Masken-, Detail- oder AO-Maps, keine Decals | „Plastisch“ und steril, fehlende Abnutzung | **3** |
-| Licht | `SunModel` (goldene Stunde im WSW), Trilight-Ambient, linearer Nebel, prozeduraler Himmel, `PostFxStack` (ACES, Farbe, Bloom, FXAA, nur URP); kein GI, keine Reflexionssonden, kein AO | Richtung und Farbe stimmen; indirektes Licht und Reflexionen fehlen | 4 |
+| Licht | `SkyModel` (echter Sonnenstand, Atmosphäre, Himmelslicht), Trilight-Ambient nach Tageszeit, linearer Nebel, prozeduraler Himmel, `PostFxStack` (ACES, Farbe, Bloom), Grafikstufen mit SSAO und einer globalen Reflexionssonde (seit 2026-10-26); kein GI | Richtung, Farbe und Verhältnis Sonne/Himmel stimmen; GI und lokale Sonden fehlen | 4 |
 | Wasser | Fläche mit prozeduraler Normal-Map | Kein Fresnel, keine Tiefe, kein Schaum: „flache Ebene“ | 5 |
 | Vegetation | 3 prozedurale Baumtypen (Platane, Schirmpinie, Zypresse) | Grob; keine Sträucher, Hecken, Wiesen | 6 |
 | Straßenraum | Gehweg-Streifen, Laternen, 6 Straßenschilder, Sponsorentafeln | Leer: keine Möbel, Läden, Cafés, geparkten Autos | 7 |
@@ -72,7 +72,9 @@
 | Laternen, Gehwege, Schilder, Flaggen gegen die Sperrzone prüfen | Code | **getestet** |
 | Validierung auf alle weiteren Objekte ausdehnen (Ampeln, Poller, Bänke, Bäume an Straßen, Werbetafeln), sobald es sie gibt; ein gemeinsamer Test pro Objektart | Code | geplant |
 | Bodenhaftung: jedes Objekt am Gelände bzw. der Straße ausrichten (kein Schweben), automatischer Test über alle Platzierungen | Code | geplant |
-| URP-Asset Ultra/Hoch/Mittel/Mobil (Schatten, Kaskaden, Render-Scale, MSAA bzw. TAA, SSAO nur ab Hoch) | Editor | geplant |
+| Grafikstufen Mobil/Mittel/Hoch/Ultra zur Laufzeit (Schatten, Kaskaden, Render-Scale, FXAA/SMAA/MSAA/TAA, SSAO ab Hoch, LOD, Anisotropie), Menü „Grafikstufe“ (`LIGHTING_AND_GRAPHICS.md`) | Code (+ Editor-Menü für SSAO) | **implementiert, getestet ohne Unity**; Editor-Prüfung und Messung offen |
+| Licht aus Sonnenstand und Himmelsmodell (NOAA, Atmosphäre, Himmelslicht, Belichtungsanpassung); Umgebungslicht folgt jetzt Tageszeit und Wolken | Code | **implementiert, getestet**; Unity-Prüfung offen |
+| Globale Echtzeit-Reflexionssonde nach Grafikstufe (nasse Straße, Lack, Glas) | Code | **implementiert, kompiliergeprüft**; Unity-Prüfung offen |
 | Asphalt, Auslauf und Kerbs mit gescannten CC0-Texturen (Poly Haven); Lizenzzeilen | Code + Assets (frei) | **importiert, offline geprüft**; Unity-Prüfung offen (`CC0_MATERIALS.md`) |
 | Ultra-Stufe: 4K-Sätze für PC, bei Bedarf geladen (`fetch_cc0.py --tier ultra`), A/B-Schalter in den Optionen | Code + Assets (frei) | **implementiert, offline geprüft**; kein sichtbarer Gewinn in der Vorschau, Unity-Prüfung offen |
 | Beton (Barrieren), Gehwege, Detail-Maps für Nahsicht | Code + Assets (frei) | geplant |
@@ -141,6 +143,8 @@
 | Mittel | PC/Konsole Mittelklasse | LOD0 nah, 4 Kaskaden, FXAA bzw. SMAA |
 | Hoch | starker PC | SSAO, Reflexionssonden, höhere Texturauflösung, weitere LOD-Distanzen |
 | Ultra/Cinematic | sehr starker PC | maximale Texturen und LOD-Distanzen, TAA, hochwertiges Wasser, Hero-Fahnen überall jedes Bild |
+
+Die umgesetzten Werte je Stufe stehen in `LIGHTING_AND_GRAPHICS.md` (Abschnitt 2); Mobil nutzt die 1K-Straßentexturen.
 
 Nicht jede Funktion ist auf jeder Hardware gleichzeitig sinnvoll. Die Stufen werden im Editor festgelegt und gemessen (Aufgabe #6 „Grafik-Presets“).
 

@@ -1,4 +1,5 @@
 // API stubs (signatures only) of com.unity.render-pipelines.core / .universal 17.x.
+// Checked against the 6000.0/staging sources (URP 17.0.4) of Unity-Technologies/Graphics.
 namespace UnityEngine.Rendering
 {
     public class VolumeParameter<T>
@@ -74,5 +75,51 @@ namespace UnityEngine.Rendering.Universal
     public static class CameraExtensions
     {
         public static UniversalAdditionalCameraData GetUniversalAdditionalCameraData(this Camera camera) => null;
+    }
+
+    public enum SoftShadowQuality { UsePipelineSettings, Low, Medium, High }
+
+    public class UniversalAdditionalLightData : MonoBehaviour
+    {
+        public SoftShadowQuality softShadowQuality { get; set; }
+    }
+
+    public static class LightExtensions
+    {
+        public static UniversalAdditionalLightData GetUniversalAdditionalLightData(this Light light) => null;
+    }
+
+    public abstract class ScriptableRendererFeature : ScriptableObject
+    {
+        public bool isActive => true;
+        public void SetActive(bool active) { }
+        public abstract void Create();
+    }
+
+    public class ScreenSpaceAmbientOcclusion : ScriptableRendererFeature
+    {
+        public override void Create() { }
+    }
+
+    public abstract class ScriptableRendererData : ScriptableObject
+    {
+        public System.Collections.Generic.List<ScriptableRendererFeature> rendererFeatures => null;
+        public bool TryGetRendererFeature<T>(out T rendererFeature) where T : ScriptableRendererFeature { rendererFeature = null; return false; }
+        public new void SetDirty() { }
+    }
+
+    public class UniversalRenderPipelineAsset : RenderPipelineAsset
+    {
+        public override RenderPipeline CreatePipeline() => null;   // protected in Unity 6, public in the 2021.3 reference assemblies
+        public System.ReadOnlySpan<ScriptableRendererData> rendererDataList => default;
+        public float renderScale { get; set; }
+        public int msaaSampleCount { get; set; }
+        public float shadowDistance { get; set; }
+        public int shadowCascadeCount { get; set; }
+        public float cascade2Split { get; set; }
+        public Vector2 cascade3Split { get; set; }
+        public Vector3 cascade4Split { get; set; }
+        public int mainLightShadowmapResolution { get; set; }
+        public int maxAdditionalLightsCount { get; set; }
     }
 }

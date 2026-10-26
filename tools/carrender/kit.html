@@ -115,10 +115,21 @@ if (params.get('cc0')) {
 }
 const fallback = M({ color: 0xff00ff });
 
-// Golden hour: sun at 252° true, 11° elevation, true north 308° in the game frame (SunModel).
-const az = (252 + 308) * Math.PI / 180, el = 11 * Math.PI / 180;
+// Lighting. Default: the original golden-hour look (sun 252° true, 11°, true north 308°).
+// &sky=<json> takes the game's values instead (dotnet run -- sky-json <time> [cloud] [north] in build/Apex.Tuning):
+// sun azimuth/elevation/colour/intensity, Trilight ambient (projected into a light probe), fog, exposure.
+// Unity Lit has no 1/pi in its diffuse term, three.js does: light intensities are multiplied by pi.
+const sky = params.get('sky') ? JSON.parse(params.get('sky')) : null;
+const north = sky ? (sky.north ?? 0) : 308;
+const az = ((sky ? sky.azimuth : 252) + north) * Math.PI / 180, el = Math.max(2, sky ? sky.elevation : 11) * Math.PI / 180;
 const sunDir = new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
-const sun = new THREE.DirectionalLight(0xffc78c, 3.2);
+const srgb = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+const sun = sky ? new THREE.DirectionalLight(srgb(sky.sun), sky.intensity * Math.PI) : new THREE.DirectionalLight(0xffc78c, 3.2);
+if (sky) {
+  scene.background = srgb(sky.fog);
+  scene.fog = new THREE.Fog(srgb(sky.fog), 600, 8000);
+  renderer.toneMappingExposure = Math.pow(2, sky.postExposure ?? 0);
+}
 const focus = (params.get('target') || '0,0,0').split(',').map(Number);
 const fp = new THREE.Vector3(-focus[0], focus[1], focus[2]);
 const sr = +(params.get('shadow') || 60);
@@ -126,7 +137,20 @@ sun.position.copy(fp).addScaledVector(sunDir, sr * 3); sun.target.position.copy(
 sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
 Object.assign(sun.shadow.camera, { left: -sr, right: sr, top: sr, bottom: -sr, near: 1, far: sr * 6 });
 scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(0x8fa9c8, 0x5b5040, 1.1));
+if (sky) {
+  // Trilight as Unity defines it: sky above, equator at the horizon, ground below; projected into SH.
+  const S = srgb(sky.ambientSky), E = srgb(sky.ambientEquator), G = srgb(sky.ambientGround);
+  const probe = new THREE.LightProbe(), basis = new Array(9).fill(0), n = 4096, d = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    const y = 1 - 2 * (i + 0.5) / n, r = Math.sqrt(1 - y * y), phi = i * 2.399963;
+    d.set(Math.cos(phi) * r, y, Math.sin(phi) * r);
+    const c = y >= 0 ? E.clone().lerp(S, y) : E.clone().lerp(G, -y);
+    THREE.SphericalHarmonics3.getBasisAt(d, basis);
+    for (let k = 0; k < 9; k++) probe.sh.coefficients[k].add(new THREE.Vector3(c.r, c.g, c.b).multiplyScalar(basis[k] * 4 * Math.PI / n));
+  }
+  probe.intensity = 1;
+  scene.add(probe);
+} else scene.add(new THREE.HemisphereLight(0x8fa9c8, 0x5b5040, 1.1));
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), M({ color: 0x6e6a5e, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = +(params.get('groundY') || -0.2); ground.receiveShadow = true; scene.add(ground);
 

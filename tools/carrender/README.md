@@ -12,3 +12,9 @@ python3 contact_sheet.py /tmp/a01 /tmp/sheet.png side front rear top front34 rea
 Die Materialwerte in `render.html` entsprechen den URP-Materialien in `ApexMaterials`.
 Bei Unity-Lit sehen die Bilder nur ähnlich aus, nicht identisch. Verbindlich ist die Darstellung im Editor.
 `node_modules/` wird nicht eingecheckt.
+
+## Rennstrecken-Kit mit Spiel-Licht (`kit.html`)
+- `&cc0=1`: gescannte CC0-Sätze aus `./cc0/` (siehe `docs/CC0_MATERIALS.md`).
+- `&sky=<json>`: Sonne, Trilight-Umgebungslicht, Dunst und Belichtung aus `SkyModel`; das JSON liefert
+  `cd build/Apex.Tuning && dotnet run -c Release -- sky-json <Tageszeit> [Bewölkung] [Nordrichtung]` (URL-kodiert anhängen).
+  Vergleich alt/neu: `docs/LIGHTING_AND_GRAPHICS.md`.

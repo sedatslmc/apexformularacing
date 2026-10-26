@@ -11,8 +11,8 @@ namespace Apex.Game
     /// Global URP post-processing volume created at runtime: ACES tonemapping, colour
     /// adjustments, white balance, bloom and vignette from <see cref="ColorGrading"/>.
     /// Only active with the URP package (APEX_URP, see Apex.Runtime.asmdef versionDefines);
-    /// with the built-in pipeline it does nothing. Bloom runs in low-quality filtering and
-    /// anti-aliasing is FXAA, both chosen for mobile cost (not measured on devices yet).
+    /// with the built-in pipeline it does nothing. Bloom filtering quality follows the graphics
+    /// tier; anti-aliasing belongs to <see cref="GraphicsQuality"/> (it stays on when the grade is off).
     /// </summary>
     public sealed class PostFxStack : MonoBehaviour
     {
@@ -35,14 +35,11 @@ namespace Apex.Game
         Bloom bloom;
         Vignette vignette;
         Volume volume;
-        UniversalAdditionalCameraData cameraData;
-        bool cameraPostBefore;
-        AntialiasingMode cameraAaBefore;
 #endif
         bool active;
 
-        /// <summary>Creates the volume and turns post-processing on for the camera (no-op without URP).</summary>
-        public void Init(Camera cam, bool enabledBySettings)
+        /// <summary>Creates the global volume (no-op without URP).</summary>
+        public void Init(bool enabledBySettings)
         {
 #if APEX_URP
             profile = ScriptableObject.CreateInstance<VolumeProfile>();
@@ -52,7 +49,7 @@ namespace Apex.Game
             adjust = profile.Add<ColorAdjustments>(true);
             white = profile.Add<WhiteBalance>(true);
             bloom = profile.Add<Bloom>(true);
-            bloom.highQualityFiltering.Override(false);
+            bloom.highQualityFiltering.Override(GraphicsQuality.Current.bloomHighQuality);
             vignette = profile.Add<Vignette>(true);
             vignette.color.Override(Color.black);
             vignette.smoothness.Override(0.45f);
@@ -60,12 +57,6 @@ namespace Apex.Game
             volume.isGlobal = true;
             volume.priority = 10f;
             volume.sharedProfile = profile;
-            if (cam != null) cameraData = cam.GetUniversalAdditionalCameraData();
-            if (cameraData != null)
-            {
-                cameraPostBefore = cameraData.renderPostProcessing;
-                cameraAaBefore = cameraData.antialiasing;
-            }
 #endif
             active = !enabledBySettings;
             SetEnabled(enabledBySettings);
@@ -77,11 +68,6 @@ namespace Apex.Game
             active = on;
 #if APEX_URP
             if (volume != null) volume.enabled = on;
-            if (cameraData != null)
-            {
-                cameraData.renderPostProcessing = on || cameraPostBefore;
-                cameraData.antialiasing = on ? AntialiasingMode.FastApproximateAntialiasing : cameraAaBefore;
-            }
 #endif
         }
 
@@ -97,6 +83,7 @@ namespace Apex.Game
             bloom.intensity.Override(g.bloomIntensity);
             bloom.threshold.Override(g.bloomThreshold);
             bloom.scatter.Override(g.bloomScatter);
+            bloom.highQualityFiltering.Override(GraphicsQuality.Current.bloomHighQuality);
             vignette.intensity.Override(g.vignette);
 #endif
         }
@@ -104,12 +91,6 @@ namespace Apex.Game
         void OnDestroy()
         {
 #if APEX_URP
-            // The camera outlives the race world: give it back the state it had before the race.
-            if (cameraData != null)
-            {
-                cameraData.renderPostProcessing = cameraPostBefore;
-                cameraData.antialiasing = cameraAaBefore;
-            }
             if (profile != null) Destroy(profile);
 #endif
         }

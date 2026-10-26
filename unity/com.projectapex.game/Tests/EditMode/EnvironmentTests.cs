@@ -185,7 +185,7 @@ namespace Apex.Tests
             Assert.That(SunModel.Get(TimeOfDay.Night).artificial, Is.EqualTo(1f));
             Assert.That(SunModel.Get(TimeOfDay.Day).artificial, Is.EqualTo(0f));
             // Game frame: true north at 308° => the western sun sits at 200° (towards -z/-x).
-            Assert.That(SunModel.GameAzimuth(golden, 308f), Is.EqualTo((252f + 308f) % 360f).Within(1e-3f));
+            Assert.That(SunModel.GameAzimuth(golden, 308f), Is.EqualTo((golden.azimuthTrue + 308f) % 360f).Within(1e-3f));
             var street = AmbienceMixer.Evaluate(400f, 600f, 0.9f, 20f);
             var quay = AmbienceMixer.Evaluate(20f, 60f, 0.1f, 2f);
             Assert.That(street.reverb, Is.GreaterThan(0.8f));

@@ -25,8 +25,8 @@
 - **Aufbau:** Ein globales Volume wird zur Laufzeit erzeugt mit:
   - ACES-Tonemapping
   - ColorAdjustments (Belichtung, Kontrast, Sättigung) und WhiteBalance
-  - Bloom (Low-Quality-Filter) und eine leichte Vignette
-  - FXAA an der Kamera
+  - Bloom (Filterqualität nach Grafikstufe) und eine leichte Vignette
+  - Kantenglättung gehört seit der Grafikstufen-Umstellung zu `GraphicsQuality` (`LIGHTING_AND_GRAPHICS.md`)
 - **Werte:**
   - Kommen aus `ColorGrading.Get(Tageszeit, Bewölkung, Regen)` in Apex.Simulation (NUnit-getestet).
   - Goldene Stunde: warm (+18) und etwas weicher.
@@ -36,7 +36,7 @@
 - **Nur mit URP:**
   - `Apex.Runtime.asmdef` definiert `APEX_URP` über `versionDefines`, wenn `com.unity.render-pipelines.universal` ≥ 17 installiert ist.
   - Mit der Built-in-Pipeline ist die Komponente wirkungslos, und die Einstellung erscheint nicht im Menü (keine Fake-UI).
-- **Einstellung:** „Nachbearbeitung (Farbe, Bloom, FXAA)“, An/Aus, wirkt sofort.
+- **Einstellung:** „Nachbearbeitung (Farbe, Bloom)“, An/Aus, wirkt sofort. Die Kantenglättung bleibt dabei an.
 - **Prüfung ohne Unity:** `build/Apex.Runtime.CompileCheck.URP` kompiliert den URP-Pfad gegen API-Stubs (`build/URPStubRef`). Die Stubs bilden nur die genutzten Mitglieder nach. **Die echte Prüfung ist der Unity-6-Editor.**
 - **Voraussetzung im Projekt:** URP-Asset mit HDR an und dem Universal Renderer mit Post-Processing (Standard der Vorlage „Universal 3D“).
 
@@ -102,12 +102,8 @@ Prozeduraler Code kann keine fotorealistischen Wahrzeichen erzeugen. Nötig sind
   - Ob das erreicht wird, zeigt erst der Profiler auf Geräten.
 
 ## 5. Noch offen im Editor (nicht ohne Unity machbar)
-- **URP-Asset:**
-  - Schattendistanz 300 m, 4 Kaskaden (PC) bzw. 2 (Mobile)
-  - Soft Shadows, HDR an
-  - Render Scale 1,0 (PC) bzw. 0,8–0,9 (Mobile)
-- **Renderer-Features:** SSAO nur auf PC/High. Das ist ein Renderer-Asset und kein Laufzeitcode.
-- **Licht:**
+- **Erledigt durch Laufzeitcode** (`LIGHTING_AND_GRAPHICS.md`): Schatten, Kaskaden, Render Scale, MSAA/SMAA/TAA, SSAO-Schalter, globale Echtzeit-Reflexionssonde und Grafikstufen (Aufgabe #6). Den SSAO-Renderer-Eintrag legt „Project Apex → 4. Grafik einrichten“ an.
+- **Weiter offen:**
+  - HDR und Soft Shadows im URP-Asset an (Vorlage „Universal 3D“; `supportsSoftShadows` ist zur Laufzeit nicht setzbar)
   - Adaptive Probe Volumes oder Lightmaps für die statische Umgebung
-  - Reflexionssonden Start/Ziel und Ortaköy
-- **Sicht:** Grafik-Presets (Aufgabe #6) koppeln Umgebungsdetails, Schatten und Nachbearbeitung.
+  - lokale Reflexionssonden mit Box-Projektion an Start/Ziel und Ortaköy
