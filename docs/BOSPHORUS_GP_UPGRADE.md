@@ -77,6 +77,47 @@ Die Vorschau zeigt auch die aktuelle Schwäche: Neben der Straße liegt nacktes 
 3. Stadt-Dreiecke (Mittel): ≈ 227 k LOD0 insgesamt (nicht alles gleichzeitig sichtbar). Muss in Phase F reduziert und auf Geräten gemessen werden.
 4. Copernicus-Quellenhinweis im Wortlaut der Lizenz und ein Credits-Bildschirm fehlen noch; OSM-Hinweis steht in der Streckenbeschreibung.
 
+## Phase B: Professionelle Renninfrastruktur (implementiert, Logik getestet, in Unity noch nicht gesehen)
+
+Alles wird aus der Strecke abgeleitet: `TrackInfrastructurePlan` (reine Logik, getestet) → `TrackInfrastructureGeometry` (Meshes) → `TrackInfrastructureBuilder` (Unity-Objekte). Das gilt für jede Strecke; der Bosphorus GP nutzt dabei seine Stadtkurs-Abstände.
+
+| Baustein | Umsetzung | Status |
+|---|---|---|
+| Asphalt | prozedurale, kachelbare Asphalt-Textur (Albedo mit Gesteinskörnung) plus passende Normal-Map, Kachel ≈ 3 m, matt (Glanz 0,22); Nässe wie bisher über `WeatherVisuals` | implementiert |
+| Fahrbahndetails | 52 Flickstellen, 44 Kanaldeckel, verblasste Mittel-Strichlinien der Originalstraßen auf breiten Geraden (445 Striche), Gummiabrieb entlang der KI-Ideallinie in jeder Bremszone und an jedem Kurvenausgang (26 Zonen, weich auslaufend, transparent) | implementiert |
+| Kerbs | 3D-Profil mit gerundeter Krone und Außenkante. Innen vom Einlenken bis zum Ausgang, außen am Ausgang. Höhe nach Kurvenradius: 2,5 cm schnell, 3,8 cm mittel, 5 cm langsam. Rot-weiß in 2,5-m-Blöcken. Nie breiter als der Auslauf (Mittelwand in Beşiktaş bleibt frei). Physik über die vorhandene Kerb-Oberfläche | implementiert, Platzierung getestet; Fahrgefühl in Unity ungeprüft |
+| Auslauf | Stadtkurs: gepflasterte Auslaufflächen und Notausfahrten (Asphalt) statt Gras; offene Strecken behalten Gras | implementiert |
+| Barrieren | Betonelemente mit Schutzwand-Profil, 1,0 m hoch, 3,8-m-Blöcke mit Fugen, Kratzspuren und Schmutz am Fuß (Textur). Leitplanke (doppelte W-Schiene) auf Notausfahrten. Kollision weiter über die einfache Wand (unsichtbar) | implementiert |
+| Aufprallschutz | 10 Zonen an den Außenseiten der Bremszonen, abgeleitet aus Anfahrts- und Kurvengeschwindigkeit der Ideallinie: Energie-Module in Event-Farben Navy/Türkis/Elfenbein bei schnellen Anfahrten, Reifenstapel mit Fördergurt-Front an 3 langsamen Kurven; mit eigener Kollision | implementiert, Zonen getestet |
+| Fangzäune | auf der Barriere, 3 m Maschendraht plus 0,9 m Überhang zur Strecke, Pfosten alle 5 m, 48 Tore (Notausgang/Wartung) mit Rahmen, an jedem dritten ein Schild „ACİL ÇIKIŞ“. Kein Zaun auf der Beşiktaş-Mittelwand und an der Boxengasse | implementiert |
+| LED-Flaggentafeln | 23 Tafeln, an jeder Kurve ≈ 120 m vorher auf der Außenseite, dazu Lücken auf max. 450 m gefüllt. Gekoppelt an die echte Rennleitung (`FlagPanelLogic`): Gelb blinkt vor einem Unfall, **Doppelgelb**, wenn ein Auto ≤ 150 m voraus auf der Strecke steht, **Grün** hinter der Zone und nach Ende einer Neutralisation, **SC/VSC** als Schrift, **Blau** für überrundete Autos mit dem Führenden dicht dahinter. Es gibt keine Rot-Regel, deshalb kein Rot. Außerhalb von Rennen bleiben die Tafeln dunkel | implementiert, Logik getestet (3 Tests) |
+| Streckenposten | an jeder Tafel ein Unterstand (Betonwände, Dach in Türkis), Feuerlöscher, zwei Posten in Orange hinter der Barriere | implementiert, **ohne Animation** |
+| Schilder | 150/100/50-m-Bremstafeln und Kurventafeln jetzt an der Barriere (vorher frei im Auslauf); Sektortafeln „SEKTÖR 1–3“; „PİT GİRİŞİ ▸“, „PİT 80 km/h“, „PİT ÇIKIŞI“. DRS gibt es im Spiel nicht, daher keine DRS-Schilder | implementiert |
+
+### Budget (Offline-Messung, ganze Runde, Stufe „Mittel“)
+Barrieren ≈ 29 k, Zäune ≈ 28 k, Stahl (Pfosten, Tore, Leitplankenpfosten) ≈ 24 k, Reifenstapel ≈ 22 k, Leitplanke ≈ 7 k, Auslauf ≈ 15 k Dreiecke.
+In 400-m-Stücken gebaut, damit Unity Unsichtbares wegschneidet. Zäune sind alpha-getestet, nicht transparent; transparent ist nur der Gummiabrieb.
+
+### Vorschau (Offline-Renderer, NICHT Unity)
+`docs/img/bosphorus_phaseB_preview_sheet.png`, Verfolger-Höhe:
+- Start
+- Anbremsen Ortaköy (Moschee und Brücke voraus)
+- Ortaköy-Haarnadel
+- Yıldız-Kamm
+- Barbaros-Ende/T6 mit Leitplanke
+- Akaretler
+- Bayıldım-Kehre mit Aufprallmodulen
+- Cockpit-Höhe
+
+Die Vorschau zeigt keine Texturen (Asphalt, Beton) und keine LED-Tafeln, nur Geometrie und Grundfarben.
+
+### Nicht umgesetzt / bekannte Punkte
+- **Fahrbahnquerneigung (Camber):** Die Streckengeometrie kennt keine Querneigung. Das zu ergänzen betrifft Physik, KI und Tests; ich würde es als eigenen Schritt vorschlagen.
+- **Pfützen, Drainage, Nachtspiegelungen:** Phase E (Wetter und Licht).
+- **Posten-Animation, Fotografen, Kamerateams:** Phase E.
+- **KI kennt die Wände nicht:** Phase F.
+- **Kerbs:** Bei 5 cm Höhe an langsamen Kurven muss das Rumpeln in Unity geprüft werden. Auf dem Prüfstand-Rig gibt es keine Kerbs.
+
 ## Umsetzungsplan Phasen B–F
 
 Grundsatz: Alles datengetrieben aus Mittellinie, Breiten, Barrierenabständen, Krümmung, Fahrtrichtung, Gelände und Geodaten. Vorhandene Builder werden erweitert, keine handplatzierten Objekte. Jede Phase endet mit grünem `tools/verify.sh` und einem Prüfstand-Lauf.

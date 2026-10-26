@@ -516,7 +516,6 @@ namespace Apex.Game
             int n = g.Count;
             int fenceStep = Mathf.Max(1, Mathf.RoundToInt(8f / g.Spacing));
             float lampSpacing = Quality == 0 ? 70f : 45f;
-            bool fullFence = Quality > 0;
             float start = ci.Definition.startLineDistance;
             foreach (int side in new[] { -1, 1 })
             {
@@ -525,26 +524,17 @@ namespace Apex.Game
                 for (int i = 0; i < n; i += fenceStep)
                 {
                     int j = (i + fenceStep) % n;
-                    float lapD = ApexMath.PosMod(g.Distances[i] - start, g.Length);
-                    bool nearStart = lapD < 400f || lapD > g.Length - 300f;
-                    // Pavement (kerbstone and sidewalk) outside the barrier.
+                    // Pavement (kerbstone and sidewalk) behind the 0.6 m deep barrier; catch fences come from TrackInfrastructureBuilder.
                     float wi = wall[i], wj = wall[j];
-                    var a = TrackPoint(g, i, side * (wi + 0.3f), -0.1f);
+                    var a = TrackPoint(g, i, side * (wi + 0.65f), -0.1f);
                     var b = TrackPoint(g, i, side * (wi + 4.3f), -0.1f);
                     var c = TrackPoint(g, j, side * (wj + 4.3f), -0.1f);
-                    var e = TrackPoint(g, j, side * (wj + 0.3f), -0.1f);
+                    var e = TrackPoint(g, j, side * (wj + 0.65f), -0.1f);
                     if (!field.IsWater(b.x, b.z))
                     {
                         parts.B(EnvironmentGeometry.Pavement).QuadFacing(a, b, c, e, new Vector2(a.x, a.z) / 3f, new Vector2(b.x, b.z) / 3f, new Vector2(c.x, c.z) / 3f, new Vector2(e.x, e.z) / 3f, Vector3.up);
                         var outward = (b - a).normalized;
                         parts.B(EnvironmentGeometry.Concrete).QuadFacing(b, c, c + Vector3.down * 2.5f, b + Vector3.down * 2.5f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, outward);
-                    }
-                    // Catch fence on top of the barrier.
-                    if (fullFence || nearStart)
-                    {
-                        var fa = TrackPoint(g, i, side * wi, -0.12f + 1.1f);
-                        var fb = TrackPoint(g, j, side * wj, -0.12f + 1.1f);
-                        EnvironmentGeometry.FenceSegment(parts.B, fa, fb, 3f, V(g.Rights[i]) * -side);
                     }
                     if (g.Distances[i] >= nextLamp)
                     {
@@ -555,7 +545,7 @@ namespace Apex.Game
                     }
                 }
             }
-            AddMeshObject(ts, "Pavements_Fences_Lamps", parts.parts, false);
+            AddMeshObject(ts, "Pavements_Lamps", parts.parts, false);
             var font = CircuitBuilder.BuiltinFont();
             // Turkish street-name signs (white on blue, as in Istanbul).
             foreach (var (text, x, z) in StreetSigns)
@@ -576,7 +566,8 @@ namespace Apex.Game
                 foreach (int side in new[] { -1, 1 })
                 {
                     float wall = side < 0 ? ci.WallLeft[i] : ci.WallRight[i];
-                    var p = TrackPoint(g, i, side * (wall - 0.08f), -0.12f + 0.62f);
+                    // On the barrier's upper face (safety-shape profile leans back 0.17 m at the top).
+                    var p = TrackPoint(g, i, side * (wall + 0.12f), -0.12f + 0.62f);
                     // TextMesh reads from its -Z side: face the board towards the track.
                     var facing = V(g.Rights[i]) * side;
                     string text = Sponsors[sponsor++ % Sponsors.Length];

@@ -109,6 +109,10 @@ namespace UnityEngine
         public static int CeilToInt(float a) => (int)MathF.Ceiling(a);
         public static int FloorToInt(float a) => (int)MathF.Floor(a);
         public static float Round(float a) => MathF.Round(a);
+        public static int RoundToInt(float a) => (int)MathF.Round(a);
+        public static float Repeat(float t, float l) => t - MathF.Floor(t / l) * l;
+        public static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
+        public static float Clamp(float v, float a, float b) => v < a ? a : v > b ? b : v;
     }
 
     public class Mesh

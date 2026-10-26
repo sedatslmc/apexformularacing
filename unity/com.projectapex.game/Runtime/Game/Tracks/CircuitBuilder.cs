@@ -23,6 +23,8 @@ namespace Apex.Game
         /// <summary>Shared ground height (terrain, buildings, props).</summary>
         public TerrainField Terrain { get; internal set; }
         /// <summary>Lateral distance of the barrier from the centreline per sample (left / right side).</summary>
+        /// <summary>Kerbs, protection, marshal posts, gates and surface details of this circuit.</summary>
+        public TrackInfrastructurePlan Infrastructure { get; internal set; }
         public float[] WallLeft { get; internal set; }
         public float[] WallRight { get; internal set; }
         /// <summary>Environment dressing (city, landmarks, water), if the circuit has geo data.</summary>
@@ -62,9 +64,6 @@ namespace Apex.Game
     /// </summary>
     public static class CircuitBuilder
     {
-        const float KerbWidth = 1.3f;
-        const float KerbHeight = 0.045f;
-        const float KerbCurvature = 1f / 260f;
         const float LineWidth = 0.3f;
         const float RunoffWidth = 16f;
         const float RunoffDrop = 0.12f;
@@ -85,18 +84,24 @@ namespace Apex.Game
             ci.SectorStarts = starts;
 
             var g = ci.Geometry;
-            var kerbL = new float[g.Count];
-            var kerbR = new float[g.Count];
-            ComputeKerbs(g, kerbL, kerbR);
             runoffL = g.RunoffLeft;
             runoffR = g.RunoffRight;
+            ci.Corners = g.CornersFor(def);
+            // Racing line (for braking rubber and protection placement) and the infrastructure layout.
+            var refSetup = new VehicleSetup();
+            var line = new Apex.AI.RacingLine(g, 1.45f, refSetup.downforceArea * refSetup.airDensity * 0.5f / refSetup.mass);
+            var plan = new TrackInfrastructurePlan(g, ci.Corners, line.offsets, line.speed);
+            ci.Infrastructure = plan;
+            var kerbL = plan.kerbs.left;
+            var kerbR = plan.kerbs.right;
+            kerbHeight = plan.kerbs.height;
+            TrackInfrastructureBuilder.EnsureMaterials();
 
             BuildRoad(root.transform, g);
             BuildKerbs(root.transform, g, kerbL, kerbR);
             var pitMask = new bool[g.Count];
             if (def.pit != null)
                 for (int i = 0; i < g.Count; i++) pitMask[i] = def.pit.Contains(g.Distances[i], g.Length);
-            ci.Corners = g.CornersFor(def);
             BuildRunoffAndWalls(root.transform, g, kerbL, kerbR, def.pit, pitMask);
             ci.WallLeft = new float[g.Count];
             ci.WallRight = new float[g.Count];
@@ -112,6 +117,7 @@ namespace Apex.Game
             BuildStartLine(root.transform, ci);
             BuildGrid(root.transform, ci);
             BuildCornerBoards(root.transform, ci);
+            TrackInfrastructureBuilder.Build(ci, root.transform, pitMask);
             if (def.landMasses.Count > 0) EnvironmentBuilder.Build(ci, root.transform);
             return ci;
         }
@@ -204,26 +210,6 @@ namespace Apex.Game
 
         // --- Parts ------------------------------------------------------------------
 
-        static void ComputeKerbs(TrackGeometry g, float[] left, float[] right)
-        {
-            int n = g.Count;
-            var raw = new float[n];
-            for (int i = 0; i < n; i++) raw[i] = Mathf.Abs(g.Curvatures[i]) > KerbCurvature ? 1f : 0f;
-            int dilate = Mathf.RoundToInt(16f / g.Spacing);
-            const int taper = 4;
-            for (int i = 0; i < n; i++)
-            {
-                float k = 0f;
-                for (int o = -dilate - taper; o <= dilate + taper; o++)
-                {
-                    float w = Mathf.Abs(o) > dilate ? 1f - (float)(Mathf.Abs(o) - dilate) / (taper + 1) : 1f;
-                    k = Mathf.Max(k, raw[((i + o) % n + n) % n] * w);
-                }
-                left[i] = k;
-                right[i] = k;
-            }
-        }
-
         static void BuildRoad(Transform parent, TrackGeometry g)
         {
             var md = new MeshData(2);
@@ -233,26 +219,44 @@ namespace Apex.Game
             AddMesh(parent, "Road", md.ToMesh("Road"), new[] { "Asphalt", "Line" }, SurfaceType.Asphalt);
         }
 
+        static float[] kerbHeight;
+
+        /// <summary>
+        /// Three-dimensional kerbs: rounded crown (height from the plan: low on fast corners,
+        /// more pronounced on slow ones), short vertical edge down to the run-off, red/white
+        /// blocks every 2.5 m. kerbL/kerbR are widths in metres.
+        /// </summary>
         static void BuildKerbs(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR)
         {
             var md = new MeshData(2);
-            Func<int, int> stripe = i => ((int)(g.Distances[i] / 3f)) % 2;
+            Func<int, int> stripe = i => ((int)(g.Distances[i] / 2.5f)) % 2;
+            // Cross-section from the track edge outwards: (fraction of width, fraction of crown height).
+            var prof = new[] { new Vector2(0f, 0f), new Vector2(0.25f, 0.7f), new Vector2(0.5f, 1f), new Vector2(0.78f, 0.85f), new Vector2(1f, 0.25f) };
             foreach (float side in new[] { -1f, 1f })
             {
                 float[] k = side < 0 ? kerbL : kerbR;
-                // Rising half then falling half: a shallow ridge.
-                Ribbon(md, 0, g, i =>
+                for (int s = 0; s < prof.Length - 1; s++)
                 {
-                    float h = g.Widths[i] * 0.5f, w = KerbWidth * k[i];
-                    float y = KerbHeight * Mathf.Min(k[i] * 2f, 1f);
-                    return side < 0 ? new Vector4(-(h + w * 0.5f), y, -h, 0f) : new Vector4(h, 0f, h + w * 0.5f, y);
-                }, 0.1f, stripe);
-                Ribbon(md, 0, g, i =>
+                    var a = prof[s];
+                    var b = prof[s + 1];
+                    Ribbon(md, 0, g, i =>
+                    {
+                        float h = g.Widths[i] * 0.5f, w = k[i], y = kerbHeight[i];
+                        if (w <= 0f) return Vector4.zero;
+                        return side < 0 ? new Vector4(-(h + w * b.x), y * b.y, -(h + w * a.x), y * a.y)
+                                        : new Vector4(h + w * a.x, y * a.y, h + w * b.x, y * b.y);
+                    }, 0.1f, stripe);
+                }
+                // Outer edge: from the kerb's outer lip down to the run-off level (double-sided strip).
+                int n = g.Count;
+                for (int i = 0; i < n; i++)
                 {
-                    float h = g.Widths[i] * 0.5f, w = KerbWidth * k[i];
-                    float y = KerbHeight * Mathf.Min(k[i] * 2f, 1f);
-                    return side < 0 ? new Vector4(-(h + w), 0f, -(h + w * 0.5f), y) : new Vector4(h + w * 0.5f, y, h + w, 0f);
-                }, 0.1f, stripe);
+                    int j = (i + 1) % n;
+                    if (k[i] <= 0f && k[j] <= 0f) continue;
+                    float oi = side * (g.Widths[i] * 0.5f + k[i]), oj = side * (g.Widths[j] * 0.5f + k[j]);
+                    md.Quad(1, P(g, i, oi, -RunoffDrop), P(g, i, oi, kerbHeight[i] * 0.25f), P(g, j, oj, -RunoffDrop), P(g, j, oj, kerbHeight[j] * 0.25f),
+                        Vector2.zero, Vector2.up, Vector2.right, Vector2.one, true);
+                }
             }
             AddMesh(parent, "Kerbs", md.ToMesh("Kerbs"), new[] { "KerbRed", "KerbWhite" }, SurfaceType.Kerb);
         }
@@ -265,7 +269,8 @@ namespace Apex.Game
         {
             if (pit) return g.Widths[i] * 0.5f + PitOuter;
             float[] r = side < 0 ? runoffL : runoffR;
-            return g.Widths[i] * 0.5f + KerbWidth * kerb[i] + (r != null ? r[i] : RunoffWidth);
+            // Run-off is measured from the track edge; a kerb lies inside it.
+            return g.Widths[i] * 0.5f + Mathf.Max(r != null ? r[i] : RunoffWidth, kerb[i] + 0.2f);
         }
 
         static void BuildRunoffAndWalls(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR, CircuitDefinition.PitLane pit, bool[] pitMask)
@@ -280,7 +285,7 @@ namespace Apex.Game
                 bool pitSide = pit != null && (int)side == pit.side;
                 Ribbon(grass, 0, g, i =>
                 {
-                    float inner = g.Widths[i] * 0.5f + KerbWidth * k[i];
+                    float inner = g.Widths[i] * 0.5f + k[i];
                     // The pit lane replaces the run-off on its side.
                     float outer = pitSide && pitMask[i] ? inner : WallOffset(g, k, i, false, side);
                     return side < 0 ? new Vector4(-outer, -RunoffDrop, -inner, 0f) : new Vector4(inner, 0f, outer, -RunoffDrop);
@@ -304,8 +309,12 @@ namespace Apex.Game
                     skirt.Quad(0, si, bi, sj, bj, Vector2.zero, Vector2.right, Vector2.up, Vector2.one, true);
                 }
             }
-            AddMesh(parent, "Runoff", grass.ToMesh("Runoff"), new[] { "Grass" }, SurfaceType.Grass);
-            AddMesh(parent, "Barriers", walls.ToMesh("Barriers"), new[] { "Wall", "WallStripe" }, SurfaceType.Wall, true);
+            // Street circuits (authored run-off) have paved run-off and escape roads; open circuits grass.
+            bool street = runoffL != null;
+            AddMesh(parent, "Runoff", grass.ToMesh("Runoff"), new[] { street ? "RunoffAsphalt" : "Grass" }, street ? SurfaceType.Asphalt : SurfaceType.Grass);
+            // Collision walls; the visible barriers come from TrackInfrastructureBuilder.
+            var wallGo = AddMesh(parent, "Barriers", walls.ToMesh("Barriers"), new[] { "Wall", "WallStripe" }, SurfaceType.Wall, false);
+            wallGo.GetComponent<MeshRenderer>().enabled = false;
             AddMesh(parent, "Skirt", skirt.ToMesh("Skirt"), new[] { "Ground" }, null);
         }
 
@@ -467,7 +476,9 @@ namespace Apex.Game
                 float d = g.Distances[corner.index];
                 // Board on the outside of the corner, facing the approaching cars.
                 float outside = corner.right ? -1f : 1f;
-                float lat = outside * (g.WidthAt(d) * 0.5f + KerbWidth + 5f);
+                // Boards stand just behind the barrier on the outside.
+                float[] wallSide = outside < 0 ? ci.WallLeft : ci.WallRight;
+                float lat = outside * (wallSide[g.IndexAt(d - 40f)] + 1.2f);
                 float bd = d - 40f;
                 g.FrameAt(bd, out var p, out var f, out _, lat);
                 // TextMesh reads from its -Z side: +Z along the driving direction faces the cars.
@@ -478,7 +489,7 @@ namespace Apex.Game
                 foreach (int metres in new[] { 150, 100, 50 })
                 {
                     float m = d - 30f - metres;
-                    g.FrameAt(m, out var bp, out var bf, out _, outside * (g.WidthAt(m) * 0.5f + KerbWidth + 3.5f));
+                    g.FrameAt(m, out var bp, out var bf, out _, outside * (wallSide[g.IndexAt(m)] + 0.9f));
                     Sign(parent, bp.ToUnity(), Quaternion.LookRotation(bf.ToUnity(), Vector3.up), metres.ToString(), new Color(0.95f, 0.95f, 0.95f), new Color(0.05f, 0.05f, 0.05f), 1.0f);
                 }
             }

@@ -66,6 +66,8 @@ namespace Apex.Game
         public WeatherModel Weather { get; private set; }
         public RacingLine Line { get; private set; }
         public RaceControl Control { get; private set; }
+        /// <summary>Latest car reports given to race control (race sessions only).</summary>
+        public IReadOnlyList<CarReport> Reports => reports;
         /// <summary>Safety car vehicle while deployed, else null.</summary>
         public VehicleController SafetyCar { get; private set; }
         public readonly List<RaceCar> Cars = new List<RaceCar>();

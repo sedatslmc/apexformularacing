@@ -105,6 +105,93 @@ if (Array.IndexOf(args, "--environment") >= 0)
         float hi = g.Widths[i] * 0.5f, hj = g.Widths[j] * 0.5f;
         B("Asphalt").QuadFacing(P(i, -hi), P(i, hi), P(j, hj), P(j, -hj), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
     }
+    // Street-circuit infrastructure: same plan and geometry code as the Unity builder.
+    {
+        var su = new VehicleSetup();
+        var rl = new Apex.AI.RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
+        var plan = new Apex.Tracks.TrackInfrastructurePlan(g, g.CornersFor(def), rl.offsets, rl.speed);
+        Console.WriteLine($"infrastructure: {plan.posts.Count} marshal posts/panels, {plan.protections.Count} protection zones ({plan.protections.FindAll(x => x.kind == Apex.Tracks.TrackInfrastructurePlan.ProtectionKind.TyreStack).Count} tyre), {plan.gates.Count} gates, {plan.rubber.Count} rubber zones, {plan.patches.Count} patches, {plan.manholes.Count} manholes, {plan.laneDashes.Count} lane dashes");
+        int nS = g.Count;
+        var wl = new float[nS]; var wr = new float[nS];
+        bool InPit(int i) => def.pit != null && def.pit.Contains(g.Distances[i], g.Length);
+        for (int i = 0; i < nS; i++)
+        {
+            float hw = g.Widths[i] * 0.5f;
+            wl[i] = InPit(i) && def.pit.side < 0 ? hw + 13.5f : hw + MathF.Max(plan.RunoffAt(i, -1), plan.kerbs.left[i] + 0.2f);
+            wr[i] = InPit(i) && def.pit.side > 0 ? hw + 13.5f : hw + MathF.Max(plan.RunoffAt(i, 1), plan.kerbs.right[i] + 0.2f);
+        }
+        Vector3 Q(int i, float lat, float dy) => TrackInfrastructureGeometry.P(g, i, lat, dy);
+        for (int i = 0; i < nS; i++)
+        {
+            int j = (i + 1) % nS;
+            foreach (int side in new[] { -1, 1 })
+            {
+                float[] k = side < 0 ? plan.kerbs.left : plan.kerbs.right;
+                float[] w = side < 0 ? wl : wr;
+                float hi = g.Widths[i] * 0.5f, hj = g.Widths[j] * 0.5f;
+                // Run-off (paved) between kerb and barrier.
+                B("RunoffAsphalt").QuadFacing(Q(i, side * (hi + k[i]), -0.1f), Q(i, side * w[i], -0.1f), Q(j, side * w[j], -0.1f), Q(j, side * (hj + k[j]), -0.1f), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                if (k[i] > 0f || k[j] > 0f)
+                {
+                    string km = ((int)(g.Distances[i] / 2.5f)) % 2 == 0 ? "KerbRed" : "KerbWhite";
+                    float yi = plan.kerbs.height[i], yj = plan.kerbs.height[j];
+                    B(km).QuadFacing(Q(i, side * hi, 0.05f), Q(i, side * (hi + k[i] * 0.5f), 0.05f + yi), Q(j, side * (hj + k[j] * 0.5f), 0.05f + yj), Q(j, side * hj, 0.05f), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                    B(km).QuadFacing(Q(i, side * (hi + k[i] * 0.5f), 0.05f + yi), Q(i, side * (hi + k[i]), 0.0f), Q(j, side * (hj + k[j]), 0.0f), Q(j, side * (hj + k[j] * 0.5f), 0.05f + yj), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                }
+            }
+        }
+        int step = Math.Max(1, (int)MathF.Round(4f / g.Spacing));
+        bool IsGate(float d) { foreach (float gd in plan.gates) if (Apex.Core.ApexMath.PosMod(d - gd, g.Length) < 3.6f) return true; return false; }
+        foreach (int side in new[] { -1, 1 })
+        {
+            float[] w = side < 0 ? wl : wr;
+            int runStart = 0;
+            int Type(int i) { if (def.pit != null && side == def.pit.side && InPit(i)) return 3; float r = plan.RunoffAt(i, side); return r < 1f ? 2 : r >= 4f ? 1 : 0; }
+            for (int i = 0; i <= nS; i++)
+            {
+                if (i < nS && Type(i) == Type(runStart)) continue;
+                int t = Type(runStart);
+                if (t == 1) TrackInfrastructureGeometry.Guardrail(B(TrackInfrastructureGeometry.Armco), B(TrackInfrastructureGeometry.Steel), g, w, side, runStart, i + 1, -0.12f);
+                else TrackInfrastructureGeometry.ConcreteBarrier(B(TrackInfrastructureGeometry.Concrete), g, w, side, runStart, i + 1, step, -0.12f);
+                if (t <= 1) TrackInfrastructureGeometry.CatchFence(B, g, w, side, runStart, i + 1, -0.12f, IsGate);
+                runStart = i;
+            }
+        }
+        foreach (var pr in plan.protections)
+        {
+            float[] w = pr.side < 0 ? wl : wr;
+            if (pr.kind == Apex.Tracks.TrackInfrastructurePlan.ProtectionKind.TyreStack) TrackInfrastructureGeometry.TyreStacks(B, g, w, pr.side, pr.from, pr.to, -0.12f);
+            else TrackInfrastructureGeometry.EnergyModules(B, g, w, pr.side, pr.from, pr.to, -0.12f);
+        }
+        foreach (var pa in plan.patches) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Patch), g, g.Wrap(pa.distance), g.Wrap(pa.distance + pa.length), pa.lateral - pa.width * 0.5f, pa.lateral + pa.width * 0.5f, 0.07f, 0f);
+        foreach (var (f, t2, lat) in plan.laneDashes) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Dash), g, g.Wrap(f), g.Wrap(t2), lat - 0.07f, lat + 0.07f, 0.072f, 0f);
+        foreach (var z in plan.rubber) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Rubber), g, z.from, z.to, z.lateralFrom, z.lateralTo, 0.075f, 25f);
+        foreach (var (d, lat) in plan.manholes) TrackInfrastructureGeometry.ManholeCover(B(TrackInfrastructureGeometry.Manhole), Q(g.IndexAt(d), lat, 0.074f), 0.38f);
+        foreach (var po in plan.posts)
+        {
+            int i = g.IndexAt(po.distance);
+            float[] w = po.side < 0 ? wl : wr;
+            var fwd = new Vector3(g.Tangents[i].X, 0f, g.Tangents[i].Z).normalized;
+            var rot = Quaternion.LookRotation(-fwd);
+            void Place(Action<TrackInfrastructureGeometry.Parts> build, Vector3 at)
+            {
+                var tmp = new Dictionary<string, MeshBuilder>();
+                MeshBuilder T(string key) { if (!tmp.TryGetValue(key, out var mb2)) tmp[key] = mb2 = new MeshBuilder(); return mb2; }
+                build(T);
+                foreach (var kv in tmp)
+                {
+                    var v = kv.Value.Vertices; var tr = kv.Value.Triangles;
+                    for (int q = 0; q < tr.Count; q += 3)
+                    {
+                        Vector3 a = at + rot * v[tr[q]], b = at + rot * v[tr[q + 1]], c = at + rot * v[tr[q + 2]];
+                        B(kv.Key).TriangleFacing(a, b, c, Vector2.zero, Vector2.zero, Vector2.zero, Vector3.Cross(c - a, b - a));
+                    }
+                }
+            }
+            Place(TrackInfrastructureGeometry.MarshalShelter, Q(i, po.side * (w[i] + 2.3f), -0.12f));
+            Place(T2 => TrackInfrastructureGeometry.PanelHousing(T2(TrackInfrastructureGeometry.Housing)), Q(i, po.side * (w[i] + 0.75f), -0.12f));
+        }
+    }
     // Trees (instanced in the game).
     foreach (var t in city.trees)
     {
@@ -169,6 +256,7 @@ if (Array.IndexOf(args, "--environment") >= 0)
         vb += mbx.VertexCount;
         total += mbx.TriangleCount;
     }
+    foreach (var kv in parts) if (kv.Value.TriangleCount > 3000) Console.WriteLine($"  {kv.Key,-18} {kv.Value.TriangleCount,7} tris");
     Directory.CreateDirectory(outDir);
     File.WriteAllText(Path.Combine(outDir, "environment.obj"), sbe.ToString());
     Console.WriteLine($"environment.obj: {total} triangles (preview: near terrain at 24 m, trees as meshes)");
