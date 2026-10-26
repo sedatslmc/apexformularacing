@@ -38,7 +38,8 @@ namespace Apex.Tracks
             public Vector3 forward, outward;
             /// <summary>Chord length (m); stretchable modules (panels, banners) are scaled to it.</summary>
             public float length;
-            /// <summary>Raw distance of the module centre, side (-1 left, +1 right), design/colour variant.</summary>
+            /// <summary>Raw distance of the module centre, side (-1 left, +1 right), variant: colour/design for
+            /// modules and banners; fence mounting for posts, panels and gates (0 on the barrier, 1 from the ground behind a guardrail).</summary>
             public float distance;
             public int side, variant;
             /// <summary>Part of a transverse closure across a step in the barrier line.</summary>
@@ -117,7 +118,7 @@ namespace Apex.Tracks
                     int type = Type(runStart);
                     if (type == 1) Chain(Module.GuardrailSpan, side, from, len, 0f, GuardrailSpanLength, 0);
                     else Chain(Module.BarrierBlock, side, from, len, 0f, BlockLength, 0);
-                    if (type == 0 || type == 1) Fence(side, from, len, banner);
+                    if (type == 0 || type == 1) Fence(side, from, len, banner, type == 1 ? 1 : 0);
                     if (Step(i))
                     {
                         // Transverse closure between the end of this run and the start of the next.
@@ -264,7 +265,7 @@ namespace Apex.Tracks
             placements.Add(new Placement { module = m, position = (a + b) * 0.5f, forward = fwd, outward = outward, length = length, distance = distance, side = side, variant = variant, transverse = transverse });
         }
 
-        void Fence(int side, float from, float len, bool[] bannerMask)
+        void Fence(int side, float from, float len, bool[] bannerMask, int mount)
         {
             if (len < FencePostSpacing) return;
             // A gate replaces the posts and panels over its width.
@@ -278,7 +279,7 @@ namespace Apex.Tracks
             for (int k = 0; k < st.Count; k++)
             {
                 float d = g.Wrap(st[k].d);
-                if (!InGate(d)) Add(Module.FencePost, side, st[k].p, st[k].p + new Vector3(0.01f, 0f, 0f), d, 0);
+                if (!InGate(d)) Add(Module.FencePost, side, st[k].p, st[k].p + new Vector3(0.01f, 0f, 0f), d, mount);
                 if (k + 1 == st.Count) break;
                 var a = st[k].p;
                 var b = st[k + 1].p;
@@ -286,11 +287,11 @@ namespace Apex.Tracks
                 float prevMid = g.Wrap(st[k].d - (st[k + 1].d - st[k].d) * 0.5f);
                 if (InGate(mid))
                 {
-                    if (k == 0 || !InGate(prevMid)) Add(Module.FenceGate, side, a, b, mid, 0);
+                    if (k == 0 || !InGate(prevMid)) Add(Module.FenceGate, side, a, b, mid, mount);
                 }
                 else
                 {
-                    Add(Module.FencePanel, side, a, b, mid, 0);
+                    Add(Module.FencePanel, side, a, b, mid, mount);
                     if (bannerMask[g.IndexAt(mid)]) Add(Module.Banner, side, a, b, mid, k % 3);
                 }
             }
