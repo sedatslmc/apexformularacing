@@ -73,7 +73,8 @@
 | Validierung auf alle weiteren Objekte ausdehnen (Ampeln, Poller, Bänke, Bäume an Straßen, Werbetafeln), sobald es sie gibt; ein gemeinsamer Test pro Objektart | Code | geplant |
 | Bodenhaftung: jedes Objekt am Gelände bzw. der Straße ausrichten (kein Schweben), automatischer Test über alle Platzierungen | Code | geplant |
 | URP-Asset Ultra/Hoch/Mittel/Mobil (Schatten, Kaskaden, Render-Scale, MSAA bzw. TAA, SSAO nur ab Hoch) | Editor | geplant |
-| Asphalt, Beton, Kerbs mit gescannten CC0-Texturen (Poly Haven, ambientCG) plus Masken- und Detail-Maps; Lizenzzeilen | Code + Assets (frei) | geplant |
+| Asphalt und Kerbs mit gescannten CC0-Texturen (Poly Haven, ambientCG); Lizenzzeilen | Code + Assets (frei) | **Pipeline getestet**, Texturen fehlen (Download gesperrt), siehe `CC0_MATERIALS.md` |
+| Beton (Barrieren), Gehwege, Detail-Maps für Nahsicht | Code + Assets (frei) | geplant |
 | Reifenabrieb- und Bremsspur-Decals entlang der Ideallinie | Code + Textur | geplant |
 
 ### Phase 2 – Ortaköy T1 (300–500 m Vertical Slice)
