@@ -67,10 +67,13 @@
   - Profi behält aus Tastatur-Gründen ABS und TC 1 (`SettingsData.ApplyProfile`).
   - Viel Abtrieb und eine hecklastige Gewichtsverteilung stabilisieren das Heck.
 - Für ein glaubwürdiges Profi-Gefühl ist das vermutlich **zu gutmütig**. Der Offline-Prüfstand hat aber keine Bodenwellen und keine Kerb-Stöße; die prüft erst Unity.
+- **Vorgaben des Product Owners (2026-10-26):**
+  - Profi soll langfristig anspruchsvoller werden, aber **realistisch bleiben**. Keine künstliche Instabilität (z. B. kein absichtlich früherer Heckabriss, keine eingebauten Lastwechsel-„Effekte“).
+  - **Fahrhilfen bleiben unabhängig vom Eingabegerät frei wählbar,** auch mit Tastatur, Touch und Gyro. Stand heute: TC, ABS, Lenkhilfe, tempoabhängige Lenkung und Automatik sind schon einzeln einstellbar (Profil „Individuell“). Es gibt keine Sperre nach Gerät.
 - **Mögliche Folgeschritte (nicht umgesetzt, erst nach dem Unity-Test entscheiden):**
-  1. **Profi mit TC aus, wenn ein Gamepad oder Lenkrad erkannt wird.** Analoge Pedale machen das fahrbar; die Tastatur behält TC 1.
-  2. **Lastwechsel-Empfindlichkeit erhöhen,** z. B. Aero-Balance bei Nicken nach vorne oder ein etwas früherer Heck-Abriss, nur für die Profi-Abstimmung. Ziel: Lastwechsel bei 120 km/h am Limit gibt β 8–12° und bleibt mit Gegenlenken fangbar.
-  3. **TC-Stufe 1 weniger eingreifend:** mehr Schlupf erlauben, damit ein Gasstoß das Heck sichtbar bewegt, ohne sofort zu drehen.
+  1. **TC-Stufen physikalisch ehrlicher staffeln:** Stufe 1 erlaubt mehr Schlupf (wie eine realistische Rennwagen-TC mit Ziel-Schlupf statt Sofort-Schnitt). Ein Gasstoß bewegt das Heck dann sichtbar. Das ist eine Änderung der Fahrhilfe, keine künstliche Instabilität.
+  2. **Reale Ursachen für Lastwechselreaktionen prüfen:** Aero-Balance-Verschiebung beim Nicken (Fahrhöhe vorne sinkt beim Bremsen), Motorbremsmoment an der Hinterachse beim Gaswegnehmen, Bodenwellen und Kerbs in Unity. Nur übernehmen, was physikalisch begründet und messbar ist.
+  3. **Reifentemperatur und -verschleiß im Profi-Erlebnis sichtbarer machen:** kalte Reifen in der Out-Lap, überhitzte Hinterreifen nach Wheelspin. Die Modelle existieren schon.
 
 ### Überschwingen 250 km/h (Profi)
 - Der ¼-Lenkstoß erzeugt eine einzelne Gierspitze, etwa 25 % über dem Endwert, nach rund 0,11 s. Danach bleibt die Gierrate ruhig.

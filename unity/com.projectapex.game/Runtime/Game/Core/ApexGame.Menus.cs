@@ -489,7 +489,7 @@ namespace Apex.Game
                     change = d => s.ApplyProfile((DrivingProfile)Wrap((int)s.drivingProfile + (d < 0 ? -1 : 1), 3)) },
                 new Row { label = "Traktionskontrolle", value = () => TcName(s.tractionLevel),
                     change = d => { s.tractionLevel = Wrap(s.tractionLevel + (d < 0 ? -1 : 1), 4); s.drivingProfile = DrivingProfile.Custom; } },
-                new Row { label = "ABS", value = () => s.abs ? "An" : "Aus (nur mit analogen Pedalen)", change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "ABS", value = () => s.abs ? "An" : "Aus (empfohlen mit analogen Pedalen)", change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Lenkhilfe", value = () => s.steeringAssistLevel == 0 ? "Aus" : s.steeringAssistLevel == 1 ? "Leicht" : "Voll",
                     change = d => { s.steeringAssistLevel = Wrap(s.steeringAssistLevel + (d < 0 ? -1 : 1), 3); s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Tempoabhängige Lenkung", value = () => s.speedSensitiveSteering ? "An" : "Aus (Lenkrad/Gamepad)",
