@@ -103,11 +103,18 @@ namespace Apex.Game
             var rb = root.AddComponent<Rigidbody>();
             rb.mass = setup.mass;
             var mat = RigidbodyCompat.MakeMaterial("CarBody", 0.3f, 0.1f);
-            float g = -setup.cogHeight;
-            var body = root.AddComponent<BoxCollider>();
-            body.center = new Vector3(0f, g + 0.29f, 0f);
-            body.size = new Vector3(1.0f, 0.5f, 5.2f);
-            body.sharedMaterial = mat;
+            // Body collider: floor box on the plank line and a nose box (see BodyCollider).
+            int bi = 0;
+            foreach (var b in new BodyCollider(setup).boxes)
+            {
+                var bodyGo = new GameObject("BodyCollider" + bi++);
+                bodyGo.transform.SetParent(root.transform, false);
+                bodyGo.transform.localPosition = b.centre.ToUnity();
+                bodyGo.transform.localRotation = Quaternion.Euler(b.PitchDegrees, 0f, 0f);
+                var body = bodyGo.AddComponent<BoxCollider>();
+                body.size = b.size.ToUnity();
+                body.sharedMaterial = mat;
+            }
             for (int i = 0; i < 4; i++)
             {
                 var mount = setup.MountPosition(i, out float sc);
