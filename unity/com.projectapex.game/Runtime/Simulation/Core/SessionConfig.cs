@@ -15,7 +15,7 @@ namespace Apex.Core
     [Serializable]
     public sealed class SessionConfig
     {
-        public string trackId = "bosphorus_gp";
+        public string trackId = "bosphorus_a";
         public SessionType sessionType = SessionType.Race;
         public WeekendFormat format = WeekendFormat.QualifyingAndRace;
         public int laps = 5;
@@ -52,6 +52,8 @@ namespace Apex.Core
 
         public void Validate()
         {
+            // The Bosphorus GP moved to the geographic layout (Variant A).
+            if (trackId == "bosphorus_gp") trackId = "bosphorus_a";
             laps = Math.Max(1, Math.Min(60, laps));
             aiCount = Math.Max(0, Math.Min(19, aiCount));
             difficulty = Math.Max(0f, Math.Min(1f, difficulty));

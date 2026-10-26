@@ -296,7 +296,7 @@ namespace Apex.Game
             if (geometries.TryGetValue(id, out var g)) return g;
             g = TrackGeometry.FromDefinition(Definition(id));
             geometries[id] = g;
-            cornerCounts[id] = g.DetectCorners().Count;
+            cornerCounts[id] = g.CornersFor(Definition(id)).Count;
             return g;
         }
 
@@ -394,7 +394,7 @@ namespace Apex.Game
                 if (ApexStyle.Button(new Rect(x, by, 460f, 64f), "Meisterschaft starten", focus == rows.Count, 28) || (navConfirm && focus == rows.Count))
                 {
                     navConfirm = false;
-                    Career.StartChampionship(new[] { "bosphorus_gp", "test_loop" }, Config.laps, Config.aiCount, Config.difficulty);
+                    Career.StartChampionship(new[] { "bosphorus_a", "test_loop" }, Config.laps, Config.aiCount, Config.difficulty);
                     SaveCareer();
                     SaveConfig();
                     StartSession(SessionKind.Championship, SessionType.Race);

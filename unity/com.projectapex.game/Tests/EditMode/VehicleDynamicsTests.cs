@@ -193,6 +193,7 @@ namespace Apex.Tests
 
         [TestCase("test_loop", 40.0, 75.0)]
         [TestCase("bosphorus_gp", 85.0, 140.0)]
+        [TestCase("bosphorus_a", 115.0, 165.0)]
         public void AutopilotCompletesValidLap(string trackId, double minLap, double maxLap)
         {
             var def = TestData.Circuit(trackId);

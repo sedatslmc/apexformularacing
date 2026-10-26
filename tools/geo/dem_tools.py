@@ -56,7 +56,7 @@ def grid(lat0, lat1, lon0, lon1):
     return z, (e0, e1, n0, n1)
 
 
-def ground_height(e, n, radius=30.0, q=20):
+def ground_height(e, n, radius=60.0, q=5):
     """Street-level estimate from the surface model: a low percentile of DEM samples within
     `radius` metres (roads lie below roofs and tree crowns). Sea pixels (0) are ignored."""
     vals = []
@@ -64,8 +64,9 @@ def ground_height(e, n, radius=30.0, q=20):
         for dy in (-radius, -radius / 2, 0.0, radius / 2, radius):
             if dx * dx + dy * dy > radius * radius * 1.01:
                 continue
-            h = height(*latlon(e + dx, n + dy))
-            if h > 0.0:
+            la, lo = latlon(e + dx, n + dy)
+            h = height(la, lo)
+            if h > 0.0 and not is_roof(la, lo):
                 vals.append(h)
     if not vals:
         return 0.0
@@ -103,3 +104,47 @@ def max_grade(s, h, window=80.0):
             break
         worst = max(worst, abs(h[j] - h[i]) / (s[j] - s[i]))
     return worst
+
+
+_mask = {}
+
+
+def building_mask(lon_deg):
+    """Boolean mask per DEM tile: True where an OSM building footprint covers the pixel
+    (data/geo/osm/bosphorus_osm.json). Such pixels are roofs, not ground."""
+    if lon_deg in _mask:
+        return _mask[lon_deg]
+    import json
+    from matplotlib.path import Path
+    t = tile(lon_deg)
+    m = np.zeros(t.shape, dtype=bool)
+    src = os.path.join(ROOT, "data/geo/osm/bosphorus_osm.json")
+    if os.path.exists(src):
+        for b in json.load(open(src))["buildings"]:
+            o = b["outline"]
+            if len(o) < 3:
+                continue
+            ll = [latlon(e, n) for e, n in o]
+            lats = [p[0] for p in ll]
+            lons = [p[1] - lon_deg for p in ll]
+            if max(lons) < 0 or min(lons) > 1:
+                continue
+            r0, r1 = int((42 - max(lats)) * 3600) - 1, int((42 - min(lats)) * 3600) + 1
+            c0, c1 = int(min(lons) * 3600) - 1, int(max(lons) * 3600) + 1
+            r0, c0 = max(r0, 0), max(c0, 0)
+            r1, c1 = min(r1, 3599), min(c1, 3599)
+            if r1 < r0 or c1 < c0:
+                continue
+            rr, cc = np.mgrid[r0:r1 + 1, c0:c1 + 1]
+            pts = np.column_stack([(cc.ravel() + 0.5) / 3600.0, 42 - (rr.ravel() + 0.5) / 3600.0])
+            inside = Path(list(zip(lons, lats))).contains_points(pts)
+            m[rr.ravel()[inside], cc.ravel()[inside]] = True
+    _mask[lon_deg] = m
+    return m
+
+
+def is_roof(lat, lon):
+    m = building_mask(int(math.floor(lon)))
+    r = int((42.0 - lat) * 3600.0)
+    c = int((lon - math.floor(lon)) * 3600.0)
+    return bool(m[min(max(r, 0), 3599), min(max(c, 0), 3599)])

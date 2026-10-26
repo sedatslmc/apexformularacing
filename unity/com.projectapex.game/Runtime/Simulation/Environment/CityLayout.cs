@@ -176,6 +176,8 @@ namespace Apex.Environment
             {
                 float td = field.TrackDistance(x, z, 90f, out _);
                 if (td < 7.5f + o.trackClearance + half) return;
+                // Detail zone A/B: full detail only within ~450 m of the circuit, beyond it mid-band blocks.
+                if (td > 90f && field.TrackDistance(x, z, 450f, out _) > 450f) band = 1;
             }
             if (IsReserved(x, z, half))
             {

@@ -56,6 +56,9 @@ namespace Apex.Career
             bool changed = false;
             if (version < CurrentVersion) { version = CurrentVersion; changed = true; }
             if (calendar == null) { calendar = new string[0]; changed = true; }
+            // The Bosphorus GP moved to the geographic layout (Variant A, id "bosphorus_a").
+            for (int i = 0; i < calendar.Length; i++)
+                if (calendar[i] == "bosphorus_gp") { calendar[i] = "bosphorus_a"; changed = true; }
             if (points == null || (calendar.Length > 0 && points.Length != Roster.Drivers.Length + 1))
             {
                 points = new int[Roster.Drivers.Length + 1];

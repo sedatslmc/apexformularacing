@@ -107,6 +107,16 @@ namespace Apex.Environment
                 if (d2 < nearest) { nearest = d2; nearestY = s.Y; }
             }
             float h = hsum / wsum - 1.2f;
+            if (land.HasHeightGrid)
+            {
+                // Real terrain, with a verge that follows the road within 25 m and blends out by 60 m.
+                float dem = land.Height(x, z);
+                float dist = MathF.Sqrt(nearest);
+                float t = ApexMath.Clamp01((dist - 25f) / 35f);
+                h = ApexMath.Lerp(nearestY - 1.0f, dem - 0.3f, t);
+                if (dist < 40f) h = MathF.Min(h, nearestY - 1.0f);
+                return h;
+            }
             // Never poke through the road corridor.
             if (nearest < 40f * 40f) h = MathF.Min(h, nearestY - 1.0f);
             return MathF.Max(h, baseLevel);

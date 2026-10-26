@@ -1,6 +1,6 @@
 {
  "id": "bosphorus_gp",
- "name": "Bosphorus Grand Prix (Entwurf v0.2)",
+ "name": "Bosphorus GP – alter Entwurf (Archiv)",
  "description": "Fiktiver, temporär gesperrter Kurs am europäischen Bosporus-Ufer, inspiriert vom Beşiktaş–Ortaköy-Korridor. Schematische Koordinaten (x = Osten, y = Norden, Meter), NICHT georeferenziert. Alle Maße sind abstimmbare Designziele.",
  "direction": "counter_clockwise",
  "default_width": 13.0,

@@ -29,7 +29,7 @@ namespace Apex.Game
     /// </summary>
     public sealed partial class ApexGame : MonoBehaviour
     {
-        public static readonly string[] TrackIds = { "bosphorus_gp", "test_loop" };
+        public static readonly string[] TrackIds = { "bosphorus_a", "test_loop" };
         const string CareerFile = "career.json";
         const string ConfigFile = "session.json";
 

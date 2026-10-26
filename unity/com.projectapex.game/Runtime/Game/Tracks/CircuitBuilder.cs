@@ -88,21 +88,23 @@ namespace Apex.Game
             var kerbL = new float[g.Count];
             var kerbR = new float[g.Count];
             ComputeKerbs(g, kerbL, kerbR);
+            runoffL = g.RunoffLeft;
+            runoffR = g.RunoffRight;
 
             BuildRoad(root.transform, g);
             BuildKerbs(root.transform, g, kerbL, kerbR);
             var pitMask = new bool[g.Count];
             if (def.pit != null)
                 for (int i = 0; i < g.Count; i++) pitMask[i] = def.pit.Contains(g.Distances[i], g.Length);
-            ci.Corners = g.DetectCorners();
+            ci.Corners = g.CornersFor(def);
             BuildRunoffAndWalls(root.transform, g, kerbL, kerbR, def.pit, pitMask);
             ci.WallLeft = new float[g.Count];
             ci.WallRight = new float[g.Count];
             for (int i = 0; i < g.Count; i++)
             {
                 bool pitHere = def.pit != null && pitMask[i];
-                ci.WallLeft[i] = WallOffset(g, kerbL, i, pitHere && def.pit.side < 0);
-                ci.WallRight[i] = WallOffset(g, kerbR, i, pitHere && def.pit.side > 0);
+                ci.WallLeft[i] = WallOffset(g, kerbL, i, pitHere && def.pit.side < 0, -1f);
+                ci.WallRight[i] = WallOffset(g, kerbR, i, pitHere && def.pit.side > 0, 1f);
             }
             if (def.pit != null) BuildPitLane(root.transform, ci, pitMask);
             ci.Terrain = new TerrainField(g, def);
@@ -255,8 +257,16 @@ namespace Apex.Game
             AddMesh(parent, "Kerbs", md.ToMesh("Kerbs"), new[] { "KerbRed", "KerbWhite" }, SurfaceType.Kerb);
         }
 
-        static float WallOffset(TrackGeometry g, float[] kerb, int i, bool pit) =>
-            pit ? g.Widths[i] * 0.5f + PitOuter : g.Widths[i] * 0.5f + KerbWidth * kerb[i] + RunoffWidth;
+        // Per-sample run-off of the circuit being built (null = RunoffWidth everywhere).
+        static float[] runoffL, runoffR;
+
+        /// <summary>Lateral distance of the barrier from the centreline; side -1 = left, +1 = right.</summary>
+        static float WallOffset(TrackGeometry g, float[] kerb, int i, bool pit, float side)
+        {
+            if (pit) return g.Widths[i] * 0.5f + PitOuter;
+            float[] r = side < 0 ? runoffL : runoffR;
+            return g.Widths[i] * 0.5f + KerbWidth * kerb[i] + (r != null ? r[i] : RunoffWidth);
+        }
 
         static void BuildRunoffAndWalls(Transform parent, TrackGeometry g, float[] kerbL, float[] kerbR, CircuitDefinition.PitLane pit, bool[] pitMask)
         {
@@ -272,14 +282,14 @@ namespace Apex.Game
                 {
                     float inner = g.Widths[i] * 0.5f + KerbWidth * k[i];
                     // The pit lane replaces the run-off on its side.
-                    float outer = pitSide && pitMask[i] ? inner : WallOffset(g, k, i, false);
+                    float outer = pitSide && pitMask[i] ? inner : WallOffset(g, k, i, false, side);
                     return side < 0 ? new Vector4(-outer, -RunoffDrop, -inner, 0f) : new Vector4(inner, 0f, outer, -RunoffDrop);
                 }, 0.25f);
                 for (int i = 0; i < n; i++)
                 {
                     int j = (i + 1) % n;
                     bool pi_ = pitSide && pitMask[i], pj = pitSide && pitMask[j];
-                    float oi = side * WallOffset(g, k, i, pi_), oj = side * WallOffset(g, k, j, pj);
+                    float oi = side * WallOffset(g, k, i, pi_, side), oj = side * WallOffset(g, k, j, pj, side);
                     float yi = pi_ ? 0f : -RunoffDrop, yj = pj ? 0f : -RunoffDrop;
                     float v = g.Distances[i] * 0.25f;
                     int sub = ((int)(g.Distances[i] / 6f)) % 2;

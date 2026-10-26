@@ -193,5 +193,44 @@ namespace Apex.Tests
             Assert.That(quay.water, Is.GreaterThan(street.water));
             Assert.That(quay.crowd, Is.GreaterThan(0.5f));
         }
+    
+        [Test]
+        public void BosphorusGrandPrixGeographyAndCity()
+        {
+            var def = TestData.Circuit("bosphorus_a");
+            var g = TrackGeometry.FromDefinition(def);
+            var field = new TerrainField(g, def);
+            var land = field.land;
+            Assert.That(land.HasLand && land.HasHeightGrid, Is.True);
+            Assert.That(def.trueNorthBearing, Is.EqualTo(0f), "unrotated frame: true north = +z");
+            for (int i = 0; i < g.Count; i += 10)
+            {
+                var p = g.Positions[i];
+                Assert.That(land.MassAt(p.X, p.Z), Is.EqualTo("europe"), $"track on the European side at {g.Distances[i]:F0} m");
+                Assert.That(field.Height(p.X, p.Z), Is.LessThan(p.Y - 0.5f), "terrain below the road");
+            }
+            CircuitDefinition.Landmark L(string id) => def.FindLandmark(id);
+            Assert.That(land.IsLand(L("maidens_tower").east, L("maidens_tower").north), Is.False, "Maiden's Tower islet in the water");
+            Assert.That(land.MassAt(L("bridge_as").east + 150f, L("bridge_as").north), Is.EqualTo("asia"));
+            Assert.That(land.IsLand((L("bridge_eu").east + L("bridge_as").east) / 2f, (L("bridge_eu").north + L("bridge_as").north) / 2f), Is.False);
+            Assert.That(land.MassAt(L("sultan_ahmed").east, L("sultan_ahmed").north), Is.EqualTo("europe"), "peninsula joins Europe beyond the Golden Horn");
+            Assert.That(land.Height(L("galata").east, L("galata").north), Is.InRange(25f, 80f), "Galata hill from the DEM");
+            var city = new CityLayout(field, def, new CityLayout.Options { quality = 0 });
+            Assert.That(city.lots.Count, Is.GreaterThan(1500));
+            foreach (var lot in city.lots)
+            {
+                Assert.That(field.IsWater(lot.x, lot.z), Is.False);
+                if (lot.band == 0)
+                    Assert.That(field.TrackDistance(lot.x, lot.z, 80f, out _), Is.GreaterThan(7.5f + 26f));
+            }
+            var routes = MarineRoute.ForCircuit(def, land);
+            Assert.That(routes.Count, Is.GreaterThanOrEqualTo(4));
+            foreach (var r in routes)
+                for (double t = 0; t < r.CycleTime; t += 3.0)
+                {
+                    r.Sample(t, 0f, out var p, out _, out _);
+                    Assert.That(land.IsLand(p.X, p.Y), Is.False, $"{r.name} on land at t={t} ({p.X:F0}, {p.Y:F0})");
+                }
+        }
     }
 }

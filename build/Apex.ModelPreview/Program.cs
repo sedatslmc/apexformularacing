@@ -67,7 +67,9 @@ if (Array.IndexOf(args, "--environment") >= 0)
     // Bosphorus environment as one OBJ (terrain, road, city, trees, landmarks) plus budget stats.
     int qa = Array.IndexOf(args, "--quality");
     int quality = qa >= 0 && qa + 1 < args.Length ? int.Parse(args[qa + 1]) : 1;
-    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json"));
+    int ti = Array.IndexOf(args, "--track");
+    string trackId = ti >= 0 && ti + 1 < args.Length ? args[ti + 1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + trackId + ".json"));
     var def = Apex.Tracks.CircuitDefinition.FromJson(json);
     var g = Apex.Tracks.TrackGeometry.FromDefinition(def);
     var field = new Apex.Environment.TerrainField(g, def);
@@ -146,9 +148,9 @@ if (Array.IndexOf(args, "--environment") >= 0)
     float qibla = (151f + north) % 360f;
     { var lg = new LandmarkGeometry(); lg.Bridge(LP("bridge_eu"), LP("bridge_as"), -0.4f); Put(lg, Vector3.zero, 0f); }
     { var lg = new LandmarkGeometry(); lg.OrtakoyMosque(); lg.B(LandmarkGeometry.Stone).Box(new Vector3(0, -3, 0), new Vector3(46, 6, 46)); var p = LP("ortakoy_mosque"); p.y = MathF.Max(p.y, 1.6f); Put(lg, p, qibla); }
-    { var lg = new LandmarkGeometry(); lg.Palace(284f, 48f, 18f, true); Put(lg, Inland(LP("dolmabahce"), -1, 40), ShoreYaw(def.shoreline, -390)); }
-    { var lg = new LandmarkGeometry(1); lg.Palace(160f, 30f, 14f, false); Put(lg, Inland(LP("ciragan"), -1, 28), ShoreYaw(def.shoreline, 841)); }
-    { var lg = new LandmarkGeometry(1); lg.Palace(65f, 40f, 15f, false); Put(lg, Inland(LP("beylerbeyi"), 1, 30), ShoreYaw(def.farShoreline, 2362)); }
+    { var lg = new LandmarkGeometry(); lg.Palace(284f, 48f, 18f, true); Put(lg, Inland(LP("dolmabahce"), -1, 40), ShoreYaw(def.shoreline, def.FindLandmark("dolmabahce").north)); }
+    { var lg = new LandmarkGeometry(1); lg.Palace(160f, 30f, 14f, false); Put(lg, Inland(LP("ciragan"), -1, 28), ShoreYaw(def.shoreline, def.FindLandmark("ciragan").north)); }
+    { var lg = new LandmarkGeometry(1); lg.Palace(65f, 40f, 15f, false); Put(lg, Inland(LP("beylerbeyi"), 1, 30), ShoreYaw(def.farShoreline, def.FindLandmark("beylerbeyi").north)); }
     { var lg = new LandmarkGeometry(1); lg.GalataTower(63f); Put(lg, LP("galata"), 0f); }
     { var lg = new LandmarkGeometry(1); lg.MaidensTower(); var p = LP("maidens_tower"); p.y = -0.4f; Put(lg, p, 90f + north); }
     { var lg = new LandmarkGeometry(1); lg.ImperialMosque(11.7f, 26f, 6, 64f, LandmarkGeometry.Stone); Put(lg, LP("sultan_ahmed"), qibla); }

@@ -48,7 +48,7 @@ namespace Apex.Tests
             var states = new List<CarState>();
             int hint = -1, spins = 0;
             bool spinning = false;
-            for (int i = 0; i < 120 * 300 && timer.completedLaps.Count < 2; i++)
+            for (int i = 0; i < 120 * 420 && timer.completedLaps.Count < 2; i++)
             {
                 var pr = g.Project(rig.Position, hint);
                 hint = pr.index;
@@ -108,6 +108,20 @@ namespace Apex.Tests
             var (spins, lap) = KeyboardLap("bosphorus_gp", Profile(profile), true);
             Assert.That(spins, Is.EqualTo(0));
             Assert.That(lap, Is.InRange(110f, 150f));
+        }
+
+        [Test]
+        [TestCase(DrivingProfile.Casual)]
+        [TestCase(DrivingProfile.Balanced)]
+        [TestCase(DrivingProfile.Expert)]
+        public void BosphorusGrandPrixKeyboardLapWithoutSpins(DrivingProfile profile)
+        {
+            var (spins, lap) = KeyboardLap("bosphorus_a", Profile(profile), false);
+            Assert.That(spins, Is.EqualTo(0));
+            Assert.That(lap, Is.InRange(118f, 150f));
+            var (wetSpins, wetLap) = KeyboardLap("bosphorus_a", Profile(profile), true);
+            Assert.That(wetSpins, Is.EqualTo(0));
+            Assert.That(wetLap, Is.InRange(135f, 170f));
         }
     }
 }

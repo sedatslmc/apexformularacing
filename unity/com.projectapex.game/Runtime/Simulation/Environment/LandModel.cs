@@ -25,11 +25,16 @@ namespace Apex.Environment
         }
 
         readonly List<Mass> masses = new List<Mass>();
+        readonly CircuitDefinition.HeightGrid grid;
+
+        /// <summary>True when real terrain heights (DEM grid) are available.</summary>
+        public bool HasHeightGrid => grid != null;
 
         public bool HasLand => masses.Count > 0;
 
         public LandModel(CircuitDefinition def)
         {
+            grid = def.heightGrid;
             foreach (var m in def.landMasses)
             {
                 var mass = new Mass { id = m.id, rise = m.rise, scale = Math.Max(m.scale, 1f), x = new float[m.polygon.Count], z = new float[m.polygon.Count] };
@@ -109,6 +114,7 @@ namespace Apex.Environment
         {
             var m = Find(x, z);
             if (m == null) return SeabedHeight;
+            if (grid != null) return MathF.Max(1.2f, grid.Sample(x, z));
             float d = EdgeDistance(m, x, z);
             // Quay edge at +1.5 m, then the hill profile with soft noise (±8 % of rise).
             float h = 1.5f + m.rise * (1f - MathF.Exp(-d / m.scale));

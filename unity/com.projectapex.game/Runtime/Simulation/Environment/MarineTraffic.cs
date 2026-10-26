@@ -105,16 +105,18 @@ namespace Apex.Environment
                 var r = new MarineRoute { name = name, speed = speed, dwell = dwell, shuttle = true, vesselKind = 0 };
                 var sa = Offshore(land, pa.Value, pb.Value, 30f);
                 var sb = Offshore(land, pb.Value, pa.Value, 30f);
-                r.points.Add(sa);
-                // Gentle S-curve via two offset control points.
+                // Gentle S-curve; points over land are pushed sideways onto open water.
                 var dir = Vector2.Normalize(sb - sa);
                 var side = new Vector2(dir.Y, -dir.X);
                 float len = Vector2.Distance(sa, sb);
-                for (int i = 1; i < 8; i++)
+                r.points.Add(sa);
+                int steps = Math.Max(8, (int)(len / 120f));
+                for (int i = 1; i < steps; i++)
                 {
-                    float t = i / 8f;
+                    float t = i / (float)steps;
                     var p = Vector2.Lerp(sa, sb, t) + side * (MathF.Sin(t * MathF.PI * 2f) * len * 0.04f);
-                    if (!land.IsLand(p.X, p.Y)) r.points.Add(p);
+                    var w = ToWater(land, p, side, 40f);
+                    if (w.HasValue) r.points.Add(w.Value);
                 }
                 r.points.Add(sb);
                 routes.Add(r);
@@ -143,16 +145,35 @@ namespace Apex.Environment
             return routes;
         }
 
-        /// <summary>Moves from a pier (on the coast) towards a target until clear of land by `clear` metres.</summary>
+        /// <summary>
+        /// Nearest open-water point from a pier (on the coast), searching a fan of directions
+        /// around the target direction, at least `clear` metres from land.
+        /// </summary>
         static Vector2 Offshore(LandModel land, Vector2 pier, Vector2 towards, float clear)
         {
             var dir = Vector2.Normalize(towards - pier);
-            for (float s = 0f; s < 600f; s += 5f)
-            {
-                var p = pier + dir * s;
-                if (!land.IsLand(p.X, p.Y) && land.WaterDistanceToCoast(p.X, p.Y) >= clear) return p;
-            }
-            return pier + dir * 600f;
+            for (float s = 0f; s < 900f; s += 10f)
+                foreach (float deg in new[] { 0f, 25f, -25f, 50f, -50f, 75f, -75f, 100f, -100f, 130f, -130f })
+                {
+                    float a = deg * MathF.PI / 180f;
+                    var d = new Vector2(dir.X * MathF.Cos(a) - dir.Y * MathF.Sin(a), dir.X * MathF.Sin(a) + dir.Y * MathF.Cos(a));
+                    var p = pier + d * s;
+                    if (!land.IsLand(p.X, p.Y) && land.WaterDistanceToCoast(p.X, p.Y) >= clear) return p;
+                }
+            return pier;
+        }
+
+        /// <summary>The point itself if it is on open water, else the nearest water point sideways (or null).</summary>
+        static Vector2? ToWater(LandModel land, Vector2 p, Vector2 side, float clear)
+        {
+            for (float o = 0f; o < 1500f; o += 20f)
+                foreach (float sgn in new[] { 1f, -1f })
+                {
+                    var q = p + side * (o * sgn);
+                    if (!land.IsLand(q.X, q.Y) && land.WaterDistanceToCoast(q.X, q.Y) >= clear) return q;
+                    if (o == 0f) break;
+                }
+            return null;
         }
     }
 }
