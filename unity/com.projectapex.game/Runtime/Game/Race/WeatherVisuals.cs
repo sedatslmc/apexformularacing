@@ -32,13 +32,13 @@ namespace Apex.Game
         float sunBaseIntensity = 1.25f;
         Color sunBaseColor = Color.white;
 
-        /// <summary>Instances the road/kerb/pit materials of the circuit so they can look wet.</summary>
+        /// <summary>Instances the road/kerb/run-off/pit materials of the circuit so they can look wet.</summary>
         public void Bind(GameObject circuitRoot)
         {
             foreach (var mr in circuitRoot.GetComponentsInChildren<MeshRenderer>())
             {
                 string n = mr.gameObject.name;
-                if (n != "Road" && n != "Kerbs" && n != "PitLane" && n != "PitApron") continue;
+                if (n != "Road" && n != "Kerbs" && n != "Runoff" && n != "PitLane" && n != "PitApron") continue;
                 var mats = mr.sharedMaterials;
                 for (int i = 0; i < mats.Length; i++)
                 {
@@ -49,7 +49,7 @@ namespace Apex.Game
                     float glossMean = -1f;
                     if (SurfaceTextures.HasGlossMap(inst))
                     {
-                        var info = SurfaceTextures.Load(n == "Kerbs" ? SurfaceTextures.Kerb : SurfaceTextures.Asphalt);
+                        var info = SurfaceTextures.Load(n == "Kerbs" ? SurfaceTextures.Kerb : n == "Runoff" ? SurfaceTextures.Runoff : SurfaceTextures.Asphalt);
                         glossMean = info != null && info.meanSmoothness >= 0f ? info.meanSmoothness : 0.3f;
                     }
                     wetMaterials.Add((inst, col, sm, glossMean));

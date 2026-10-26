@@ -12,7 +12,7 @@ namespace Apex.Game
     {
         public const string Folder = "Textures/CC0";
         /// <summary>Set names the circuit uses (the importer's --name).</summary>
-        public const string Asphalt = "asphalt", Kerb = "kerb";
+        public const string Asphalt = "asphalt", Runoff = "runoff", Kerb = "kerb";
         /// <summary>Metres per UV unit of the road, kerb and run-off meshes.</summary>
         public const float RoadUvMetres = Apex.Tracks.RoadSurface.UvMetres;
 
@@ -23,6 +23,8 @@ namespace Apex.Game
             public float metres = 1f;
             /// <summary>Mean smoothness of the map (-1 = no map), used for wet roads.</summary>
             public float meanSmoothness = -1f;
+            /// <summary>Mean linear albedo of the base colour (0 = unknown), for <see cref="AlbedoTint"/>.</summary>
+            public float meanAlbedoLinear;
             public string source, author, licence;
         }
 
@@ -76,6 +78,22 @@ namespace Apex.Game
             }
             return true;
         }
+
+        /// <summary>
+        /// Material colour that brings a set's mean linear albedo to `target` (e.g. 0.07 for aged city asphalt;
+        /// scans of fresh asphalt are often 0.015). The factor is linear (0.5 .. 6); Color.gamma keeps it linear
+        /// after Unity's sRGB-to-linear conversion of material colours in a linear-space project.
+        /// </summary>
+        public static Color AlbedoTint(string set, float target)
+        {
+            var info = Load(set);
+            if (info == null || info.meanAlbedoLinear <= 0f) return Color.white;
+            float f = Mathf.Clamp(target / info.meanAlbedoLinear, 0.5f, 6f);
+            return new Color(f, f, f, 1f).gamma;
+        }
+
+        /// <summary>Mean linear albedo targets (physically plausible ranges: fresh asphalt 0.04-0.05, aged 0.08-0.12).</summary>
+        public const float AsphaltAlbedo = 0.07f, RunoffAlbedo = 0.09f;
 
         /// <summary>True when a material takes its smoothness from a map (wet-road handling, see WeatherVisuals).</summary>
         public static bool HasGlossMap(Material m) => m != null && m.IsKeywordEnabled("_METALLICSPECGLOSSMAP");

@@ -340,13 +340,18 @@ namespace Apex.Game
             if (materialsReady) return;
             materialsReady = true;
             var asphaltA = AsphaltTexture(out var asphaltN);
-            // Road and run-off: the scanned CC0 asphalt set when imported (tools/textures/import_cc0.py), else procedural.
+            // Road and run-off: the scanned CC0 sets when imported (tools/textures/import_cc0.py, see docs/CC0_MATERIALS.md), else procedural.
             var road = Lit("Asphalt", new Color(0.62f, 0.62f, 0.64f), 0.22f, asphaltA, asphaltN, new Vector2(3.3f, 3.3f));
-            if (SurfaceTextures.TryApply(road, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres)) SetColor(road, new Color(0.95f, 0.95f, 0.95f));
+            // Calibrated to aged city asphalt (the track scan is fresh, very dark asphalt).
+            if (SurfaceTextures.TryApply(road, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres))
+                SetColor(road, SurfaceTextures.AlbedoTint(SurfaceTextures.Asphalt, SurfaceTextures.AsphaltAlbedo));
             ApexMaterials.Register("Asphalt", road);
             var runoff = Lit("RunoffAsphalt", new Color(0.78f, 0.77f, 0.75f), 0.18f, asphaltA, asphaltN, new Vector2(6.25f, 6.25f));
-            // The run-off is older, paler asphalt: same scan, lighter tint.
-            if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres)) SetColor(runoff, new Color(1.08f, 1.07f, 1.05f));
+            // The run-off is older, paler asphalt: its own scan, or the road scan with a lighter tint.
+            if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Runoff, SurfaceTextures.RoadUvMetres))
+                SetColor(runoff, SurfaceTextures.AlbedoTint(SurfaceTextures.Runoff, SurfaceTextures.RunoffAlbedo));
+            else if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres))
+                SetColor(runoff, SurfaceTextures.AlbedoTint(SurfaceTextures.Asphalt, SurfaceTextures.RunoffAlbedo));
             ApexMaterials.Register("RunoffAsphalt", runoff);
             // Kerbs: red and white paint on the scanned kerb set (paint base tinted by the kerb colour); without it the plain palette colours stay.
             if (SurfaceTextures.Load(SurfaceTextures.Kerb) != null)
