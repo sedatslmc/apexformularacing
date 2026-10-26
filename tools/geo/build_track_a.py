@@ -3,7 +3,7 @@
 
 Writes unity/.../Resources/Tracks/bosphorus_a.json in the existing CircuitDefinition
 format: points [east, north, elevation, width, run-off left, run-off right] in the unrotated local frame of
-tools/geo/dem_tools.py (true north = +z), the game height profile (<= 12 %), widths
+tools/geo/dem_tools.py (true north = +z), the drivable height profile (tools/geo/vertical_alignment.py), widths
 (11 m, 13 m on Dolmabahçe Cd.), pit lane, sectors, corner names, DEM shorelines and
 the verified landmarks. Derived from OSM (ODbL) and Copernicus DEM.
 """
@@ -19,6 +19,7 @@ ROOT = dem.ROOT
 PLAN = os.path.join(ROOT, "data/geo/track_plan_A.json")
 OUT = os.path.join(ROOT, "unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_a.json")
 LEAD = 300.0       # points start this far before the start/finish line
+LIMITS = os.path.join(ROOT, "data/geo/bosphorus_a_limits.csv")   # build/Apex.Tuning: dotnet run -- limits bosphorus_a <csv>
 SPACING = 10.0
 
 LANDMARKS = [
@@ -50,12 +51,14 @@ EASE = [(3360.0, 3740.0, 6)]
 RUNOFF_DEFAULT = 1.5
 # Beşiktaş Cd.: outgoing and return legs on the two carriageways (lap ranges), 9.5 m each,
 # a shared median wall on their left.
-PARALLEL = [(230.0, 460.0), (5410.0, 5650.0)]
+# Where the two legs run side by side (centrelines < 16 m apart: 250–460 and 5313–5519 m true lap
+# distance), plus 20 m for the transitions.
+PARALLEL = [(230.0, 480.0), (5293.0, 5540.0)]
 PARALLEL_WIDTH = 9.5
 # Escape roads on the outside of the heavy braking zones: (from, to, side, metres).
 ESCAPES = [(1950.0, 2200.0, "right", 12.0),   # T1 Ortaköy
            (3600.0, 3800.0, "right", 10.0),   # T5 Balmumcu
-           (5150.0, 5320.0, "left", 8.0),     # T6 Beşiktaş
+           (5150.0, 5290.0, "left", 8.0),     # T6 Beşiktaş (ends where the other carriageway begins)
            (6100.0, 6280.0, "right", 8.0),    # T8 Maçka
            (6760.0, 6880.0, "right", 6.0),    # T10 Bayıldım
            (7050.0, 7200.0, "right", 6.0)]    # T11 Kabataş
@@ -118,19 +121,13 @@ def height_grid(cell=100.0):
 def main():
     plan = json.load(open(PLAN))
     pts = plan["points"]                       # every 10 m from the start line (5 m resample, [::2])
-    prof_s, prof_h = plan["profile"]["s"], plan["profile"]["game"]
-    L = plan["length"]
+    prof_s = plan["profile"]["s"]
     n = len(pts)
     # Rotate so the file starts LEAD metres before the line.
     k = int(round(LEAD / SPACING))
     order = list(range(n - k, n)) + list(range(0, n - k))
     rows = []
     dolmabahce = [w for w in plan["width_sections"] if w["street"] == "Dolmabahçe Caddesi"]
-
-    def height_at(s):
-        s %= L
-        j = min(range(len(prof_s)), key=lambda i: abs(prof_s[i] - s))
-        return prof_h[j]
 
     import numpy as np
     arr = np.array(pts, float)
@@ -145,8 +142,41 @@ def main():
                 t = min(1.0, (i - i0) / w, (i1 - i) / w)
                 arr[i] = arr[i] * (1 - t) + sm[i] * t
     pts = arr.tolist()
+    # Lap distance of each point = true arc length from the start line (the points are ~9.7 m apart,
+    # not exactly SPACING; using idx * SPACING shifted heights and widths by up to ~200 m).
+    arc = [0.0]
+    for i in range(1, n):
+        arc.append(arc[-1] + math.dist(pts[i - 1], pts[i]))
+    L = arc[-1] + math.dist(pts[-1], pts[0])
+    # Drivable height profile (vertical alignment) from the street-level DEM profile and the vehicle limits.
+    import vertical_alignment as va
+    print("vertical alignment:")
+    # Side-by-side legs (Beşiktaş Cd.): each point in a PARALLEL range is tied to the nearest point of the
+    # other leg (centrelines < 20 m apart) so both carriageways have one height.
+    pairs = []
+    for i in range(n):
+        if not any(a <= arc[i] <= b for a, b in PARALLEL[:1]):
+            continue
+        best, bj = 1e9, -1
+        for j in range(n):
+            along = abs(arc[i] - arc[j])
+            if min(along, L - along) < 300:
+                continue
+            dd = math.dist(pts[i], pts[j])
+            if dd < best:
+                best, bj = dd, j
+        if best < 20.0:
+            # Foot of the perpendicular on the other leg (between bj and its neighbours).
+            pa, pb = pts[bj], pts[(bj + 1) % n]
+            seg = math.dist(pa, pb)
+            t = max(0.0, min(1.0, ((pts[i][0] - pa[0]) * (pb[0] - pa[0]) + (pts[i][1] - pa[1]) * (pb[1] - pa[1])) / max(seg * seg, 1e-9)))
+            pairs.append((arc[i], (arc[bj] + t * seg) % L))
+    grid_s, grid_h, _ = va.design(prof_s, plan["profile"]["street"], L, LIMITS, pairs)
+    heights = va.evaluate(grid_s, grid_h, L, np.array(arc))
+    # Raw (file) distance of the start line: arc length of the k points before it.
+    lead = L - arc[n - k]
     for idx in order:
-        s = idx * SPACING
+        s = arc[idx]
         width = 11.0
         for w in dolmabahce:
             if w["from"] - 5 <= s <= w["to"] + 5:
@@ -165,35 +195,8 @@ def main():
                 else:
                     left = max(left, v)
         x, z = pts[idx]
-        rows.append([round(x, 2), round(z, 2), round(height_at(s), 2), width, round(left, 2), round(right, 2)])
-    # Game profile: at most 11.5 % over any 50 m (documented smoothing of the street profile).
-    import numpy as np
-    h = np.array([r[2] for r in rows])
-    xy = np.array([[r[0], r[1]] for r in rows])
-    seg = np.linalg.norm(np.roll(xy, -1, axis=0) - xy, axis=1)
-    m = len(h)
-
-    def grades():
-        out = np.zeros(m)
-        for i in range(m):
-            acc, j = 0.0, i
-            while acc < 50.0:
-                acc += seg[j % m]
-                j += 1
-            out[i] = abs(h[j % m] - h[i]) / acc
-        return out
-    for _ in range(600):
-        g50 = grades()
-        if g50.max() <= 0.112:
-            break
-        bad = g50 > 0.112
-        for k in range(1, 7):
-            bad = bad | np.roll(g50 > 0.112, k)
-        sm = (np.roll(h, 1) + h + np.roll(h, -1)) / 3.0
-        h = np.where(bad | np.roll(bad, -1), sm, h)
-    for r, v in zip(rows, h):
-        r[2] = round(float(v), 2)
-    sec = [round(((b + LEAD) % L) / L, 4) for b in plan["sectors"]]
+        rows.append([round(x, 2), round(z, 2), round(float(heights[idx]), 5), width, round(left, 2), round(right, 2)])
+    sec = [round(((b + lead) % L) / L, 4) for b in plan["sectors"]]
     data = {
         "id": "bosphorus_a",
         "name": "Bosphorus Grand Prix",
@@ -204,13 +207,13 @@ def main():
         "identity": "bosphorus",
         "default_width": 11.0,
         "sector_fractions": sorted(sec),
-        "start_line_distance": LEAD,
+        "start_line_distance": round(lead, 2),
         "points": rows,
-        "pit": {"side": -1, "entry": round(LEAD - 170), "exit": round(LEAD + 230), "box_start": round(LEAD - 90),
+        "pit": {"side": -1, "entry": round(lead - 170), "exit": round(lead + 230), "box_start": round(lead - 90),
                 "box_spacing": 9, "speed_limit_kmh": 80},
         "corner_names": CORNER_NAMES,
         # Approved corners: raw distance of the apex (file distance = lap distance + LEAD) and direction.
-        "corners": [{"name": CORNER_NAMES[i], "distance": round((c["s"] + LEAD) % L, 1), "right": c["dir"] == "rechts",
+        "corners": [{"name": CORNER_NAMES[i], "distance": round((c["s"] + lead) % L, 1), "right": c["dir"] == "rechts",
                      "angle": c["angle"]} for i, c in enumerate(plan["corners"])],
         "sightlines": [],
         "shoreline": shoreline(-1500.0, 2600.0, 10.0, list(range(-900, 2601, 50))),

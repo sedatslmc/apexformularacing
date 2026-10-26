@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.IO;
 using System.Numerics;
@@ -5,8 +6,9 @@ using Apex.AI;
 using Apex.Race;
 using Apex.Tracks;
 using Apex.Vehicle;
-
 // Usage: dotnet run -- launch | brake | steer | slide | aero | validate | line | field | lap <track_id> [trace]
+// Road surface (Bosphorus fix): surface <track> [grid|lap|all] | validate-road <track> [out.txt] | limits <track> <csv>
+//   | vmax | probe-surface <track> <from> <to> | trace <track> <from> <to> [pace] | profile-csv <json> <csv>
 const float Dt = 1f / 120f;
 string mode = args.Length > 0 ? args[0] : "launch";
 
@@ -434,6 +436,165 @@ else if (mode == "field")
         }
     }
     Console.WriteLine("max beyond edge per car: " + string.Join(" ", Array.ConvertAll(maxB, b => b.ToString("F2"))));
+}
+else if (mode == "surface")
+{
+    // Drives the real vehicle model on the circuit's real collider triangles (SurfaceRig) and lists road defects.
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    Console.WriteLine($"test bed: {bed.world.TriangleCount} collider triangles, {sw.ElapsedMilliseconds} ms");
+    void Show(string title, CircuitTestBed.DriveResult r, int max = 12)
+    {
+        Console.WriteLine($"{title}: {r}");
+        var gr = r.events.FindAll(e => e.kind == CircuitTestBed.EventKind.Grounding);
+        if (gr.Count > 0)
+        {
+            foreach (var (lo, hi) in new[] { (0f, 200f), (200f, 250f), (250f, 280f), (280f, 300f), (300f, 400f) })
+            {
+                var b = gr.FindAll(e => e.speed * 3.6f >= lo && e.speed * 3.6f < hi);
+                if (b.Count > 0) Console.WriteLine($"   grounding {lo:F0}-{hi:F0} km/h: {b.Count}, deepest {b.Max(e => e.value) * 1000:F1} mm (negative = gap within the 10 mm contact offset), parts {string.Join(",", b.Select(e => e.part).Distinct())}");
+            }
+        }
+        int k = 0;
+        foreach (var e in r.events)
+            if (e.kind != CircuitTestBed.EventKind.Grounding || e.value > 0.002f)
+                if (k++ < max) Console.WriteLine("   " + e);
+    }
+    string what = args.Length > 2 ? args[2] : "all";
+    if (what == "all" || what == "grid")
+        for (int slot = 0; slot < 20; slot += (what == "grid" ? 1 : 19))
+        {
+            var (d, lat) = bed.GridSlot(slot);
+            Show($"grid {slot} full throttle 800 m", bed.Drive(d, lat, 800f, 40f, throttleOnly: false));
+        }
+    if (what == "all" || what == "lap")
+    {
+        var (d0, l0) = bed.GridSlot(0);
+        Show("full race lap from pole (AI, 2 laps)", bed.Drive(d0, l0, 0f, 600f, laps: 2), 40);
+    }
+}
+else if (mode == "limits")
+{
+    // Vertical-curvature limits from the vehicle, and the racing-line speed with its limits every 5 m (CSV for the profile design).
+    var lim = new VerticalLimits(new VehicleSetup());
+    Console.WriteLine($"static box clearance {lim.staticClearance * 1000:F0} mm, heave stiffness {lim.heaveStiffness:F0} N/m, top speed {lim.topSpeed * 3.6f:F0} km/h, accel at 100/200/300 km/h {lim.Acceleration(100 / 3.6f):F1}/{lim.Acceleration(200 / 3.6f):F1}/{lim.Acceleration(300 / 3.6f):F1} m/s²");
+    foreach (float kmh in new[] { 0f, 50f, 100f, 150f, 200f, 250f, 280f, 300f, 320f })
+    {
+        float v = kmh / 3.6f;
+        float c = lim.MaxCrest(v), sg = lim.MaxSag(v);
+        Console.WriteLine($"{kmh,4} km/h flat clearance front {lim.FlatClearance(lim.boxFront, v) * 1000:F0} mm rear {lim.FlatClearance(lim.boxRear, v) * 1000:F0} mm  crest R >= {(c > 0 ? 1 / c : float.PositiveInfinity):F0} m  sag R >= {(sg > 0 ? 1 / sg : float.PositiveInfinity):F0} m");
+    }
+    if (args.Length > 2)
+    {
+        string id = args[1];
+        string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+        var def = CircuitDefinition.FromJson(json);
+        var g = TrackGeometry.FromDefinition(def);
+        var su = new VehicleSetup();
+        var line = new RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
+        using var w = new StreamWriter(args[2]);
+        w.WriteLine("lap_s,speed,max_crest,max_sag");
+        var vs = lim.DesignSpeeds(g, line.speed);
+        for (float d = 0f; d < g.Length; d += 5f)
+        {
+            float v = vs[g.IndexAt(def.startLineDistance + d)];
+            w.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1},{1:F2},{2:G6},{3:G6}", d, v, lim.MaxCrest(v), lim.MaxSag(v)));
+        }
+        Console.WriteLine("wrote " + args[2]);
+    }
+}
+else if (mode == "vmax")
+{
+    // Full throttle on flat ground: speed over distance (drag/power-limited top speed).
+    var rig = NewRig(true);
+    float next = 200f;
+    while (rig.time < 90f)
+    {
+        rig.sim.throttle = 1f;
+        rig.Step(Dt);
+        if (rig.positionXZ.Y >= next) { Console.WriteLine($"{next,5:F0} m: {rig.u * 3.6f:F0} km/h t={rig.time:F1}s"); next += 200f; }
+    }
+    Console.WriteLine($"after 90 s: {rig.u * 3.6f:F0} km/h");
+}
+else if (mode == "probe-surface")
+{
+    // Physical surface along the lap: centreline height vs the highest collider hit at several lateral offsets.
+    string id = args[1];
+    float from = float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture), to = float.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture);
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    var g = bed.g;
+    for (float d = from; d <= to; d += 2f)
+    {
+        g.FrameAt(d, out var p0, out _, out _);
+        var sb = new System.Text.StringBuilder($"{d,6:F0} y {p0.Y,7:F3} w {g.WidthAt(d):F1} curv {g.CurvatureAt(d) * 1000:F1}");
+        foreach (float lat in new[] { -5f, -3.4f, 0f, 3.4f, 5f })
+        {
+            g.FrameAt(d, out var p, out _, out _, lat);
+            if (bed.world.SurfaceBelow(p.X, p.Z, p.Y + 20f, p.Y - 20f, out var hit))
+                sb.Append($" | {lat,4:F1}: {hit.point.Y - p.Y,6:F3} {hit.part}");
+            else sb.Append($" | {lat,4:F1}: none");
+        }
+        Console.WriteLine(sb);
+    }
+}
+else if (mode == "trace")
+{
+    // Per-step rig state between two raw distances on the first lap from pole: trace <track> <from> <to> [pace].
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string id = args[1];
+    float from = float.Parse(args[2], inv), to = float.Parse(args[3], inv);
+    float pace = args.Length > 4 ? float.Parse(args[4], inv) : 0.95f;
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    bool done = false;
+    bed.trace = (d, rig) =>
+    {
+        if (done || d < from || d > to) return;
+        var s = rig.sim;
+        float pitch = MathF.Asin(rig.Forward.Y) * 57.3f, roll = MathF.Asin(rig.Right.Y) * 57.3f;
+        Console.WriteLine($"{d,7:F1} v {rig.velocity.Length() * 3.6f,5:F0} (line {bed.line.SpeedAt(d) * 3.6f:F0}) vy {rig.velocity.Y,6:F2} pitch {pitch,5:F2} roll {roll,5:F2} grade {bed.g.GradeAt(d) * 100:F1}% " +
+            $"thr {s.throttle:F2} brk {s.brake:F2} st {s.steer,5:F2} comp {s.wheels[0].compression * 1000,3:F0}/{s.wheels[1].compression * 1000,3:F0}/{s.wheels[2].compression * 1000,3:F0}/{s.wheels[3].compression * 1000,3:F0} mm " +
+            $"wheels {string.Join("/", rig.wheelParts)} clearance {rig.MinClearance * 1000,4:F0} mm ({rig.ClearancePart}) body {rig.BodyContacts} slipF {s.wheels[0].slipAngle:F3}");
+        if (d > to - 1f) done = true;
+    };
+    var (d0, l0) = bed.GridSlot(0);
+    bed.Drive(d0, l0, to - d0 + 50f, 200f, pace: pace);
+}
+else if (mode == "validate-road")
+{
+    // Geometric validation of the physical road surface (RoadSurfaceValidator); optional markdown output.
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    var val = new RoadSurfaceValidator(bed);
+    string rep = val.Report(60);
+    Console.WriteLine(rep);
+    if (args.Length > 2) File.WriteAllText(args[2], rep);
+}
+else if (mode == "profile-csv")
+{
+    // Per-sample profile of a circuit file as built (lap distance, height, grade, vertical curvature, vehicle limit use).
+    string path = args[1];
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(File.ReadAllText(path)), withTerrain: false);
+    var val = new RoadSurfaceValidator(bed);
+    var lim = new VerticalLimits(new VehicleSetup());
+    var g = bed.g;
+    int n = g.Count, h = 2;
+    using var w = new StreamWriter(args[2]);
+    w.WriteLine("lap,y,grade,kappa,speed,use");
+    for (int i = 0; i < n; i++)
+    {
+        float Y(int k) => g.Positions[((k % n) + n) % n].Y;
+        float kappa = -(Y(i + h) - 2 * Y(i) + Y(i - h)) / (h * h * g.Spacing * g.Spacing);
+        float v = val.speed[i];
+        float l = kappa >= 0 ? lim.MaxCrest(v) : lim.MaxSag(v);
+        w.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F1},{1:F4},{2:F5},{3:G6},{4:F2},{5:F4}",
+            g.Wrap(g.Distances[i] - bed.def.startLineDistance), Y(i), g.GradeAt(g.Distances[i]), kappa, v, MathF.Abs(kappa) / MathF.Max(l, 1e-6f)));
+    }
+    Console.WriteLine("wrote " + args[2]);
 }
 else if (mode == "lap")
 {
