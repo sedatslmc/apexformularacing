@@ -27,14 +27,14 @@ class ImportCC0Test(unittest.TestCase):
             Image.fromarray(np.full((s, s), 179, np.uint8)).save(os.path.join(src, "x_rough_2k.png"))   # roughness 0.7
             Image.fromarray(np.full((s, s), 200, np.uint8)).save(os.path.join(src, "x_ao_2k.png"))
             out = os.path.join(tmp, "out")
-            import_cc0.main([src, "--name", "t", "--metres", "3", "--paint-base", "--out-root", out])
+            import_cc0.main([src, "--name", "t", "--metres", "3", "--paint-base", "--detail", "--out-root", out])
             d = os.path.join(out, "t")
             meta = json.load(open(os.path.join(d, "source.json")))
             self.assertEqual(meta["metres"], 3)
             self.assertAlmostEqual(meta["meanSmoothness"], 1 - 179 / 255, places=3)
             self.assertGreater(meta["meanAlbedoLinear"], 0.04)   # sRGB 60..140 -> linear about 0.05..0.26
             self.assertLess(meta["meanAlbedoLinear"], 0.2)
-            for f in ("BaseColor.jpg", "PaintBase.jpg", "Normal.png", "MetallicSmoothness.png", "Occlusion.jpg"):
+            for f in ("BaseColor.jpg", "PaintBase.jpg", "Detail.jpg", "Normal.png", "MetallicSmoothness.png", "Occlusion.jpg"):
                 self.assertIn(f, meta["files"])
             nrm = np.asarray(Image.open(os.path.join(d, "Normal.png")))
             self.assertEqual(nrm[0, 0, 1], 155, "DirectX green flipped to OpenGL")

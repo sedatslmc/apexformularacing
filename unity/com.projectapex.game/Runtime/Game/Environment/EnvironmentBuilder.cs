@@ -502,7 +502,7 @@ namespace Apex.Game
                 float inner = hw + 13.5f + 11f, outer = hw + 13.5f + 46f;
                 var a = TrackPoint(g, i, side * inner, -0.05f); var b = TrackPoint(g, i, side * outer, -0.05f);
                 var c = TrackPoint(g, j, side * outer, -0.05f); var e = TrackPoint(g, j, side * inner, -0.05f);
-                parts.B(EnvironmentGeometry.Pavement).QuadFacing(a, b, c, e, new Vector2(a.x, a.z) / 4f, new Vector2(b.x, b.z) / 4f, new Vector2(c.x, c.z) / 4f, new Vector2(e.x, e.z) / 4f, Vector3.up);
+                parts.B(EnvironmentGeometry.Pavement).QuadFacing(a, b, c, e, new Vector2(a.x, a.z) / 3f, new Vector2(b.x, b.z) / 3f, new Vector2(c.x, c.z) / 3f, new Vector2(e.x, e.z) / 3f, Vector3.up);
                 var outward = (b - a).normalized;
                 parts.B(EnvironmentGeometry.Concrete).QuadFacing(b, c, c + Vector3.down * 4f, b + Vector3.down * 4f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, outward);
             }
@@ -576,7 +576,10 @@ namespace Apex.Game
                 parts.B(EnvironmentGeometry.Concrete).QuadFacing(b, c, c + Vector3.down * 2.5f, b + Vector3.down * 2.5f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, V(q.outward));
             }
             foreach (var l in furniture.lamps)
+            {
                 EnvironmentGeometry.Lamp(parts.B, V(l.position), V(l.towards), 9f);
+                env.lampHeads.Add(EnvironmentGeometry.LampHeadPosition(V(l.position), V(l.towards), 9f));
+            }
             float start = ci.Definition.startLineDistance;
             AddMeshObject(ts, "Pavements_Lamps", parts.parts, false);
             var font = CircuitBuilder.BuiltinFont();
@@ -1010,6 +1013,18 @@ namespace Apex.Game
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.TowerGlass), new Color(0.32f, 0.33f, 0.3f));
             foreach (var key in new[] { LandmarkGeometry.Stone, LandmarkGeometry.Marble, LandmarkGeometry.HagiaPlaster })
                 env.AddLight(ApexMaterials.Get(key), new Color(0.32f, 0.27f, 0.2f));
+            // Grey interlocking concrete pavers on the pavements (UV = world x/z per 3 m along the circuit);
+            // the colour stays white so the scan's own albedo applies (mean linear 0.21).
+            var pavement = ApexMaterials.Get(EnvironmentGeometry.Pavement);
+            if (pavement != null)
+            {
+                pavement = new Material(pavement) { name = "Env_Pavement" };
+                if (SurfaceTextures.TryApply(pavement, SurfaceTextures.Pavement, 3f))
+                {
+                    SetColour(pavement, Color.white);
+                    ApexMaterials.Register(EnvironmentGeometry.Pavement, pavement);
+                }
+            }
             foreach (var key in new[] { EnvironmentGeometry.Pavement, EnvironmentGeometry.Concrete, EnvironmentGeometry.RoofTile, EnvironmentGeometry.RoofFlat, EnvironmentGeometry.Quay, LandmarkGeometry.Stone })
                 env.AddWettable(ApexMaterials.Get(key));
         }

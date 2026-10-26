@@ -65,6 +65,60 @@
   - Mobil höchstens 2048 px ASTC 6×6; PC höchstens 4096 px, BC7 bzw. BC5 für Normalen
 - **Repo-Größe:** Im Repo liegen nur die 1K-Sätze (etwa 10 MB). Die 4K-Sätze sind gitignoriert.
 
+## Beton und Gehwege (Phase 1, zweiter Schritt)
+**Status:**
+- **Importiert, kompiliergeprüft, offline gesehen.**
+- **In Unity nicht gesehen.**
+
+| Satz | Quelle | Kachel | Albedo linear | Verwendung |
+|---|---|---|---|---|
+| `barrier` | [concrete_wall_008](https://polyhaven.com/a/concrete_wall_008) | 2,71 m | 0,24 | **Detailkarte** (URP Lit „multiply ×2“ plus Normalen 0,8) über der vorhandenen Blocktextur der Fertigteil-Barrieren: Fugen, Kratzer und Schmutz am Fuß bleiben, dazu kommt echtes Betonkorn. Kachelung 3,8 m Block × 1,6 m Profil. |
+| `pavement` | [patterned_concrete_pavers](https://polyhaven.com/a/patterned_concrete_pavers) | 1,8 m | 0,21 | Volles Material der Gehwege: graues Verbundpflaster („kilit taşı“), wie es Istanbul an den Uferstraßen verlegt. Die UVs sind jetzt einheitlich 3 m je Einheit (vorher teils 4 m). |
+
+**Auswahl:**
+- **Verworfen nach Sichtprüfung der automatischen Erstwahl:**
+  - `precast_concrete_wall`: Bruchsteinmuster, keine Rennstrecken-Barriere
+  - `interlocking_concrete_pavers`: braune Zierplatten
+- **Begründung der Wahl:** Glatter Ortbeton mit feinen Schalungsspuren passt zu Fertigteil-Barrieren.
+
+![Sätze barrier und pavement](img/cc0_concrete_sets.jpg)
+
+- **Importer:** neue Option `--detail` (`Detail.jpg`: entsättigt, Mittelwert sRGB 0,5 = neutral).
+- **Satzliste:** `cc0_sets.json` mit `"detail": true`.
+
+**Wichtig für Builds:**
+- Die gescannten Sätze schalten zur Laufzeit Lit-Keywords ein: Normal-, Glanz-, Occlusion- und Detailkarten; nasse Straßen schalten die Glanzkarte ab.
+- Unity behält in Player-Builds nur Varianten, die ein Material-Asset nutzt.
+- „Project Apex → 2. Materialien erzeugen“ legt deshalb unter `Resources/…/VariantKeepers` kleine Materialien für jede Kombination an.
+- **Ohne diesen Schritt fehlen im Build die Texturen.** Im Editor fällt das nicht auf.
+
+## Gummiabrieb und Bremsspuren
+**Status:**
+- **Implementiert und getestet** (`RubberFollowsTheRacingLineAndDarkensWhereTheTyresWork`).
+- **Offline gesehen, in Unity nicht.**
+
+**Vorher:**
+- Pro Kurve zwei gerade Streifen mit fester seitlicher Lage.
+- Gleich stark, ohne Bezug zur tatsächlichen Linie.
+
+**Jetzt** (`TrackInfrastructurePlan.BuildRubber`):
+- **Reifenarbeit je Abtastpunkt** aus dem Geschwindigkeitsprofil der KI-Ideallinie:
+  - Längsbeschleunigung (Bremsen zählt ×1,4) und Querbeschleunigung v²κ, bezogen auf 1,5 g
+  - über ±12 m geglättet, weil Autos nie exakt dieselbe Linie fahren
+  - überall ein leichter Grundfilm (12 %)
+- **Zwei Reifenspuren** (±0,8 m um die Linie) und die Rille dazwischen, in 4-m-Stücken entlang der Linie.
+  - Sie werden breiter, wo stark gearbeitet wird.
+- **Blockierspuren** in Bremszonen mit mehr als 25 m/s Geschwindigkeitsabbau:
+  - 2–5 schmale Streifen, 8–30 m lang
+  - im ersten Drittel der Zone
+  - bis 0,4 m seitlich driftend, mit verjüngten Enden
+- **Darstellung:**
+  - Stock-URP-Lit, transparent.
+  - Die Deckkraft je Streifen steckt in einem Textur-Atlas mit 16 Stufen, bis 55 %.
+  - Auf 75 % gedeckelt wirkte der Abrieb in der Vorschau zu schwarz.
+
+![Gummiabrieb T1](img/rubber_t1.jpg)
+
 ## Ultra-Stufe 4K (PC)
 **Status:**
 - **Implementiert, offline geprüft.**

@@ -58,6 +58,38 @@ namespace Apex.Game
             }
         }
 
+        /// <summary>Opacity levels of the rubber texture atlas (one band of u per level).</summary>
+        public const int RubberLevels = 16;
+
+        /// <summary>
+        /// A rubber strip following the line: centre offset interpolated from start to end, u mapped into
+        /// the atlas band of its strength (so stock URP Lit shows per-strip opacity), v along the road.
+        /// Brake marks taper at both ends.
+        /// </summary>
+        public static void RubberStrip(MeshBuilder mb, TrackGeometry g, TrackInfrastructurePlan.RubberStrip s, float lift)
+        {
+            float len = Mathf.Repeat(s.to - s.from, g.Length);
+            if (len < 0.5f) return;
+            int level = System.Math.Max(0, System.Math.Min(RubberLevels - 1, (int)System.Math.Round(s.strength * (RubberLevels - 1))));
+            // Inset from the band edges keeps bilinear filtering inside the band.
+            float u0 = (level + 0.06f) / RubberLevels, u1 = (level + 0.94f) / RubberLevels;
+            float step = Mathf.Max(g.Spacing, Mathf.Min(4f, len / 2f));
+            float taper = s.brakeMark ? Mathf.Min(3f, len * 0.3f) : 0f;
+            for (float d = 0f; d < len - 1e-3f; d += step)
+            {
+                float d1 = Mathf.Min(len, d + step);
+                float w0 = taper > 0f ? Mathf.Clamp01(Mathf.Min(d, len - d) / taper) : 1f;
+                float w1 = taper > 0f ? Mathf.Clamp01(Mathf.Min(d1, len - d1) / taper) : 1f;
+                float c0 = Mathf.Lerp(s.lateralFrom, s.lateralTo, d / len), c1 = Mathf.Lerp(s.lateralFrom, s.lateralTo, d1 / len);
+                float h0 = s.width * 0.5f * Mathf.Max(0.2f, w0), h1 = s.width * 0.5f * Mathf.Max(0.2f, w1);
+                int i = g.IndexAt(g.Wrap(s.from + d)), j = g.IndexAt(g.Wrap(s.from + d1));
+                var a0 = P(g, i, c0 - h0, lift); var b0 = P(g, i, c0 + h0, lift);
+                var a1 = P(g, j, c1 - h1, lift); var b1 = P(g, j, c1 + h1, lift);
+                float v0 = (s.from + d) / 6f, v1 = (s.from + d1) / 6f;
+                mb.QuadFacing(a0, b0, b1, a1, new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), Vector3.up);
+            }
+        }
+
         /// <summary>Manhole cover (octagon) on the road.</summary>
         public static void ManholeCover(MeshBuilder mb, Vector3 centre, float radius)
         {

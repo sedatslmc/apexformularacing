@@ -46,6 +46,21 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void TheNearestLampsAreReflected()
+        {
+            var d = new float[40];
+            for (int i = 0; i < d.Length; i++) d[i] = (i * 37 % 40) * 10f;   // a permutation of 0..390
+            var picked = new int[WaterOptics.MaxLamps];
+            int n = WaterOptics.NearestLamps(d.Length, i => d[i], picked);
+            Assert.That(n, Is.EqualTo(WaterOptics.MaxLamps));
+            var got = new System.Collections.Generic.List<float>();
+            for (int k = 0; k < n; k++) got.Add(d[picked[k]]);
+            got.Sort();
+            for (int k = 0; k < n; k++) Assert.That(got[k], Is.EqualTo(k * 10f), "the 16 smallest distances");
+            Assert.That(WaterOptics.NearestLamps(3, i => i, picked), Is.EqualTo(3), "fewer lamps than slots");
+        }
+
+        [Test]
         public void CoastDistanceFieldIsExactForACircularIsland()
         {
             // Land: disc of 500 m radius at the origin; grid 2 km, 8 m cells.

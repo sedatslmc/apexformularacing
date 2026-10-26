@@ -13,6 +13,7 @@ Recognised maps (case-insensitive):
 Output: unity/com.projectapex.game/Runtime/Resources/Textures/CC0/<name>/
   BaseColor.jpg          sRGB albedo (JPG q95 by default, --color-format png for lossless)
   PaintBase.jpg          (--paint-base) desaturated albedo normalised to a light mean, for tinted paint (kerbs)
+  Detail.jpg             (--detail) desaturated albedo with mean sRGB 0.5, for URP Lit detail maps (multiply x2)
   Normal.png             OpenGL tangent-space normal (Unity's convention)
   MetallicSmoothness.png URP Lit metallic/smoothness map: R = metallic (0), A = smoothness (1 - roughness)
   Occlusion.jpg          grey AO
@@ -142,6 +143,7 @@ def main(argv=None):
     ap.add_argument("--licence", default="CC0 1.0")
     ap.add_argument("--max-size", type=int, default=2048, help="largest output size (px); platform limits are set on import")
     ap.add_argument("--paint-base", action="store_true", help="also write PaintBase.png (desaturated, for tinted paint)")
+    ap.add_argument("--detail", action="store_true", help="also write Detail.jpg (grey, mean 0.5) for URP Lit detail maps")
     ap.add_argument("--out-root", default=OUT_ROOT)
     ap.add_argument("--color-format", choices=("jpg", "png"), default="jpg",
                     help="colour, paint base and AO as high-quality JPG (default, small repo) or PNG; normal and smoothness are always PNG")
@@ -178,7 +180,7 @@ def main(argv=None):
     lin = np.where(srgb <= 0.04045, srgb / 12.92, ((srgb + 0.055) / 1.055) ** 2.4)
     mean_albedo = float((lin @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32)).mean())
     cext = "." + a.color_format
-    for old in ("BaseColor", "PaintBase", "Occlusion"):   # a re-import in the other format must not leave both
+    for old in ("BaseColor", "PaintBase", "Occlusion", "Detail"):   # a re-import in the other format must not leave both
         for ext in (".png", ".jpg"):
             if ext != cext and os.path.exists(os.path.join(out, old + ext)):
                 os.remove(os.path.join(out, old + ext))
@@ -189,6 +191,12 @@ def main(argv=None):
         # Keep the variation, move the mean to 0.82 so a tint gives the paint colour with wear and grain.
         lum = (lum - lum.mean()) * 0.6 + 0.82
         hashes["PaintBase" + cext] = write(Image.fromarray((lum.clip(0, 1) * 255).astype(np.uint8)).convert("RGB"), os.path.join(out, "PaintBase" + cext))
+
+    if a.detail:
+        # URP Lit "multiply x2" detail: 0.5 sRGB is neutral (x unity_ColorSpaceDouble). Keep 80 % of the contrast.
+        lum = np.asarray(color.convert("L"), dtype=np.float32) / 255.0
+        lum = (lum - lum.mean()) * 0.8 + 0.5
+        hashes["Detail" + cext] = write(Image.fromarray((lum.clip(0, 1) * 255).astype(np.uint8)).convert("RGB"), os.path.join(out, "Detail" + cext))
 
     if "normal_gl" in maps or "normal_dx" in maps:
         n = np.asarray(load(maps.get("normal_gl") or maps["normal_dx"], "RGB", size), dtype=np.uint8).copy()

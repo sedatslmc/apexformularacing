@@ -87,7 +87,7 @@ Alles wird aus der Strecke abgeleitet: `TrackInfrastructurePlan` (reine Logik, g
 | Baustein | Umsetzung | Status |
 |---|---|---|
 | Asphalt | prozedurale, kachelbare Asphalt-Textur (Albedo mit Gesteinskörnung) plus passende Normal-Map, Kachel ≈ 3 m, matt (Glanz 0,22); Nässe wie bisher über `WeatherVisuals` | implementiert |
-| Fahrbahndetails | 52 Flickstellen, 44 Kanaldeckel, verblasste Mittel-Strichlinien der Originalstraßen auf breiten Geraden (445 Striche), Gummiabrieb entlang der KI-Ideallinie in jeder Bremszone und an jedem Kurvenausgang (26 Zonen, weich auslaufend, transparent) | implementiert |
+| Fahrbahndetails | 52 Flickstellen, 44 Kanaldeckel, verblasste Mittel-Strichlinien der Originalstraßen auf breiten Geraden (445 Striche), Gummiabrieb als zwei Reifenspuren entlang der KI-Ideallinie, Stärke aus Brems- und Querbeschleunigung, dazu Blockierspuren in starken Bremszonen (seit 2026-10-26, `CC0_MATERIALS.md`) | implementiert |
 | Kerbs | 3D-Profil mit gerundeter Krone und Außenkante. Innen vom Einlenken bis zum Ausgang, außen am Ausgang. Höhe nach Kurvenradius: 2,5 cm schnell, 3,8 cm mittel, 5 cm langsam. Rot-weiß in 2,5-m-Blöcken. Nie breiter als der Auslauf (Mittelwand in Beşiktaş bleibt frei). Physik über die vorhandene Kerb-Oberfläche | implementiert, Platzierung getestet; Fahrgefühl in Unity ungeprüft |
 | Auslauf | Stadtkurs: gepflasterte Auslaufflächen und Notausfahrten (Asphalt) statt Gras; offene Strecken behalten Gras | implementiert |
 | Barrieren | Betonelemente mit Schutzwand-Profil, 1,0 m hoch, 3,8-m-Blöcke mit Fugen, Kratzspuren und Schmutz am Fuß (Textur). Leitplanke (doppelte W-Schiene) auf Notausfahrten. Kollision weiter über die einfache Wand (unsichtbar) | implementiert |

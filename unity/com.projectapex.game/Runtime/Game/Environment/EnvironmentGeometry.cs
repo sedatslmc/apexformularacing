@@ -293,6 +293,13 @@ namespace Apex.Game
         }
 
         /// <summary>Street lamp at a base point, arm reaching towards `towards` (horizontal).</summary>
+        /// <summary>Centre of the lamp head's light-emitting underside (same geometry as <see cref="Lamp"/>).</summary>
+        public static Vector3 LampHeadPosition(Vector3 basePoint, Vector3 towards, float height)
+        {
+            var dir = new Vector3(towards.x, 0f, towards.z).normalized;
+            return Up(basePoint, height) + dir * 1.8f + Vector3.down * 0.19f;
+        }
+
         public static void Lamp(Parts B, Vector3 basePoint, Vector3 towards, float height)
         {
             var dir = new Vector3(towards.x, 0f, towards.z).normalized;

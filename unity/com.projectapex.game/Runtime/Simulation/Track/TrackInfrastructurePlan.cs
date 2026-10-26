@@ -11,7 +11,8 @@ namespace Apex.Tracks
     /// barrier on the outside of braking zones (energy-absorbing modules on fast approaches,
     /// tyre stacks at slow corners), marshal posts with LED flag panels before every corner
     /// and at most every ~450 m, emergency gates in the catch fence, braking-zone rubber and
-    /// asphalt details. Pure data, no rendering.
+    /// asphalt details. Rubber follows the racing line: two tyre tracks and the groove between them,
+    /// darker where the tyres work hardest, plus lock-up streaks in heavy braking zones. Pure data, no rendering.
     /// </summary>
     public sealed class TrackInfrastructurePlan
     {
@@ -45,18 +46,30 @@ namespace Apex.Tracks
             public int corner;
         }
 
-        public struct Zone
+        /// <summary>
+        /// A rubber strip on the asphalt: raw distances, centre offset at both ends (follows the line),
+        /// width and opacity 0..1. <see cref="brakeMark"/> marks a lock-up streak.
+        /// </summary>
+        public struct RubberStrip
         {
             public float from, to;
             public float lateralFrom, lateralTo;
+            public float width;
             public float strength;
+            public bool brakeMark;
         }
+
+        /// <summary>Lateral distance of each tyre track from the line (half the car's track width).</summary>
+        public const float TyreTrack = 0.8f;
+        const float RubberSegment = 4f;
 
         public readonly Kerbs kerbs = new Kerbs();
         public readonly List<Protection> protections = new List<Protection>();
         public readonly List<Post> posts = new List<Post>();
         public readonly List<float> gates = new List<float>();
-        public readonly List<Zone> rubber = new List<Zone>();
+        public readonly List<RubberStrip> rubber = new List<RubberStrip>();
+        /// <summary>Rubber intensity 0..1 per centreline sample (tyre work: braking, cornering, traction).</summary>
+        public float[] rubberIntensity;
         public readonly List<(float distance, float lateral, float length, float width, float shade)> patches = new List<(float, float, float, float, float)>();
         public readonly List<(float distance, float lateral)> manholes = new List<(float, float)>();
         public readonly List<(float from, float to, float lateral)> laneDashes = new List<(float, float, float)>();
@@ -186,17 +199,7 @@ namespace Apex.Tracks
         void BuildSurface(List<TrackGeometry.Corner> corners, float[] lineOffsets, float[] lineSpeed)
         {
             var rng = new Random(1907);
-            foreach (var c in corners)
-            {
-                float apex = g.Distances[c.index];
-                float line = lineOffsets != null ? lineOffsets[c.index] : 0f;
-                float hw = g.Widths[c.index] * 0.5f;
-                // Braking rubber along the line before the corner, exit rubber after it.
-                float brake = lineSpeed != null ? MathF.Min(160f, MathF.Max(40f, (Max(lineSpeed, c.index - Samples(250f), c.index) - lineSpeed[c.index]) * 2.2f)) : 80f;
-                float entryLine = lineOffsets != null ? lineOffsets[Wrap(c.index - Samples(brake * 0.6f))] : 0f;
-                rubber.Add(new Zone { from = g.Wrap(apex - brake), to = g.Wrap(apex - 5f), lateralFrom = Clamp(entryLine - 0.9f, hw), lateralTo = Clamp(entryLine + 0.9f, hw), strength = 0.55f });
-                rubber.Add(new Zone { from = g.Wrap(apex - 5f), to = g.Wrap(apex + 60f), lateralFrom = Clamp(line - 1f, hw), lateralTo = Clamp(line + 1f, hw), strength = 0.4f });
-            }
+            if (lineOffsets != null && lineSpeed != null) BuildRubber(lineOffsets, lineSpeed);
             for (float d = 30f; d < g.Length; d += 110f + (float)rng.NextDouble() * 80f)
             {
                 int i = g.IndexAt(d);
@@ -222,6 +225,96 @@ namespace Apex.Tracks
                         for (float d = start + 10f; d < end - 10f; d += 9f) laneDashes.Add((d, d + 3f, 0f));
                     start = -1f;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Tyre work per sample from the line's speed profile: longitudinal acceleration (braking and
+        /// traction) and lateral acceleration v²κ, as a fraction of 1.5 g, smoothed over ±12 m because
+        /// cars never run exactly the same line. Rubber deposition grows with it; a light film everywhere.
+        /// </summary>
+        void BuildRubber(float[] lineOffsets, float[] lineSpeed)
+        {
+            int n = N;
+            var work = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float v0 = lineSpeed[i], v1 = lineSpeed[Wrap(i + 1)];
+                float along = MathF.Abs(v1 * v1 - v0 * v0) / (2f * g.Spacing);
+                // Braking deposits more than traction (four tyres and higher slip).
+                if (v1 < v0) along *= 1.4f;
+                float lateral = v0 * v0 * MathF.Abs(g.Curvatures[i]);
+                work[i] = ApexMath.Clamp01(MathF.Sqrt(along * along + lateral * lateral) / (1.5f * 9.81f));
+            }
+            int r = Samples(12f);
+            rubberIntensity = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float sum = 0f;
+                for (int k = -r; k <= r; k++) sum += work[Wrap(i + k)];
+                rubberIntensity[i] = ApexMath.Clamp01(0.12f + 0.95f * sum / (2 * r + 1));
+            }
+            // Two tyre tracks and the groove, in segments that follow the line.
+            int step = Samples(RubberSegment);
+            for (int i = 0; i < n; i += step)
+            {
+                int j = Math.Min(i + step, n) % n;
+                float strength = 0.5f * (rubberIntensity[i] + rubberIntensity[j]);
+                float hwA = g.Widths[i] * 0.5f, hwB = g.Widths[j] * 0.5f;
+                float from = g.Distances[i], to = i + step >= n ? g.Length : g.Distances[j];
+                // Wider where the line varies more between cars (hard work = fighting cars, different lines).
+                float spread = 0.45f + 0.5f * strength;
+                foreach (float side in new[] { -TyreTrack, TyreTrack })
+                    rubber.Add(new RubberStrip
+                    {
+                        from = from, to = to,
+                        lateralFrom = Clamp(lineOffsets[i] + side, hwA), lateralTo = Clamp(lineOffsets[j] + side, hwB),
+                        width = spread, strength = strength,
+                    });
+                rubber.Add(new RubberStrip
+                {
+                    from = from, to = to,
+                    lateralFrom = Clamp(lineOffsets[i], hwA), lateralTo = Clamp(lineOffsets[j], hwB),
+                    width = 2f * TyreTrack + 0.6f, strength = 0.35f * strength,
+                });
+            }
+            BuildBrakeMarks(lineOffsets, lineSpeed);
+        }
+
+        /// <summary>
+        /// Lock-up streaks: in braking zones that slow the car by more than 25 m/s, 2–5 narrow dark streaks
+        /// from 15–40 % of the zone, 8–30 m long, drifting up to 0.4 m sideways (the locked tyre slides).
+        /// </summary>
+        void BuildBrakeMarks(float[] lineOffsets, float[] lineSpeed)
+        {
+            var rng = new Random(2207);
+            int n = N;
+            for (int i = 0; i < n; i++)
+            {
+                // Start of a braking zone: speed falls from here onwards.
+                if (!(lineSpeed[Wrap(i + 1)] < lineSpeed[i] - 0.02f && lineSpeed[Wrap(i - 1)] <= lineSpeed[i] + 0.02f)) continue;
+                int end = i;
+                while (lineSpeed[Wrap(end + 1)] < lineSpeed[Wrap(end)] && end - i < n / 2) end++;
+                float drop = lineSpeed[i] - lineSpeed[Wrap(end)];
+                if (drop < 25f) continue;
+                float zone = (end - i) * g.Spacing;
+                int marks = 2 + rng.Next(4);
+                for (int m = 0; m < marks; m++)
+                {
+                    float start = g.Distances[i] + zone * (0.15f + 0.25f * (float)rng.NextDouble());
+                    float length = 8f + 22f * (float)rng.NextDouble();
+                    int a = g.IndexAt(g.Wrap(start)), b = g.IndexAt(g.Wrap(start + length));
+                    float side = (rng.Next(2) == 0 ? -1f : 1f) * TyreTrack + ((float)rng.NextDouble() - 0.5f) * 0.6f;
+                    float drift = ((float)rng.NextDouble() - 0.5f) * 0.8f;
+                    rubber.Add(new RubberStrip
+                    {
+                        from = g.Wrap(start), to = g.Wrap(start + length),
+                        lateralFrom = Clamp(lineOffsets[a] + side, g.Widths[a] * 0.5f),
+                        lateralTo = Clamp(lineOffsets[b] + side + drift, g.Widths[b] * 0.5f),
+                        width = 0.28f, strength = 0.7f + 0.3f * (float)rng.NextDouble(), brakeMark = true,
+                    });
+                }
+                i = end;
             }
         }
 

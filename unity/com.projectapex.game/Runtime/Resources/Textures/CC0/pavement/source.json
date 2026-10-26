@@ -1,0 +1,17 @@
+{
+  "name": "pavement",
+  "metres": 1.7999999523162842,
+  "meanSmoothness": 0.2744,
+  "meanAlbedoLinear": 0.2084,
+  "source": "https://polyhaven.com/a/patterned_concrete_pavers",
+  "author": "Amal Kumar",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "ad2a48adab65158947dbce25378175d69f83dfc43b945ba4784d76c6ffd165db",
+    "Normal.png": "8e0b4c54e62252d6c3734e36d91c4a793d5b41929948e3e2582a0f75cf34fab5",
+    "MetallicSmoothness.png": "309c0884908f60d502b18e07832bef25642497e32325319d0f96c22c3148c81e",
+    "Occlusion.jpg": "e435686e75e4969fb76a098666403af249aa58a1762a3457b515a830f09a9c01"
+  }
+}

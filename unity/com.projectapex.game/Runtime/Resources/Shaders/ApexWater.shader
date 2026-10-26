@@ -99,6 +99,11 @@ Shader "Apex/Water"
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
+            // Street lamps nearest the camera (globals from WaterSurfaceComponent): xyz position, w = 1 if used.
+            #define APEX_WATER_LAMPS 16
+            float4 _ApexWaterLamps[APEX_WATER_LAMPS];
+            float4 _ApexWaterLampColor;
+
             TEXTURE2D(_NormalMap);  SAMPLER(sampler_NormalMap);
             TEXTURE2D(_CoastTex);   SAMPLER(sampler_CoastTex);
 
@@ -114,6 +119,18 @@ Shader "Apex/Water"
                 half m = 1.0h - saturate(cosTheta);
                 half m2 = m * m;
                 return f0 + (1.0h - f0) * m2 * m2 * m;
+            }
+
+            // URP's minimalist GGX specular for light direction L (same normalisation as Lit).
+            half GgxSpecular(half3 N, half3 V, half3 L, half alpha)
+            {
+                half3 H = SafeNormalize(L + V);
+                half NdotH = saturate(dot(N, H));
+                half LdotH = saturate(dot(L, H));
+                half a2 = alpha * alpha;
+                half d = NdotH * NdotH * (a2 - 1.0h) + 1.00001h;
+                half specular = a2 / ((d * d) * max(0.1h, LdotH * LdotH) * (alpha * 4.0h + 2.0h));
+                return min(specular, 100.0h) * SchlickFresnel(_F0, LdotH);
             }
 
             half4 WaterFragment(Varyings input) : SV_Target
@@ -151,15 +168,24 @@ Shader "Apex/Water"
                 Light mainLight = GetMainLight(TransformWorldToShadowCoord(positionWS));
                 half atten = mainLight.distanceAttenuation * mainLight.shadowAttenuation;
                 half3 L = mainLight.direction;
-                half3 H = SafeNormalize(L + V);
                 half NdotL = saturate(dot(N, L));
-                half NdotH = saturate(dot(N, H));
-                half LdotH = saturate(dot(L, H));
-                half a2 = alpha * alpha;
-                half d = NdotH * NdotH * (a2 - 1.0h) + 1.00001h;
-                half specular = a2 / ((d * d) * max(0.1h, LdotH * LdotH) * (alpha * 4.0h + 2.0h));
-                specular = min(specular, 100.0h);
-                half3 glitter = mainLight.color * (atten * NdotL * specular * SchlickFresnel(_F0, LdotH));
+                half3 glitter = mainLight.color * (atten * NdotL * GgxSpecular(N, V, L, alpha));
+
+                // Street-lamp light paths at night (inverse-square point lights, glitter only).
+                if (_ApexWaterLampColor.r + _ApexWaterLampColor.g + _ApexWaterLampColor.b > 0.0)
+                {
+                    half lampAlpha = max(alpha * 0.7h, 0.07h);
+                    for (int k = 0; k < APEX_WATER_LAMPS; k++)
+                    {
+                        float4 lamp = _ApexWaterLamps[k];
+                        if (lamp.w <= 0.0) continue;
+                        float3 toLamp = lamp.xyz - positionWS;
+                        float dist2 = max(dot(toLamp, toLamp), 1.0);
+                        half3 Ll = half3(toLamp * rsqrt(dist2));
+                        half nl = saturate(dot(N, Ll));
+                        glitter += half3(_ApexWaterLampColor.rgb) * half(nl / dist2) * GgxSpecular(N, V, Ll, lampAlpha);
+                    }
+                }
 
                 // Water body: light that enters, scatters and leaves (deep blue-green, lighter near the shore).
                 half3 ambientUp = SampleSHPixel(half3(0.0h, 0.0h, 0.0h), half3(0.0h, 1.0h, 0.0h));

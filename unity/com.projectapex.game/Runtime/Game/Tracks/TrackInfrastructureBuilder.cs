@@ -79,8 +79,9 @@ namespace Apex.Game
             }
             EnvironmentBuilder.AddMeshObject(infra, "RoadDetails", opaque.parts, false);
             var rubber = new MeshBuilder();
+            // Groove under the tyre tracks, tracks above it, lock-up streaks on top (separate lifts avoid z-fighting).
             foreach (var z in plan.rubber)
-                TrackInfrastructureGeometry.RoadDecal(rubber, g, z.from, z.to, z.lateralFrom, z.lateralTo, 0.03f, 25f);
+                TrackInfrastructureGeometry.RubberStrip(rubber, g, z, z.brakeMark ? 0.034f : z.width > 1.5f ? 0.028f : 0.031f);
             EnvironmentBuilder.AddMeshObject(infra, "Rubber", new Dictionary<string, MeshBuilder> { [TrackInfrastructureGeometry.Rubber] = rubber }, false);
         }
 
@@ -352,7 +353,10 @@ namespace Apex.Game
             var asphaltN = asphaltNormal;
             RegisterSurfaceMaterials();
             ApexMaterials.Register(TrackInfrastructureGeometry.Patch, Lit("Patch", new Color(0.48f, 0.48f, 0.5f), 0.2f, asphaltA, asphaltN, new Vector2(1f, 1f)));
-            ApexMaterials.Register(TrackInfrastructureGeometry.Concrete, Lit("BarrierConcrete", Color.white, 0.12f, ConcreteTexture()));
+            var concrete = Lit("BarrierConcrete", Color.white, 0.12f, ConcreteTexture());
+            // Scanned concrete grain on top of the block texture (UV: one 3.8 m block along u, 1.6 m of profile along v).
+            SurfaceTextures.TryApplyDetail(concrete, SurfaceTextures.Barrier, new Vector2(Apex.Tracks.TrackKitLayout.BlockLength, 1.6f), 0.8f);
+            ApexMaterials.Register(TrackInfrastructureGeometry.Concrete, concrete);
             ApexMaterials.Register(TrackInfrastructureGeometry.Armco, Lit("Armco", new Color(0.72f, 0.74f, 0.76f), 0.55f));
             ApexMaterials.Register(TrackInfrastructureGeometry.ModuleA, Lit("ModuleNavy", new Color(0.114f, 0.157f, 0.208f), 0.35f));
             ApexMaterials.Register(TrackInfrastructureGeometry.ModuleB, Lit("ModuleIvory", new Color(0.94f, 0.914f, 0.851f), 0.35f));
@@ -515,19 +519,26 @@ namespace Apex.Game
             return m;
         }
 
-        /// <summary>Rubber deposit: soft across the strip (u), streaky along it (v), alpha-blended.</summary>
+        /// <summary>
+        /// Rubber atlas: <see cref="TrackInfrastructureGeometry.RubberLevels"/> bands across u, one per opacity
+        /// level (up to 55 %); inside a band soft across the strip, streaky along it (v). Alpha-blended.
+        /// </summary>
         static Texture2D RubberTexture()
         {
-            const int n = 64;
-            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "Rubber", wrapMode = TextureWrapMode.Repeat };
-            var px = new Color[n * n];
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
+            int levels = TrackInfrastructureGeometry.RubberLevels;
+            const int band = 32, h = 64;
+            int w = band * levels;
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, true) { name = "Rubber", wrapMode = TextureWrapMode.Repeat, anisoLevel = 4 };
+            tex.wrapModeU = TextureWrapMode.Clamp;
+            var px = new Color[w * h];
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
                 {
-                    float u = (x + 0.5f) / n * 2f - 1f;
+                    int level = x / band;
+                    float u = ((x % band) + 0.5f) / band * 2f - 1f;
                     float across = Mathf.Exp(-u * u * 3f);
-                    float streak = 0.6f + 0.4f * TileNoise(x * 4, y, n * 4, 8);
-                    px[y * n + x] = new Color(0f, 0f, 0f, 0.5f * across * streak);
+                    float streak = 0.6f + 0.4f * TileNoise((x % band) * 4, y, band * 4, 8);
+                    px[y * w + x] = new Color(0f, 0f, 0f, 0.55f * level / (levels - 1f) * across * streak);
                 }
             tex.SetPixels(px);
             tex.Apply(true);

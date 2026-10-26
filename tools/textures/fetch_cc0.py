@@ -33,6 +33,8 @@ def main(argv=None):
                 "--out-root", os.path.join(TEXTURES, folder), "--prefer-jpg"]
         if s.get("paint_base"):
             args.append("--paint-base")
+        if s.get("detail"):
+            args.append("--detail")
         print(f"== {s['name']} <- polyhaven {s['polyhaven']} ({res})", flush=True)
         import_cc0.main(args)
     return 0

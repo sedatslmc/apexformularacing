@@ -20,7 +20,7 @@ namespace Apex.Game
         /// <summary>Whether 4K sets are present and usable on this platform (the settings row only appears then).</summary>
         public static bool UltraAvailable => !Application.isMobilePlatform && Resources.Load<TextAsset>(UltraFolder + "/" + Asphalt + "/source") != null;
         /// <summary>Set names the circuit uses (the importer's --name).</summary>
-        public const string Asphalt = "asphalt", Runoff = "runoff", Kerb = "kerb";
+        public const string Asphalt = "asphalt", Runoff = "runoff", Kerb = "kerb", Barrier = "barrier", Pavement = "pavement";
         /// <summary>Metres per UV unit of the road, kerb and run-off meshes.</summary>
         public const float RoadUvMetres = Apex.Tracks.RoadSurface.UvMetres;
 
@@ -96,6 +96,30 @@ namespace Apex.Game
                 m.EnableKeyword("_OCCLUSIONMAP");
                 if (m.HasProperty("_OcclusionStrength")) m.SetFloat("_OcclusionStrength", 1f);
             }
+            return true;
+        }
+
+        /// <summary>
+        /// Puts a set's grain on a material as URP Lit detail maps (Detail.jpg, multiply ×2, plus its normal
+        /// map), keeping the material's own base map: the barrier keeps its block joints, scuffs and grime and
+        /// gains real concrete texture. `tiling` is the material UV per set tile (u and v may differ).
+        /// </summary>
+        public static bool TryApplyDetail(Material m, string set, Vector2 uvMetres, float normalScale = 1f)
+        {
+            var info = Load(set, out string path);
+            if (info == null || m == null || !m.HasProperty("_DetailAlbedoMap")) return false;
+            var detail = Resources.Load<Texture2D>(path + "Detail");
+            if (detail == null) return false;
+            var tiling = new Vector2(uvMetres.x / info.metres, uvMetres.y / info.metres);
+            SetTexture(m, "_DetailAlbedoMap", detail, tiling);
+            if (m.HasProperty("_DetailAlbedoMapScale")) m.SetFloat("_DetailAlbedoMapScale", 1f);
+            var normal = Resources.Load<Texture2D>(path + "Normal");
+            if (normal != null && m.HasProperty("_DetailNormalMap"))
+            {
+                m.SetTexture("_DetailNormalMap", normal);
+                if (m.HasProperty("_DetailNormalMapScale")) m.SetFloat("_DetailNormalMapScale", normalScale);
+            }
+            m.EnableKeyword("_DETAIL_MULX2");
             return true;
         }
 

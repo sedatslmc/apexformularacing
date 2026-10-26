@@ -96,6 +96,29 @@ namespace Apex.Environment
         public const float FoamAlbedo = 0.75f;
         /// <summary>Foam band along quay walls and shores (m) and the shallow-colour band (m).</summary>
         public const float FoamWidth = 4f, ShallowWidth = 45f;
+        /// <summary>Street lamps the water reflects at once (nearest to the camera).</summary>
+        public const int MaxLamps = 16;
+        /// <summary>Warm-white LED street light (linear) and its intensity for the water glitter: an art value
+        /// in Unity light units, tuned in the offline preview (tools/carrender/water.html &lamps=1) to distinct light paths.</summary>
+        public static readonly float[] LampColor = { 1f, 0.72f, 0.42f };
+        public const float LampIntensity = 50f;
+
+        /// <summary>Indices of the `result.Length` smallest values of distance(i) (unordered), returns the count.</summary>
+        public static int NearestLamps(int count, Func<int, float> distance, int[] result)
+        {
+            int k = Math.Min(result.Length, count);
+            var best = new float[k];
+            for (int j = 0; j < k; j++) { result[j] = j; best[j] = distance(j); }
+            for (int i = k; i < count; i++)
+            {
+                float d = distance(i);
+                int worst = 0;
+                for (int j = 1; j < k; j++) if (best[j] > best[worst]) worst = j;
+                if (k > 0 && d < best[worst]) { best[worst] = d; result[worst] = i; }
+            }
+            return k;
+        }
+
         /// <summary>Distance range the coast texture encodes (m).</summary>
         public const float CoastMaxDistance = 64f;
     }
