@@ -898,7 +898,9 @@ namespace Apex.Game
             var bytes = TurkishFlagDesign.Rasterize(h);
             int w = bytes.Length / 4 / h;
             flagTex = new Texture2D(w, h, TextureFormat.RGBA32, true) { name = "TurkishFlag", wrapMode = TextureWrapMode.Clamp, anisoLevel = 2 };
-            flagTex.LoadRawTextureData(bytes);
+            // Only mip level 0 is provided (LoadRawTextureData would expect the whole mip chain);
+            // Apply(true) generates the smaller levels.
+            flagTex.SetPixelData(bytes, 0);
             flagTex.Apply(true);
             Flag = new Material(ApexMaterials.LitShader()) { name = "Env_Flag" };
             SetTexture(Flag, "_BaseMap", "_MainTex", flagTex);
