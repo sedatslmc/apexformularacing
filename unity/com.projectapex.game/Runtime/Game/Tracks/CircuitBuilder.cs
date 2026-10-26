@@ -121,12 +121,26 @@ namespace Apex.Game
             ci.Terrain = new TerrainField(g, def);
             BuildTerrain(root.transform, ci.Terrain, def);
             BuildStartLine(root.transform, ci);
-            if (EventBrandingBuilder.IsEvent(def)) EventBrandingBuilder.Build(ci, root.transform);
+            if (EventBrandingBuilder.IsEvent(def)) Dressing("event identity", () => EventBrandingBuilder.Build(ci, root.transform));
             BuildGrid(root.transform, ci);
             BuildCornerBoards(root.transform, ci);
-            TrackInfrastructureBuilder.Build(ci, root.transform, pitMask);
-            if (def.landMasses.Count > 0) EnvironmentBuilder.Build(ci, root.transform);
+            Dressing("infrastructure", () => TrackInfrastructureBuilder.Build(ci, root.transform, pitMask));
+            if (def.landMasses.Count > 0) Dressing("environment", () => EnvironmentBuilder.Build(ci, root.transform));
             return ci;
+        }
+
+        /// <summary>
+        /// Builds optional dressing; an exception there is logged instead of aborting the circuit,
+        /// so road, walls, pit lane and grid (everything needed to race) are always there.
+        /// </summary>
+        static void Dressing(string what, Action build)
+        {
+            try { build(); }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Apex] Circuit {what} failed, continuing without it: {e.Message}");
+                Debug.LogException(e);
+            }
         }
 
         // --- Mesh helper ----------------------------------------------------------
