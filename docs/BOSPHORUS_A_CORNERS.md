@@ -59,6 +59,10 @@ Tempi in km/h. „–“ = ohne Bremsen gefahren.
 2. **T5 Balmumcu:** Eine gute Bremszone (264 → 80 km/h), aber nur 282 m Anlauf aus Palanga 2. Überholen geht nur mit klarem Tempoüberschuss.
 3. **T3, T4, T12, T13 werden ohne Bremsen gefahren.** Sie sind freigegebene Kurven, aber fahrerisch Knicke. Das ist für einen Stadtkurs normal und kein Fehler.
 
+## Entscheidung (2026-10-26)
+- Vorschlag A abgelehnt: **T10 bleibt.** Die Doppelkehre T9/T10 ist der technisch anspruchsvollste Abschnitt.
+- Über Layoutänderungen wird erst nach dem Unity-Handlingtest entschieden.
+
 ## Vorschläge (nicht umgesetzt, Freigabe nötig)
 Die Bosporus-Gerade bleibt in jedem Fall unverändert.
 
