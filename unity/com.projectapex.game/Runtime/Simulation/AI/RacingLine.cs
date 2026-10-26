@@ -107,19 +107,21 @@ namespace Apex.AI
                 float denom = k - Mu * DownforcePerMass;
                 speed[i] = denom <= 1e-5f ? 95f : MathF.Min(95f, MathF.Sqrt(Mu * g / denom));
             }
+            // Longitudinal grade (+ uphill): gravity helps braking uphill and hurts it downhill, and the
+            // other way round when accelerating.
             for (int pass = 0; pass < 2; pass++)
                 for (int step = 0; step < n; step++)
                 {
                     int i = n - 1 - step;
                     float v = speed[(i + 1) % n];
-                    float decel = Mu * (g + DownforcePerMass * v * v) * 0.85f;
+                    float decel = MathF.Max(1f, Mu * (g + DownforcePerMass * v * v) * 0.85f + g * geometry.GradeAt(geometry.Distances[i]));
                     speed[i] = MathF.Min(speed[i], MathF.Sqrt(v * v + 2f * decel * ds));
                 }
             for (int pass = 0; pass < 2; pass++)
                 for (int i = 0; i < n; i++)
                 {
                     float v = speed[i];
-                    float accel = ApexMath.Clamp(14f - v * 0.09f, 3f, 14f);
+                    float accel = MathF.Max(0.5f, ApexMath.Clamp(14f - v * 0.09f, 3f, 14f) - g * geometry.GradeAt(geometry.Distances[i]));
                     int j = (i + 1) % n;
                     speed[j] = MathF.Min(speed[j], MathF.Sqrt(v * v + 2f * accel * ds));
                 }

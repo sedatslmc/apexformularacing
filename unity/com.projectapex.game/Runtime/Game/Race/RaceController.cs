@@ -555,6 +555,9 @@ namespace Apex.Game
 
         // --- Pit lane -------------------------------------------------------------------
 
+        /// <summary>Distance before the pit exit from which the lane may be left (where the pit wall ends).</summary>
+        public const float PitMergeLength = 60f;
+
         void UpdatePit(RaceCar rc, float dt)
         {
             var pit = Circuit.Pit;
@@ -598,7 +601,9 @@ namespace Apex.Game
                     bool auto = !rc.isPlayer || rc.pitAssistActive;
                     if (auto)
                     {
-                        rc.ai.forcedLateral = sinceEntry > span - 25f ? float.NaN : laneLat;
+                        // Merge back where the pit wall ends (60 m before the exit): at 80 km/h the lane change
+                        // takes ~25 m, so releasing only 25 m before the exit could run a car into the wall end.
+                        rc.ai.forcedLateral = sinceEntry > span - PitMergeLength ? float.NaN : laneLat;
                         rc.ai.speedCap = pit.SpeedLimit;
                     }
                     if (ps.stage == PitState.Stage.InLane)

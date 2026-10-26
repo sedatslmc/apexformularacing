@@ -27,6 +27,9 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
 - Tests einzeln: `cd build/Apex.Simulation.Tests && dotnet test`
 - Fahrdynamik-Diagnose: `cd build/Apex.Tuning && dotnet run -c Release -- launch|brake|aero|validate|lap <track_id> [trace]`
   (`validate` erzeugt den Bericht für `docs/HANDLING_VALIDATION.md`).
+- Fahrbahn/Kollision ohne Unity (`docs/BOSPHORUS_ROAD_FIX.md`): `cd build/Apex.Tuning && dotnet run -c Release -- surface|validate-road|limits|trace <track_id> …`.
+  Fahrfläche nur über `RoadSurface` (Apex.Simulation) erzeugen: Unity-Mesh, MeshCollider, Prüfstand (`SurfaceRig`) und
+  Validierung nutzen dieselben Dreiecke. Fahrzeug-Collider nur über `BodyCollider`.
 - Fahrzeuggeometrie ohne Unity: `cd build/Apex.ModelPreview && dotnet run -c Release -- <out_dir>`, dann
   `python3 tools/render_car_preview.py <out_dir>/car_lod0.obj <bild.png> 0,0.47,0.02` (mit Cockpit-Ansicht).
   Unity-Konvention: Vorderseite, wenn `cross(b−a, c−a)` zum Betrachter zeigt.
@@ -44,7 +47,9 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
 - Alter schematischer Kurs (`bosphorus_gp.json`, Archiv) wird erzeugt: `python3 tools/build_bosphorus_layout.py`. Bericht und Schema:
   `python3 tools/circuit_report.py <json> docs/img/<name>.png`.
 - Tests für `bosphorus_a`: gegen den Uhrzeigersinn, 7,5–7,8 km, 13 freigegebene Kurven, Steigung < 12,5 %/50 m,
-  Barrieren ohne Überschneidung. Archivkurs: 4,8–5,4 km, 19–21 Kurven, Abschnitte > 60 m auseinander.
+  Barrieren ohne Überschneidung, Fahrtests A–G auf der echten Collider-Fläche (`RoadSurfaceDriveTests`).
+- Höhenprofil nie direkt aus dem DEM: `build_track_a.py` entwirft es mit `vertical_alignment.py` gegen die Fahrzeuggrenzen
+  (`data/geo/bosphorus_a_limits.csv` aus `dotnet run -- limits bosphorus_a <csv>`; nach Fahrzeugänderungen neu erzeugen). Archivkurs: 4,8–5,4 km, 19–21 Kurven, Abschnitte > 60 m auseinander.
 
 ## Abnahmekriterien M1
 Siehe `docs/TEST_PLAN.md`, Abschnitt „M1-Abnahme“.

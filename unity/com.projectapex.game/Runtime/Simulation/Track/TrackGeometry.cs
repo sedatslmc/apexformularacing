@@ -81,6 +81,21 @@ namespace Apex.Tracks
                 Distances[k] = (float)d;
                 controlParam[k] = (j + t) / SamplesPerSegment;
             }
+            // Heights: periodic cubic spline through the control-point elevations over arc length, so the
+            // vertical profile has continuous height, grade and curvature (C2). Catmull-Rom (used for the
+            // horizontal line) only gives C1 and puts a curvature jump at every control point, which a
+            // low formula car feels as a bump at speed.
+            var knotS = new double[n];
+            var knotY = new double[n];
+            for (int i = 0; i < n; i++) { knotS[i] = cum[i * SamplesPerSegment]; knotY[i] = pts[i].elevation; }
+            var spline = PeriodicSpline(knotS, knotY, total);
+            int seg = 0;
+            for (int k = 0; k < count; k++)
+            {
+                double d = Distances[k];
+                while (seg + 1 < n && knotS[seg + 1] <= d) seg++;
+                Positions[k] = new Vector3(Positions[k].X, (float)EvalSpline(spline, knotS, knotY, total, seg, d), Positions[k].Z);
+            }
             Tangents = new Vector3[count];
             Rights = new Vector3[count];
             Curvatures = new float[count];
@@ -97,6 +112,68 @@ namespace Apex.Tracks
                 float db = ApexMath.WrapAngle(bearings[(k + 2) % count] - bearings[(k - 2 + count) % count]);
                 Curvatures[k] = db / (4f * Spacing);
             }
+        }
+
+        /// <summary>Second derivatives of the periodic cubic spline through (s[i], y[i]), period `total`.</summary>
+        static double[] PeriodicSpline(double[] s, double[] y, double total)
+        {
+            int n = s.Length;
+            double H(int i) => i < n - 1 ? s[i + 1] - s[i] : total - s[n - 1] + s[0];
+            // Cyclic tridiagonal system: h[i-1] M[i-1] + 2(h[i-1]+h[i]) M[i] + h[i] M[i+1] = 6 (dy[i]/h[i] - dy[i-1]/h[i-1]).
+            var a = new double[n]; var b = new double[n]; var c = new double[n]; var r = new double[n];
+            for (int i = 0; i < n; i++)
+            {
+                int im = (i - 1 + n) % n, ip = (i + 1) % n;
+                double h0 = H(im), h1 = H(i);
+                a[i] = h0; b[i] = 2 * (h0 + h1); c[i] = h1;
+                r[i] = 6 * ((y[ip] - y[i]) / h1 - (y[i] - y[im]) / h0);
+            }
+            return SolveCyclic(a, b, c, r);
+        }
+
+        /// <summary>Cyclic tridiagonal solve (Sherman–Morrison).</summary>
+        static double[] SolveCyclic(double[] a, double[] b, double[] c, double[] r)
+        {
+            int n = b.Length;
+            double alpha = c[n - 1], beta = a[0], gamma = -b[0];
+            var bb = (double[])b.Clone();
+            bb[0] = b[0] - gamma;
+            bb[n - 1] = b[n - 1] - alpha * beta / gamma;
+            var x = Thomas(a, bb, c, r);
+            var u = new double[n];
+            u[0] = gamma; u[n - 1] = alpha;
+            var z = Thomas(a, bb, c, u);
+            double fact = (x[0] + beta * x[n - 1] / gamma) / (1 + z[0] + beta * z[n - 1] / gamma);
+            for (int i = 0; i < n; i++) x[i] -= fact * z[i];
+            return x;
+        }
+
+        static double[] Thomas(double[] a, double[] b, double[] c, double[] r)
+        {
+            int n = b.Length;
+            var cp = new double[n]; var rp = new double[n];
+            cp[0] = c[0] / b[0]; rp[0] = r[0] / b[0];
+            for (int i = 1; i < n; i++)
+            {
+                double m = b[i] - a[i] * cp[i - 1];
+                cp[i] = c[i] / m;
+                rp[i] = (r[i] - a[i] * rp[i - 1]) / m;
+            }
+            var x = new double[n];
+            x[n - 1] = rp[n - 1];
+            for (int i = n - 2; i >= 0; i--) x[i] = rp[i] - cp[i] * x[i + 1];
+            return x;
+        }
+
+        static double EvalSpline(double[] m, double[] s, double[] y, double total, int i, double d)
+        {
+            int n = s.Length;
+            int j = (i + 1) % n;
+            double s0 = s[i], s1 = j == 0 ? total + s[0] : s[j];
+            double h = s1 - s0;
+            double t0 = s1 - d, t1 = d - s0;
+            return m[i] * t0 * t0 * t0 / (6 * h) + m[j] * t1 * t1 * t1 / (6 * h)
+                 + (y[i] / h - m[i] * h / 6) * t0 + (y[j] / h - m[j] * h / 6) * t1;
         }
 
         /// <summary>Control-point parameter (index + fraction) of each sample, for per-point attributes.</summary>
@@ -163,6 +240,16 @@ namespace Apex.Tracks
 
         public float CurvatureAt(float d) => Curvatures[IndexAt(d)];
         public float WidthAt(float d) => Widths[IndexAt(d)];
+
+        /// <summary>Longitudinal grade (rise over run, + = uphill in the driving direction) at a distance.</summary>
+        public float GradeAt(float d)
+        {
+            int i = IndexAt(d);
+            var a = Positions[(i - 1 + Count) % Count];
+            var b = Positions[(i + 1) % Count];
+            float run = MathF.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Z - a.Z) * (b.Z - a.Z));
+            return run > 1e-4f ? (b.Y - a.Y) / run : 0f;
+        }
 
         /// <summary>Projection of a world point onto the centreline.</summary>
         public struct Projection
