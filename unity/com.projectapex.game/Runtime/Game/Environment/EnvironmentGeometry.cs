@@ -37,6 +37,7 @@ namespace Apex.Game
         public const string Gull = "Gull";
         public const string FlagPole = "FlagPole";
         public const string BridgeLight = "BridgeLight";
+        public const string BridgeRed = "BridgeRed", BridgeWhite = "BridgeWhite";
 
         public static string Facade(int style) => "Facade" + style;
 

@@ -27,6 +27,7 @@ namespace Apex.Game
         float lightCloud = -1f, reflectedCloud = -1f, reflectedWet = -1f, reflectedArtificial = -1f;
         PostFxStack postFx;
         EnvironmentReflections reflections;
+        StreetLightPool streetLights;
         Material skyMaterial;
 
         ParticleSystem rain;
@@ -72,12 +73,22 @@ namespace Apex.Game
             reflections = probe.AddComponent<EnvironmentReflections>();
             reflections.cameraTransform = cameraTransform;
             reflections.Init(GraphicsQuality.Current);
+            if (environment != null && environment.lampHeads.Count > 0)
+            {
+                var pool = new GameObject("StreetLights");
+                pool.transform.SetParent(transform, false);
+                streetLights = pool.AddComponent<StreetLightPool>();
+                streetLights.env = environment;
+                streetLights.cameraTransform = cameraTransform;
+                streetLights.Init(GraphicsQuality.Current.streetLights);
+            }
         }
 
         /// <summary>Graphics tier changed in the settings: re-configure the probe (render settings apply in <see cref="GraphicsQuality"/>).</summary>
         public void ApplyGraphics(GraphicsPreset p)
         {
             if (reflections != null) reflections.Init(p);
+            if (streetLights != null) streetLights.Init(p.streetLights);
         }
 
         /// <summary>Sun, ambient, haze and sky for the time of day and the current cloud cover.</summary>

@@ -157,6 +157,67 @@ namespace Apex.Game
             }
         }
 
+        /// <summary>
+        /// Architectural night lighting of the 15 July Martyrs Bridge in the national colours, laid on the same
+        /// parametric frame as <see cref="Bridge"/>: red LED lines along both main cables (the silhouette), white
+        /// on the hangers, on the inner edges of the tower legs and on the top cross beams. Not a uniformly
+        /// glowing bridge: the steel stays dark between the lines. Returns the four tower-wash light positions
+        /// (foot of each leg at deck level) for real spot lights.
+        /// </summary>
+        public static List<Vector3> BridgeIllumination(Vector3 euEnd, Vector3 asEnd, float waterY, MeshBuilder red, MeshBuilder white)
+        {
+            Vector3 flat = asEnd - euEnd;
+            flat.y = 0f;
+            float total = flat.magnitude;
+            Vector3 dir = flat / total;
+            Vector3 side = Vector3.Cross(Vector3.up, dir).normalized;
+            float scale = total / 1560f;
+            float tEu = 231f * scale, tAs = total - 255f * scale;
+            float deckY = waterY + 64f + 1.5f;
+            const float halfWidth = 16.7f;
+            float topY = waterY + 165f, lowY = deckY + 4f;
+            Vector3 P(float t, float y, float lateral) => new Vector3(euEnd.x, 0f, euEnd.z) + dir * t + side * lateral + Vector3.up * y;
+            var wash = new List<Vector3>();
+            foreach (float s in new[] { -1f, 1f })
+            {
+                float lat = s * (halfWidth + 1.5f);
+                // Red line on the cable (slightly larger than the 0.7 m cable so it reads at night).
+                var path = new List<Vector3> { P(0f, euEnd.y + 6f, lat), P(tEu, topY, lat) };
+                for (int i = 1; i < 40; i++)
+                {
+                    float u = i / 40f;
+                    path.Add(P(Mathf.Lerp(tEu, tAs, u), lowY + (topY - lowY) * (2f * u - 1f) * (2f * u - 1f), lat));
+                }
+                path.Add(P(tAs, topY, lat));
+                path.Add(P(total, asEnd.y + 6f, lat));
+                red.TubePath(path, 0.85f, 6, true);
+                // White hangers every 18 m.
+                for (float t = tEu + 18f; t < tAs - 9f; t += 18f)
+                {
+                    float u = (t - tEu) / (tAs - tEu);
+                    float y = lowY + (topY - lowY) * (2f * u - 1f) * (2f * u - 1f);
+                    float camber = 4f * Mathf.Sin(Mathf.PI * t / total);
+                    white.Tube(P(t, deckY + camber + 0.5f, lat), P(t, y, lat), 0.28f, 4, false);
+                }
+                // White light bands on the inner edges of each tower leg, from the deck to the top.
+                foreach (float t in new[] { tEu, tAs })
+                {
+                    // On the leg's inner corners (the leg tapers from 3 x 1.8 m half size at the deck to 2.4 x 1.44 m at the top).
+                    foreach (float e in new[] { -1f, 1f })
+                    {
+                        var a = P(t + e * 3.25f, deckY + 2f, lat - s * 2.0f);
+                        var b = P(t + e * 2.65f, topY - 3f, lat - s * 1.65f);
+                        white.Tube(a, b, 0.35f, 4, false);
+                    }
+                    wash.Add(P(t, deckY + 1.5f, lat - s * 4f));
+                }
+            }
+            // White crown on the top cross beams.
+            foreach (float t in new[] { tEu, tAs })
+                white.Tube(P(t, waterY + 160f + 2.7f, -(halfWidth + 1.5f)), P(t, waterY + 160f + 2.7f, halfWidth + 1.5f), 0.45f, 6, true);
+            return wash;
+        }
+
         /// <summary>Points along the bridge deck edges (for night lighting strips).</summary>
         public static List<Vector3> BridgeLightPath(Vector3 euEnd, Vector3 asEnd, float waterY, float lateral)
         {

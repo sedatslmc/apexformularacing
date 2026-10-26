@@ -72,6 +72,11 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
         Console.WriteLine($"{name}: {tr} triangles");
     }
     Export("bridge", l => l.Bridge(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f));
+    Export("bridge_night", l =>
+    {
+        l.Bridge(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f);
+        LandmarkGeometry.BridgeIllumination(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f, l.B("BridgeRed"), l.B("BridgeWhite"));
+    });
     Export("ortakoy", l => l.OrtakoyMosque());
     Export("dolmabahce", l => { l.Palace(284f, 48f, 18f, true); });
     Export("galata", l => l.GalataTower(63f));

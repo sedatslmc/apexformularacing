@@ -80,6 +80,8 @@ namespace Apex.Game
             ["Gull"] = new Color(0.93f, 0.93f, 0.92f),
             ["FlagPole"] = new Color(0.8f, 0.81f, 0.83f),
             ["BridgeLight"] = new Color(0.9f, 0.9f, 0.95f),
+            ["BridgeRed"] = new Color(0.62f, 0.07f, 0.08f),
+            ["BridgeWhite"] = new Color(0.92f, 0.92f, 0.9f),
         };
 
         static readonly Dictionary<string, (float smoothness, float metallic)> Surface = new Dictionary<string, (float, float)>
@@ -115,7 +117,7 @@ namespace Apex.Game
         {
             "RainLight", "BrakeDisc", "Display",
             // Night: street lamps, bridge lighting, floodlit monuments, lit office towers.
-            "LampHead", "BridgeLight", "Stone", "Marble", "HagiaPlaster", "TowerGlass",
+            "LampHead", "BridgeLight", "BridgeRed", "BridgeWhite", "Stone", "Marble", "HagiaPlaster", "TowerGlass",
         };
 
         static readonly Dictionary<string, Material> Cache = new Dictionary<string, Material>();

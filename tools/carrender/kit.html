@@ -191,6 +191,19 @@ if (params.get('fence')) {
   const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   mats.CatchFence = M({ map: t, transparent: true, depthWrite: false, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.55 });
 }
+// Bridge (ModelPreview --landmarks bridge_night.obj): steel, cables and the red/white night lighting
+// (emission as EnvironmentBuilder: red #E30A17 x 1.3, white x 2.4, scaled by &night=level).
+{
+  const lvl = +(params.get('night') || 0);
+  mats.BridgeSteel = M({ color: 0x8c9196, metalness: 0.4, roughness: 0.5 });
+  mats.BridgeCable = M({ color: 0x9aa0a6, metalness: 0.5, roughness: 0.45 });
+  mats.BridgeRed = M({ color: 0x9e1214, emissive: new THREE.Color(0.89, 0.04, 0.09).multiplyScalar(1.3 * lvl), roughness: 0.5 });
+  mats.BridgeWhite = M({ color: 0xebebe6, emissive: new THREE.Color(1, 0.97, 0.92).multiplyScalar(2.4 * lvl), roughness: 0.5 });
+  if (params.get('waterplane')) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(20000, 20000), new THREE.MeshStandardMaterial({ color: 0x050a10, metalness: 0.0, roughness: 0.08 }));
+    w.rotation.x = -Math.PI / 2; w.position.y = -0.4; scene.add(w);
+  }
+}
 const fallback = M({ color: 0xff00ff });
 
 // Lighting. Default: the original golden-hour look (sun 252° true, 11°, true north 308°).

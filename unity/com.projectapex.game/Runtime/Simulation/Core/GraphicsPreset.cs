@@ -52,6 +52,8 @@ namespace Apex.Core
         public float lodBias;
         public bool forceAnisotropic;
         public int maxAdditionalLights;
+        /// <summary>Real spot lights for the street lamps at night (pool following the camera).</summary>
+        public int streetLights;
         public bool bloomHighQuality;
         /// <summary>Content defaults the tier sets when chosen (environment density 0..2, 4K road textures).</summary>
         public int environmentDetail;
@@ -71,7 +73,7 @@ namespace Apex.Core
                         shadowDistance = 120f, shadowCascades = 2, shadowResolution = 1024, softShadowQuality = 0,
                         ssao = false, reflectionResolution = 64, reflectionCapturesWorld = false, reflectionInterval = 0f,
                         lodBias = 1f, forceAnisotropic = false, maxAdditionalLights = 2, bloomHighQuality = false,
-                        environmentDetail = 0, ultraTextures = false,
+                        environmentDetail = 0, ultraTextures = false, streetLights = 8,
                     };
                     break;
                 case GraphicsTier.Medium:
@@ -81,7 +83,7 @@ namespace Apex.Core
                         shadowDistance = 200f, shadowCascades = 3, shadowResolution = 2048, softShadowQuality = 1,
                         ssao = false, reflectionResolution = 128, reflectionCapturesWorld = true, reflectionInterval = 0f,
                         lodBias = 1.25f, forceAnisotropic = false, maxAdditionalLights = 4, bloomHighQuality = false,
-                        environmentDetail = 1, ultraTextures = false,
+                        environmentDetail = 1, ultraTextures = false, streetLights = 16,
                     };
                     break;
                 case GraphicsTier.High:
@@ -91,7 +93,7 @@ namespace Apex.Core
                         shadowDistance = 320f, shadowCascades = 4, shadowResolution = 2048, softShadowQuality = 2,
                         ssao = true, reflectionResolution = 256, reflectionCapturesWorld = true, reflectionInterval = 4f,
                         lodBias = 1.6f, forceAnisotropic = true, maxAdditionalLights = 6, bloomHighQuality = true,
-                        environmentDetail = 2, ultraTextures = false,
+                        environmentDetail = 2, ultraTextures = false, streetLights = 32,
                     };
                     break;
                 default:
@@ -102,7 +104,7 @@ namespace Apex.Core
                         shadowDistance = 450f, shadowCascades = 4, shadowResolution = 4096, softShadowQuality = 2,
                         ssao = true, reflectionResolution = 512, reflectionCapturesWorld = true, reflectionInterval = 1.5f,
                         lodBias = 2.2f, forceAnisotropic = true, maxAdditionalLights = 8, bloomHighQuality = true,
-                        environmentDetail = 2, ultraTextures = true,
+                        environmentDetail = 2, ultraTextures = true, streetLights = 48,
                     };
                     tier = GraphicsTier.Ultra;
                     break;

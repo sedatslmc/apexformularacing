@@ -125,6 +125,10 @@
 - **Leben:** Streckenposten, Fotografen, Sicherheitspersonal (Figuren-Assets nötig), Kamerablitze, Bewegung in der Ferne.
 
 ### Phase 6 – Wetter & Nacht
+- **Umgesetzt (2026-10-26, `NIGHT_LIGHTING.md`):**
+  - Lichtpool echter Laternen-Spots (8–48 je Stufe), Laternenabstand 34 m
+  - Bosporus-Brücke in Rot-Weiß: rote Tragseile, weiße Hänger, Pylonbänder und -anstrahlung
+  - **Status:** implementiert und getestet bzw. offline gesehen; Unity-Prüfung offen
 - **Regen:** nasser Asphalt mit Pfützenmaske, Gischt hinter Autos.
 - **Nacht:**
   - Flutlicht, beleuchtete Brücke, Schaufenster, LED-Werbung

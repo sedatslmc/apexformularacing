@@ -24,6 +24,8 @@ namespace Apex.Game
         public static int Quality = 1;
 
         const float WaterY = -0.4f;
+        /// <summary>Tower wash spot: illuminance intensity / d² gives ~0.6 on the legs 60 m up (night exposure).</summary>
+        const float BridgeWashIntensity = 2200f;
         const float ChunkSize = 384f;
 
         public static EnvironmentInstance Build(CircuitInstance ci, Transform parent)
@@ -313,12 +315,34 @@ namespace Apex.Game
                     lg.Bridge(a, b, WaterY);
                     AddMeshObject(lmRoot, "Bridge_15Temmuz", lg.parts, true);
                 }
-                // Night lighting (also with an authored model): small lamps along both deck edges and on the tower tops.
+                // Night lighting in red and white (LandmarkGeometry.BridgeIllumination; also with an authored model,
+                // which shares the bridge's real dimensions): red cables, white hangers, tower bands and deck dots.
                 var lights = new MeshBuilder();
+                var red = new MeshBuilder();
+                var white = new MeshBuilder();
                 foreach (float lat in new[] { -17.2f, 17.2f })
                     foreach (var p in LandmarkGeometry.BridgeLightPath(a, b, WaterY, lat))
                         lights.Box(p + Vector3.up * 1.2f, new Vector3(0.9f, 0.5f, 0.9f));
-                AddMeshObject(lmRoot, "BridgeLights", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.BridgeLight] = lights }, false);
+                var wash = LandmarkGeometry.BridgeIllumination(a, b, WaterY, red, white);
+                AddMeshObject(lmRoot, "BridgeLights", new Dictionary<string, MeshBuilder>
+                {
+                    [EnvironmentGeometry.BridgeLight] = lights, [EnvironmentGeometry.BridgeRed] = red, [EnvironmentGeometry.BridgeWhite] = white,
+                }, false);
+                // Real lights: four white spots wash the tower legs from deck level (no shadows).
+                foreach (var w in wash)
+                {
+                    var go = new GameObject("BridgeTowerWash");
+                    go.transform.SetParent(lmRoot, false);
+                    go.transform.position = w;
+                    go.transform.rotation = Quaternion.LookRotation(Vector3.up, Vector3.forward);
+                    var l = go.AddComponent<Light>();
+                    l.type = LightType.Spot;
+                    l.spotAngle = 24f;
+                    l.range = 120f;
+                    l.color = new Color(1f, 0.97f, 0.92f);
+                    l.shadows = LightShadows.None;
+                    env.AddRealLight(l, BridgeWashIntensity);
+                }
             }
             foreach (var l in def.landmarks)
             {
@@ -986,6 +1010,9 @@ namespace Apex.Game
             // Night lights (moderate intensities: no neon, no blown-out bloom).
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.LampHead), new Color(1f, 0.82f, 0.58f) * 2.2f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeLight), new Color(0.85f, 0.9f, 1f) * 2f);
+            // Turkish red (#E30A17) and white. Red stays at 1.3: brighter saturated red bleaches to pink under ACES.
+            env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeRed), new Color(0.89f, 0.04f, 0.09f) * 1.3f);
+            env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeWhite), new Color(1f, 0.97f, 0.92f) * 2.4f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.TowerGlass), new Color(0.32f, 0.33f, 0.3f));
             foreach (var key in new[] { LandmarkGeometry.Stone, LandmarkGeometry.Marble, LandmarkGeometry.HagiaPlaster })
                 env.AddLight(ApexMaterials.Get(key), new Color(0.32f, 0.27f, 0.2f));
