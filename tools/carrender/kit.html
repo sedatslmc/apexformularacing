@@ -1,0 +1,128 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+// Preview renderer for the circuit kit OBJs (build/Apex.ModelPreview --kit): golden-hour sun from
+// SunModel, procedural stand-in textures (no external assets). Not a game capture: URP Lit in Unity
+// will look similar, not identical. The model is mirrored on x (Unity left-handed -> three.js).
+import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 1600), Hh = +(params.get('h') || 900);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, logarithmicDepthBuffer: true });
+renderer.setSize(W, Hh);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xc9b9a3);
+scene.fog = new THREE.Fog(0xc9b9a3, 250, 1200);
+
+function canvasTex(size, draw, repeat = 1) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat, repeat); t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+function noise(g, s, base, spread, n = 9000, size = 2) {
+  g.fillStyle = base; g.fillRect(0, 0, s, s);
+  for (let i = 0; i < n; i++) {
+    const v = Math.floor(spread * (Math.random() - 0.5));
+    g.fillStyle = `rgba(${128 + v},${128 + v},${128 + v},0.18)`;
+    g.fillRect(Math.random() * s, Math.random() * s, size, size);
+  }
+}
+const concrete = canvasTex(256, (g, s) => {
+  noise(g, s, '#b9b6ae', 120);
+  // weathering streaks near the foot and the top
+  const grd = g.createLinearGradient(0, s, 0, 0); grd.addColorStop(0, 'rgba(60,55,45,0.35)'); grd.addColorStop(0.15, 'rgba(60,55,45,0)');
+  grd.addColorStop(0.9, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(40,40,40,0.15)');
+  g.fillStyle = grd; g.fillRect(0, 0, s, s);
+});
+const asphalt = canvasTex(256, (g, s) => noise(g, s, '#55565a', 140, 20000, 1), 6);
+const fenceTex = canvasTex(128, (g, s) => {
+  g.clearRect(0, 0, s, s); g.strokeStyle = 'rgba(190,195,200,1)'; g.lineWidth = 3;
+  for (let i = -s; i < 2 * s; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + s, s); g.stroke(); g.beginPath(); g.moveTo(i + s, 0); g.lineTo(i, s); g.stroke(); }
+}, 1);
+fenceTex.repeat.set(4, 4);
+// Event banners in the Bosphorus GP palette (#C8102E, #087F8C, #C9A66B, #1D2835, #F0E9D9); patterns only.
+function banner(bg, fg, accent) {
+  return canvasTex(512, (g, s) => {
+    g.fillStyle = bg; g.fillRect(0, 0, s, s);
+    g.fillStyle = accent; g.fillRect(0, s * 0.82, s, s * 0.08);
+    g.fillStyle = fg;
+    for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(s * (0.1 + i * 0.16), s * 0.42, s * 0.11, 0, Math.PI * 2); g.fill(); }
+    g.fillStyle = bg;
+    for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(s * (0.13 + i * 0.16), s * 0.42, s * 0.085, 0, Math.PI * 2); g.fill(); }
+  });
+}
+const M = (o) => new THREE.MeshStandardMaterial(o);
+const mats = {
+  BarrierConcrete: M({ map: concrete, roughness: 0.92 }),
+  Concrete: M({ map: concrete, roughness: 0.9 }),
+  KitDark: M({ color: 0x26272a, roughness: 0.9 }),
+  Steel: M({ color: 0xaeb2b6, metalness: 0.85, roughness: 0.42 }),
+  Armco: M({ color: 0xc3c7cb, metalness: 0.9, roughness: 0.3 }),
+  CatchFence: M({ map: fenceTex, alphaTest: 0.4, transparent: false, side: THREE.DoubleSide, metalness: 0.7, roughness: 0.4 }),
+  ModuleNavy: M({ color: 0x1d2835, roughness: 0.55 }),
+  ModuleIvory: M({ color: 0xf0e9d9, roughness: 0.55 }),
+  ModuleTurquoise: M({ color: 0x087f8c, roughness: 0.55 }),
+  Tire: M({ color: 0x151515, roughness: 0.9 }),
+  ConveyorBelt: M({ color: 0x18181a, roughness: 0.7, side: THREE.DoubleSide }),
+  KitStrap: M({ color: 0x111111, roughness: 0.6 }),
+  KitReflector: M({ color: 0xf2f2f2, emissive: 0x333333, roughness: 0.2 }),
+  KitBanner0: M({ map: banner('#1d2835', '#c8102e', '#c9a66b'), roughness: 0.6 }),
+  KitBanner1: M({ map: banner('#c8102e', '#f0e9d9', '#1d2835'), roughness: 0.6 }),
+  KitBanner2: M({ map: banner('#087f8c', '#f0e9d9', '#c9a66b'), roughness: 0.6 }),
+  KitBannerBack: M({ color: 0xe9e4d8, roughness: 0.7 }),
+  ShelterRoof: M({ color: 0x087f8c, roughness: 0.5 }),
+  Extinguisher: M({ color: 0xbf0d10, roughness: 0.4 }),
+  PanelHousing: M({ color: 0x15171a, roughness: 0.5 }),
+  Asphalt: M({ map: asphalt, roughness: 0.85 }),
+  Line: M({ color: 0xe8e8e2, roughness: 0.7 }),
+  KerbRed: M({ color: 0xb3161b, roughness: 0.6 }),
+  KerbWhite: M({ color: 0xe9e9e4, roughness: 0.6 }),
+  RunoffAsphalt: M({ map: asphalt, color: 0xc9c6c0, roughness: 0.9 }),
+};
+const fallback = M({ color: 0xff00ff });
+
+// Golden hour: sun at 252° true, 11° elevation, true north 308° in the game frame (SunModel).
+const az = (252 + 308) * Math.PI / 180, el = 11 * Math.PI / 180;
+const sunDir = new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+const sun = new THREE.DirectionalLight(0xffc78c, 3.2);
+const focus = (params.get('target') || '0,0,0').split(',').map(Number);
+const fp = new THREE.Vector3(-focus[0], focus[1], focus[2]);
+const sr = +(params.get('shadow') || 60);
+sun.position.copy(fp).addScaledVector(sunDir, sr * 3); sun.target.position.copy(fp);
+sun.castShadow = true; sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+Object.assign(sun.shadow.camera, { left: -sr, right: sr, top: sr, bottom: -sr, near: 1, far: sr * 6 });
+scene.add(sun, sun.target);
+scene.add(new THREE.HemisphereLight(0x8fa9c8, 0x5b5040, 1.1));
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), M({ color: 0x6e6a5e, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = +(params.get('groundY') || -0.2); ground.receiveShadow = true; scene.add(ground);
+
+new OBJLoader().load(params.get('obj'), (obj) => {
+  obj.traverse((m) => {
+    if (!m.isMesh) return;
+    const pick = (x) => mats[x.name] || fallback;
+    m.material = Array.isArray(m.material) ? m.material.map(pick) : pick(m.material);
+    m.castShadow = true; m.receiveShadow = true;
+    m.geometry.computeVertexNormals();
+  });
+  obj.scale.x = -1;
+  scene.add(obj);
+  const cam = new THREE.PerspectiveCamera(+(params.get('fov') || 50), W / Hh, 0.05, 3000);
+  const e = params.get('eye').split(',').map(Number);
+  cam.position.set(-e[0], e[1], e[2]);
+  cam.lookAt(fp);
+  renderer.render(scene, cam);
+  window.renderDone = true;
+});
+</script></body></html>
