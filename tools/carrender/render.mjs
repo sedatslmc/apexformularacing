@@ -41,7 +41,7 @@ const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 page.on('console', (m) => { if (m.type() === 'error') console.error('page:', m.text()); });
 for (const [name, v] of Object.entries(views)) {
   if (only && !only.split(',').includes(name)) continue;
-  await page.goto(`http://localhost:${port}/render.html?obj=/car.obj&eye=${v.eye}&target=${v.target}&fov=${v.fov}${v.extra || ''}`);
+  await page.goto(`http://localhost:${port}/${process.env.APEX_PAGE || 'render.html'}?obj=/car.obj&eye=${v.eye}&target=${v.target}&fov=${v.fov}${v.extra || ''}`);
   await page.waitForFunction('window.renderDone === true', null, { timeout: 120000 });
   await page.locator('canvas').screenshot({ path: `${outPrefix}_${name}.png` });
   console.log('rendered', name);

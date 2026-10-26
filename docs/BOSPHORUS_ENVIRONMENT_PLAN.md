@@ -61,18 +61,33 @@ Die Sternausrichtung ist aus Sekundärquellen (FOTW) abgeleitet. Die amtliche Ko
 - Mindestabstand der Strecke zum Wasser: 21 m.
 
 ## 5.–12. Umsetzung (Reihenfolge laut Briefing)
+Statusstufen: **implementiert** = Code steht und kompiliert gegen die Unity-Referenzen; **getestet** = NUnit-Tests decken die Logik ab.
+Im Unity-6-Editor gesehen habe ich die Szene noch **nicht**. Die Bilder unten stammen aus dem Offline-Vorschauwerkzeug (three.js), nicht aus dem Spiel.
+
 | # | Schritt | Umsetzung | Status |
 |---|---|---|---|
-| 5 | 500-m-Uferprototyp | Abschnitt A (Start/Ziel, Beşiktaş-Ufer) in voller Dichte: Tribünen am Wasser, Boxen und Hospitality, Zäune, Bürgersteige, Laternen, Straßenschilder, fiktive Sponsoren | implementiert (Code), Sichtprüfung im Editor offen |
-| 6 | Wahrzeichen | Brücke, Ortaköy-Moschee, Dolmabahçe, Çırağan, Beylerbeyi, Galata-Turm, Leanderturm, Sultan-Ahmed-Moschee, Hagia Sophia: vereinfachte **eigene** Silhouettenmodelle an den Geo-Positionen | implementiert (Platzhalter-Silhouetten, nicht fotorealistisch) |
-| 7 | Stadt und Skyline | prozedurale Istanbuler Wohnblöcke (Putzfarben, Ziegeldächer, Fensterbänder) auf dem Hang, asiatisches Ufer mit Hügeln und Häuserteppich, historische Halbinsel als ferne Masse | implementiert (Platzhalter) |
-| 8 | Flaggen, Fähren, Zuschauer | türkische Flaggen (exakte Geometrie, Stoffanimation, gemeinsame Windrichtung), Fähren auf der realen Linie Beşiktaş–Üsküdar, Schiffe im Bosporus, Zuschauer als Instanzen, Möwen | implementiert |
-| 9 | Goldene Stunde | Sonnenrichtung aus Wahr-Nord, warmes Licht auf den europäischen Fassaden | implementiert |
-| 10 | Nacht und Nässe | Nachtpreset mit Straßenlaternen, Fensterlicht, Brückenbeleuchtung; nasse Fassaden und Straßen | implementiert |
-| 11 | Profiling auf Geräten | Telemetrie zeigt die Frametime; **Messung auf echter Hardware steht aus** | geplant |
-| 12 | Ausweitung auf den ganzen Kurs | Stadt- und Wahrzeichen-Schicht ist kursweit; volle Dichte nur in Abschnitt A | teilweise |
+| 5 | 500-m-Uferprototyp | Start/Ziel-Bereich: Tribünen zwischen Barriere und Kai (Platzprüfung gegen Wasser und Strecke), Zuschauer, LED-Tafeln, gepflastertes Paddock mit drei Hospitality-Gebäuden, Gehwege, Fangzäune, Laternen, türkische Straßenschilder (weiß auf blau), Banner mit erfundenen Sponsoren, große Flaggen an den Tribünenenden | implementiert; Sichtprüfung im Editor offen |
+| 6 | Wahrzeichen | Brücke, Ortaköy-Moschee (auf Kaiplattform, Achse Richtung Qibla), Dolmabahçe mit Uhrturm, Çırağan, Beylerbeyi, Galata-Turm, Leanderturm, Sultan-Ahmed-Moschee, Hagia Sophia. Alle an den Geo-Positionen, Paläste entlang der Uferlinie ausgerichtet | implementiert (Platzhalter-Silhouetten) |
+| 7 | Stadt und Skyline | `CityLayout`: Wohnblöcke mit Istanbuler Putzfarben, Ziegel-Walmdächern oder Flachdächern mit Wassertanks; Fassaden zeigen hangabwärts zum Wasser. Drei Dichtezonen (nah/mittel/fern), Levent-Hochhäuser im Norden. Landmassen: europäisches Ufer, asiatisches Ufer mit Hügelrücken, historische Halbinsel jenseits des Goldenen Horns. Sichtachsen (z. B. Ortaköy-Kamm → Moschee/Brücke) bleiben frei | implementiert, getestet |
+| 8 | Flaggen, Fähren, Zuschauer | ~11 türkische Flaggen (exakte Geometrie, analytischer Stoff: hängt bei Flaute, weht bei Wind, Wellen werden zum freien Ende stärker; gemeinsamer Wind aus NNO, Poyraz); große Flaggen an Tribünen und Palast, kleine am Startportal und Hospitality, ferne am Galata- und Leanderturm mit reduzierter Aktualisierung. Fähren Beşiktaş/Karaköy/Eminönü–Üsküdar mit Liegezeit, Frachter im Fahrwasser. Zuschauer als GPU-Instanzen, die jubeln, wenn ein Auto nah ist. Möwen, Bäume (Platanen, Schirmpinien, Zypressen) mit Windbewegung | implementiert, Kinematik getestet |
+| 9 | Goldene Stunde | `SunModel`: Sonne aus WSW (wahr 252°, 11°), über Wahr-Nord ins Spiel gedreht. Beleuchtet die westseitigen Fassaden des asiatischen Ufers, Gegenlicht auf den europäischen Hängen | implementiert, getestet |
+| 10 | Nacht und Nässe | Tageszeit „Nacht“ (Mond, Fensterlicht über Emissions-Textur, Laternen, Brückenlichter, angestrahlte Moscheen) und „Sonnenuntergang“; bei Regen dunklere, glattere Fassaden, Gehwege und Dächer; bei Bewölkung gehen Lichter früher an. Moderate Intensitäten, kein Neon | implementiert |
+| – | Audio-Zonen | Prozedurale Loops für Wasser, Publikum, Stadt und Wind, gemischt nach Kameraposition (`AmbienceMixer`). Hallzonen (`AudioReverbZone`) in engen Häuserschluchten; diese färben auch den Motorsound. Tunnel oder Unterführungen gibt es im Layout nicht | implementiert, Mischlogik getestet |
+| – | Qualitätsstufen | Einstellung „Umgebungsdetails“ (Niedrig/Mittel/Hoch): Blockdichte, Ausdehnung, Tribünenreihen, Zuschauerdichte, Zaunumfang, Laternenabstand, Schiffe, Möwen. LODGroups für die nahen Blöcke, ferne Blöcke vergröbert, verteilte Aktualisierung bei fernen Flaggen und Bäumen | implementiert |
+| 11 | Profiling auf Geräten | Stadt-Dreiecke (LOD0, gesamt, nicht alle gleichzeitig sichtbar): Niedrig ~81 k, Mittel ~150 k, Hoch ~243 k; Fernterrain ~20 k. **Messung auf echter Hardware steht aus** | geplant |
+| 12 | Ausweitung auf den ganzen Kurs | Stadt, Gehwege, Zäune und Laternen sind kursweit; Tribünen und Paddock-Detail nur im Start/Ziel-Bereich und an Bremszonen | teilweise |
+
+### Vorschaubilder (Offline-Vorschau, nicht das Spiel)
+- `docs/img/bosphorus_env_aerial.png`: Luftbild in der goldenen Stunde (Strecke, Ufer, Brücke, Levent, asiatisches Ufer)
+- `docs/img/bosphorus_env_crest.png`: Blick vom Ortaköy-Kamm auf die Brücke
+- `docs/img/bosphorus_env_night.png`: dieselbe Ansicht nachts
+- `docs/img/bosphorus_env_straight.png`: Start/Ziel-Gerade (ohne Barrieren, Tribünen und Flaggen, diese erzeugt nur der Unity-Builder)
+
+Erzeugen: `cd build/Apex.ModelPreview && dotnet run -c Release -- <dir> --environment --quality 1`, dann `APEX_PAGE=env.html node tools/carrender/render.mjs <dir>/environment.obj <prefix>` mit `APEX_VIEWS`.
 
 ## Ehrliche Grenzen
 - Alle Gebäude und Wahrzeichen sind **prozedurale Platzhalter-Silhouetten**, nicht fotorealistisch. Fotorealismus braucht lizenzierte oder eigens modellierte Hero-Assets (Brücke, Moschee, Palast) nach Referenzfotos, Fassaden-Texturen und gebackenes Licht.
-- Uferlinien und einige Positionen sind Näherungen (siehe Tabelle).
+- Die Stadt ist generisch: Gleiche Blocktypen wiederholen sich, es gibt keine Straßenzüge zwischen den Blöcken, und die fernen Blöcke wirken flach.
+- Das Wasser ist eine Ebene mit wandernder Normal-Map, ohne Wellengeometrie oder Uferschaum. Schiffe ziehen keine Bugwelle.
+- Uferlinien, Landmassen und einige Positionen sind Näherungen (siehe Tabelle).
 - Die Strecke selbst ist ein fiktiver, temporär gesperrter Kurs. Es wird nicht behauptet, dass diese Straßen so existieren.

@@ -124,7 +124,7 @@ namespace Apex.Environment
             var land = field.land;
             float cx = (field.MinX + field.MaxX) * 0.5f, cz = (field.MinZ + field.MaxZ) * 0.5f;
             float nearCell = o.quality >= 2 ? 24f : o.quality == 1 ? 28f : 36f;
-            float farCell = o.quality >= 2 ? 56f : o.quality == 1 ? 70f : 96f;
+            float farCell = o.quality >= 2 ? 60f : o.quality == 1 ? 76f : 100f;
             float farRadius = o.farRadius * (o.quality >= 2 ? 1f : o.quality == 1 ? 0.9f : 0.8f);
             var park = Find("park");
             var skyline = Find("skyline");
@@ -136,16 +136,21 @@ namespace Apex.Environment
 
             if (!land.HasLand) return;
             // Mid and far bands: coarser blocks on the land masses out to the far radius.
-            float ext = farRadius;
-            for (float z = cz - ext; z < cz + ext; z += farCell)
-                for (float x = cx - ext; x < cx + ext; x += farCell)
-                {
-                    if (field.InNearArea(x, z)) continue;
-                    float dist = MathF.Sqrt((x - cx) * (x - cx) + (z - cz) * (z - cz));
-                    if (dist > farRadius) continue;
-                    int band = dist < farRadius * 0.55f ? 1 : 2;
-                    TryLot(x + R(-0.25f, 0.25f) * farCell, z + R(-0.25f, 0.25f) * farCell, farCell, band, null);
-                }
+            // The far band uses bigger, denser blocks: it reads as a carpet of roofs at
+            // 3-7 km while costing far fewer triangles.
+            float midRadius = farRadius * 0.5f;
+            foreach (int band in new[] { 1, 2 })
+            {
+                float cell = band == 1 ? farCell : farCell * 1.9f;
+                for (float z = cz - farRadius; z < cz + farRadius; z += cell)
+                    for (float x = cx - farRadius; x < cx + farRadius; x += cell)
+                    {
+                        if (field.InNearArea(x, z)) continue;
+                        float dist = MathF.Sqrt((x - cx) * (x - cx) + (z - cz) * (z - cz));
+                        if (dist > farRadius || (band == 1) != (dist < midRadius)) continue;
+                        TryLot(x + R(-0.25f, 0.25f) * cell, z + R(-0.25f, 0.25f) * cell, cell, band, null);
+                    }
+            }
             if (skyline != null) AddTowers(skyline);
         }
 
@@ -157,7 +162,8 @@ namespace Apex.Environment
             float coast = land.HasLand ? land.CoastDistance(x, z) : float.MaxValue;
             bool asia = mass == "asia";
             float quay = band == 0 && !asia ? o.quay : 12f;
-            float w = R(0.55f, 0.8f) * cell, d = R(0.5f, 0.75f) * cell;
+            float fill = band == 2 ? 0.2f : 0f;
+            float w = R(0.55f + fill, 0.8f + fill * 0.5f) * cell, d = R(0.5f + fill, 0.75f + fill * 0.5f) * cell;
             float half = MathF.Max(w, d) * 0.5f;
             if (coast < quay + half * 0.7f)
             {
@@ -199,10 +205,13 @@ namespace Apex.Environment
                 ground = MathF.Min(ground, field.Height(px, pz));
             }
             int floors;
+            int maxFloors = band == 0 ? SightlineFloorLimit(x, z) : 99;
+            if (maxFloors == 0) return;
             if (asia) floors = coast < 80f ? rng.Next(2, 4) : rng.Next(3, 7);
             else if (mass == "peninsula") floors = rng.Next(3, 6);
             else if (band == 0) floors = coast < 120f ? rng.Next(3, 6) : rng.Next(4, 8);
             else floors = rng.Next(4, 9);
+            floors = Math.Min(floors, maxFloors);
             float height = floors * FloorHeight + R(0.3f, 1.2f);
             int roof = band == 2 ? 0 : rng.NextDouble() < (mass == "europe" ? 0.45 : 0.65) ? 1 : 0;
             lots.Add(new Lot
@@ -210,6 +219,27 @@ namespace Apex.Environment
                 x = x, z = z, ground = ground - 0.6f, w = w, d = d, height = height, floors = floors,
                 yaw = yaw, style = rng.Next(Styles), roof = roof, band = band,
             });
+        }
+
+        /// <summary>
+        /// Keeps the circuit's signature views open (Ortaköy crest towards the mosque and the
+        /// bridge, panoramas): inside a widening corridor along each sightline only low
+        /// buildings are allowed, right next to the viewpoint none at all.
+        /// </summary>
+        int SightlineFloorLimit(float x, float z)
+        {
+            int limit = 99;
+            foreach (var s in def.sightlines)
+            {
+                float a = s.bearing * MathF.PI / 180f;
+                float dx = x - s.east, dz = z - s.north;
+                float along = dx * MathF.Sin(a) + dz * MathF.Cos(a);
+                if (along < 0f || along > 700f) continue;
+                float lateral = MathF.Abs(dx * MathF.Cos(a) - dz * MathF.Sin(a));
+                if (lateral > 30f + 0.18f * along) continue;
+                limit = Math.Min(limit, along < 120f ? 0 : 2);
+            }
+            return limit;
         }
 
         static bool InCircle(float x, float z, CircuitDefinition.Landmark l, float r) =>

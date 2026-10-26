@@ -62,6 +62,116 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     Export("freighter", l => l.Freighter());
     return;
 }
+if (Array.IndexOf(args, "--environment") >= 0)
+{
+    // Bosphorus environment as one OBJ (terrain, road, city, trees, landmarks) plus budget stats.
+    int qa = Array.IndexOf(args, "--quality");
+    int quality = qa >= 0 && qa + 1 < args.Length ? int.Parse(args[qa + 1]) : 1;
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_gp.json"));
+    var def = Apex.Tracks.CircuitDefinition.FromJson(json);
+    var g = Apex.Tracks.TrackGeometry.FromDefinition(def);
+    var field = new Apex.Environment.TerrainField(g, def);
+    var parts = new Dictionary<string, MeshBuilder>();
+    MeshBuilder B(string k) { if (!parts.TryGetValue(k, out var m)) parts[k] = m = new MeshBuilder(); return m; }
+    var sw = System.Diagnostics.Stopwatch.StartNew();
+    var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality });
+    Console.WriteLine($"city: {city.lots.Count} lots, {city.trees.Count} trees, {sw.ElapsedMilliseconds} ms");
+    int[] bands = new int[3];
+    foreach (var lot in city.lots) { bands[lot.band]++; EnvironmentGeometry.Building(B, lot, lot.band == 0); }
+    Console.WriteLine($"  bands near/mid/far: {bands[0]}/{bands[1]}/{bands[2]}");
+    int cityTris = 0; foreach (var kv in parts) cityTris += kv.Value.TriangleCount;
+    Console.WriteLine($"  city triangles (LOD0): {cityTris}");
+    // Near terrain on a 24 m grid (the game uses 12 m), far terrain, quays.
+    const float c = 24f;
+    for (float z = field.MinZ; z < field.MaxZ - 1f; z += c)
+        for (float x = field.MinX; x < field.MaxX - 1f; x += c)
+        {
+            var a = new Vector3(x, field.Height(x, z), z); var b = new Vector3(x + c, field.Height(x + c, z), z);
+            var cc = new Vector3(x + c, field.Height(x + c, z + c), z + c); var d = new Vector3(x, field.Height(x, z + c), z + c);
+            B("Ground").QuadFacing(a, b, cc, d, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+        }
+    float cx = (field.MinX + field.MaxX) * 0.5f, cz = (field.MinZ + field.MaxZ) * 0.5f;
+    EnvironmentGeometry.FarTerrain(B(EnvironmentGeometry.FarGround), field, cx, cz, 6400f);
+    Console.WriteLine($"  far terrain triangles: {parts[EnvironmentGeometry.FarGround].TriangleCount}");
+    EnvironmentGeometry.QuayWall(B(EnvironmentGeometry.Quay), def.shoreline, true);
+    EnvironmentGeometry.QuayWall(B(EnvironmentGeometry.Quay), def.farShoreline, false);
+    // Road ribbon.
+    for (int i = 0; i < g.Count; i++)
+    {
+        int j = (i + 1) % g.Count;
+        Vector3 P(int k, float lat) { var p = g.Positions[k] + g.Rights[k] * lat; return new Vector3(p.X, p.Y + 0.05f, p.Z); }
+        float hi = g.Widths[i] * 0.5f, hj = g.Widths[j] * 0.5f;
+        B("Asphalt").QuadFacing(P(i, -hi), P(i, hi), P(j, hj), P(j, -hj), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+    }
+    // Trees (instanced in the game).
+    foreach (var t in city.trees)
+    {
+        var trunk = new MeshBuilder(); var crown = new MeshBuilder();
+        EnvironmentGeometry.TreeMesh(t.kind, trunk, crown);
+        void Copy(MeshBuilder src, string key)
+        {
+            var v = src.Vertices; var tr = src.Triangles;
+            Vector3 W(Vector3 p) => new Vector3(t.x + p.x * t.height, t.ground + p.y * t.height, t.z + p.z * t.height);
+            for (int i = 0; i < tr.Count; i += 3)
+            {
+                Vector3 a = W(v[tr[i]]), b = W(v[tr[i + 1]]), cc = W(v[tr[i + 2]]);
+                B(key).TriangleFacing(a, b, cc, Vector2.zero, Vector2.zero, Vector2.zero, Vector3.Cross(cc - a, b - a));
+            }
+        }
+        Copy(trunk, EnvironmentGeometry.Bark);
+        Copy(crown, t.kind == 1 ? EnvironmentGeometry.Pine : t.kind == 2 ? EnvironmentGeometry.Cypress : EnvironmentGeometry.Foliage);
+    }
+    // Landmarks (same placement rules as EnvironmentBuilder, simplified).
+    float north = def.trueNorthBearing;
+    void Put(LandmarkGeometry lg, Vector3 pos, float yawDeg)
+    {
+        var q = Quaternion.Euler(0f, yawDeg, 0f);
+        foreach (var kv in lg.parts)
+        {
+            var v = kv.Value.Vertices; var tr = kv.Value.Triangles;
+            for (int i = 0; i < tr.Count; i += 3)
+            {
+                Vector3 a = pos + q * v[tr[i]], b = pos + q * v[tr[i + 1]], cc = pos + q * v[tr[i + 2]];
+                B(kv.Key).TriangleFacing(a, b, cc, Vector2.zero, Vector2.zero, Vector2.zero, Vector3.Cross(cc - a, b - a));
+            }
+        }
+    }
+    Vector3 LP(string id) { var l = def.FindLandmark(id); return new Vector3(l.east, field.Height(l.east, l.north), l.north); }
+    Vector3 Inland(Vector3 p, float dir, float clear)
+    {
+        for (float s = 0; s < 400; s += 5) { var x = p + new Vector3(dir * s, 0, 0); if (!field.IsWater(x.x, x.z) && field.land.CoastDistance(x.x, x.z) >= clear) { x.y = field.Height(x.x, x.z); return x; } }
+        return p;
+    }
+    float ShoreYaw(List<(float east, float north)> sh, float z) => MathF.Atan2(Apex.Environment.TerrainField.ShoreX(sh, z + 60) - Apex.Environment.TerrainField.ShoreX(sh, z - 60), 120f) * Mathf.Rad2Deg;
+    float qibla = (151f + north) % 360f;
+    { var lg = new LandmarkGeometry(); lg.Bridge(LP("bridge_eu"), LP("bridge_as"), -0.4f); Put(lg, Vector3.zero, 0f); }
+    { var lg = new LandmarkGeometry(); lg.OrtakoyMosque(); lg.B(LandmarkGeometry.Stone).Box(new Vector3(0, -3, 0), new Vector3(46, 6, 46)); var p = LP("ortakoy_mosque"); p.y = MathF.Max(p.y, 1.6f); Put(lg, p, qibla); }
+    { var lg = new LandmarkGeometry(); lg.Palace(284f, 48f, 18f, true); Put(lg, Inland(LP("dolmabahce"), -1, 40), ShoreYaw(def.shoreline, -390)); }
+    { var lg = new LandmarkGeometry(1); lg.Palace(160f, 30f, 14f, false); Put(lg, Inland(LP("ciragan"), -1, 28), ShoreYaw(def.shoreline, 841)); }
+    { var lg = new LandmarkGeometry(1); lg.Palace(65f, 40f, 15f, false); Put(lg, Inland(LP("beylerbeyi"), 1, 30), ShoreYaw(def.farShoreline, 2362)); }
+    { var lg = new LandmarkGeometry(1); lg.GalataTower(63f); Put(lg, LP("galata"), 0f); }
+    { var lg = new LandmarkGeometry(1); lg.MaidensTower(); var p = LP("maidens_tower"); p.y = -0.4f; Put(lg, p, 90f + north); }
+    { var lg = new LandmarkGeometry(1); lg.ImperialMosque(11.7f, 26f, 6, 64f, LandmarkGeometry.Stone); Put(lg, LP("sultan_ahmed"), qibla); }
+    { var lg = new LandmarkGeometry(1); lg.ImperialMosque(15.5f, 34f, 4, 60f, LandmarkGeometry.HagiaPlaster); Put(lg, LP("hagia_sophia"), 122f + north); }
+    var sbe = new StringBuilder();
+    int vb = 1, total = 0;
+    foreach (var kv in parts)
+    {
+        var mbx = kv.Value;
+        if (mbx.TriangleCount == 0) continue;
+        sbe.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+        foreach (var v in mbx.Vertices) sbe.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F2} {1:F2} {2:F2}", v.x, v.y, v.z));
+        foreach (var uv in mbx.UVs) sbe.AppendLine(string.Format(CultureInfo.InvariantCulture, "vt {0:F4} {1:F4}", uv.x, uv.y));
+        var ts = mbx.Triangles;
+        for (int i = 0; i < ts.Count; i += 3) sbe.AppendLine($"f {ts[i] + vb}/{ts[i] + vb} {ts[i + 1] + vb}/{ts[i + 1] + vb} {ts[i + 2] + vb}/{ts[i + 2] + vb}");
+        vb += mbx.VertexCount;
+        total += mbx.TriangleCount;
+    }
+    Directory.CreateDirectory(outDir);
+    File.WriteAllText(Path.Combine(outDir, "environment.obj"), sbe.ToString());
+    Console.WriteLine($"environment.obj: {total} triangles (preview: near terrain at 24 m, trees as meshes)");
+    return;
+}
 bool primitivesOnly = Array.IndexOf(args, "--primitives") >= 0;
 bool primitiveFailed = false;
 if (primitivesOnly || Array.IndexOf(args, "--check") >= 0)

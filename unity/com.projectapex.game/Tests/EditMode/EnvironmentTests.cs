@@ -109,6 +109,22 @@ namespace Apex.Tests
                 Assert.That(lot.height, Is.InRange(5f, 220f));
             }
             Assert.That(near, Is.GreaterThan(800));
+            // Signature views stay open: nothing right in front of a viewpoint, only low blocks further out.
+            Assert.That(def.sightlines.Count, Is.GreaterThanOrEqualTo(3));
+            foreach (var s in def.sightlines)
+            {
+                float a = s.bearing * (float)Math.PI / 180f;
+                foreach (var lot in city.lots)
+                {
+                    if (lot.band != 0) continue;
+                    float dx = lot.x - s.east, dz = lot.z - s.north;
+                    float along = dx * (float)Math.Sin(a) + dz * (float)Math.Cos(a);
+                    float lateral = Math.Abs(dx * (float)Math.Cos(a) - dz * (float)Math.Sin(a));
+                    if (along < 0f || along > 700f || lateral > 30f + 0.18f * along) continue;
+                    Assert.That(along, Is.GreaterThanOrEqualTo(120f), s.label);
+                    Assert.That(lot.floors, Is.LessThanOrEqualTo(2), s.label);
+                }
+            }
             Assert.That(onAsia, Is.GreaterThan(200), "Asian shore skyline");
             Assert.That(onPeninsula, Is.GreaterThan(30), "historic peninsula");
             Assert.That(city.trees.Count, Is.GreaterThan(100));

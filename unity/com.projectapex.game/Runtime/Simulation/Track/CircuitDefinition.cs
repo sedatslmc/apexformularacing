@@ -78,6 +78,15 @@ namespace Apex.Tracks
 
         public readonly List<LandMass> landMasses = new List<LandMass>();
 
+        /// <summary>Signature view from a point of the circuit (game-frame bearing, deg).</summary>
+        public sealed class Sightline
+        {
+            public string label = "";
+            public float east, north, bearing;
+        }
+
+        public readonly List<Sightline> sightlines = new List<Sightline>();
+
         public Landmark FindLandmark(string landmarkId) => landmarks.Find(l => l.id == landmarkId);
 
         public static CircuitDefinition FromJson(string json)
@@ -126,6 +135,20 @@ namespace Apex.Tracks
                     if (row is List<object> r && r.Count >= 2)
                         def.shoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
             }
+            if (root.TryGetValue("sightlines", out var sl) && sl is List<object> sll)
+                foreach (var o in sll)
+                {
+                    if (!(o is Dictionary<string, object> sd)) continue;
+                    var from = sd.TryGetValue("from", out var fr) ? fr as List<object> : null;
+                    if (from == null || from.Count < 2) continue;
+                    def.sightlines.Add(new Sightline
+                    {
+                        label = Str(sd, "label"),
+                        east = Convert.ToSingle(from[0]),
+                        north = Convert.ToSingle(from[1]),
+                        bearing = Num(sd, "bearing_deg", 0f),
+                    });
+                }
             if (root.TryGetValue("geo", out var geo) && geo is Dictionary<string, object> gd)
             {
                 def.trueNorthBearing = Num(gd, "true_north_bearing_deg", float.NaN);

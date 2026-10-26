@@ -525,7 +525,8 @@ namespace Apex.Game
             mesh.SetTriangles(tris, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateBounds();
-            AddMesh(parent, "Terrain", mesh, new[] { "Ground" }, SurfaceType.Grass);
+            // Geo circuits sit in a city: urban ground tone instead of open grassland.
+            AddMesh(parent, "Terrain", mesh, new[] { far ? "FarGround" : "Ground" }, SurfaceType.Grass);
             var shore = def.shoreline;
             if (!far && shore != null && shore.Count > 1)
             {
