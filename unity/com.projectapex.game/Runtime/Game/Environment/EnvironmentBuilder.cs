@@ -47,12 +47,22 @@ namespace Apex.Game
             // Event buildings (pit building, timing tower, race control) keep stands and city away.
             foreach (var (x, z, r) in ci.EventFootprints) reserved.Add(new CityLayout.Reserved(x, z, r));
             BuildWaterfront(root.transform, env, ci, reserved);
+            // Monumental Turkish flag (site from the circuit file, re-checked against the built circuit): keep the city away.
+            bool monumental = false;
+            if (def.monumentalFlag.HasValue)
+            {
+                var (fx, fz) = def.monumentalFlag.Value;
+                monumental = MonumentalFlagSite.Validate(field, g, ci.Clearance, fx, fz, out _, out _);
+                if (monumental) reserved.Add(new CityLayout.Reserved(fx, fz, MonumentalFlagSite.ReservedRadius));
+                else Debug.LogWarning($"Monumental flag site {fx:F0},{fz:F0} is not clear of the circuit; not placed.");
+            }
             var opts = new CityLayout.Options { quality = q };
             opts.reserved.AddRange(reserved);
             var city = new CityLayout(field, def, opts);
             BuildCity(root.transform, city);
             BuildTrees(root.transform, env, city);
             BuildLandmarks(root.transform, env, ci);
+            if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
             BuildTrackside(root.transform, env, ci);
             BuildShips(root.transform, env, def, field.land);
             BuildGulls(root.transform, env, ci);

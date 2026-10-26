@@ -52,20 +52,26 @@ namespace Apex.Environment
     public static class FlagCloth
     {
         /// <summary>Angle of the flag below the horizontal (deg) for a wind speed (m/s).</summary>
+        /// <summary>Flag length (m) up to which the ripple rate is not slowed down.</summary>
+        public const float ReferenceLength = 2.4f;
+
         public static float DroopDeg(float windSpeed) => ApexMath.Lerp(82f, 5f, 1f - MathF.Exp(-windSpeed / 3.5f));
 
         /// <summary>
         /// Cloth point for u (0 hoist .. 1 fly) and v (0 top .. 1 bottom of the hoist).
         /// Frame: x downwind (horizontal), y up, z lateral; origin at the top of the hoist.
+        /// Large flags ripple more slowly: the wave frequency is divided by sqrt(length / 2.4 m) above
+        /// a 2.4 m flag (a giant 18 m flag waves at about a third of the rate of a small one).
         /// </summary>
         public static Vector3 Evaluate(float u, float v, float length, float height, float windSpeed, float time, float phase)
         {
+            float slow = length > ReferenceLength ? MathF.Sqrt(length / ReferenceLength) : 1f;
             float droop = DroopDeg(windSpeed) * MathF.PI / 180f;
             float k = ApexMath.Clamp01(windSpeed / 10f);
             float s = u * length;
             // Wave amplitude grows towards the fly; ripples also make the flag a little shorter.
             float amp = length * (0.025f + 0.05f * k) * MathF.Pow(u, 1.25f);
-            float freq = 0.5f + 0.17f * windSpeed;
+            float freq = (0.5f + 0.17f * windSpeed) / slow;
             float lambda = length * ApexMath.Lerp(0.9f, 0.5f, k);
             float wave = MathF.Sin(2f * MathF.PI * (s / lambda - freq * time) + phase + v * 0.9f);
             float flutter = 0.25f * MathF.Sin(2f * MathF.PI * (s / (lambda * 0.37f) - freq * 2.3f * time) + phase * 1.7f) * u * u;
