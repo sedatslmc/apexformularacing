@@ -132,7 +132,8 @@ namespace Apex.AI
                 float r = MathF.Max(5f, 1f / k - MathF.Sign(kc) * lateral);
                 float denom = 1f / r - mu * dpm;
                 float vmax = denom <= 1e-5f ? 95f : MathF.Sqrt(mu * g0 / denom);
-                float decel = mu * (g0 + dpm * vmax * vmax) * 0.8f;
+                // Downhill reduces and uphill adds to the braking deceleration (see RacingLine).
+                float decel = MathF.Max(1f, mu * (g0 + dpm * vmax * vmax) * 0.8f + g0 * g.GradeAt(d + s * 0.5f));
                 best = MathF.Min(best, MathF.Sqrt(vmax * vmax + 2f * decel * s));
             }
             return best;
