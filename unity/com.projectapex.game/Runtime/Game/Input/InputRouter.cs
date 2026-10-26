@@ -213,7 +213,7 @@ namespace Apex.Game
             }
 
             float digitalSteer = Mathf.Clamp(kSteer + tSteer, -1f, 1f);
-            if (analogSteer) Steer = padSteer;
+            if (analogSteer) Steer = InputTuning.StickSteer(padSteer);
             else if (tiltMode && TiltAvailable && digitalSteer == 0f) Steer = tiltSteer;
             else
             {

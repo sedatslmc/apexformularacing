@@ -25,14 +25,26 @@ namespace Apex.Vehicle
         /// <summary>Yaw rate (rad/s), positive = turning right.</summary>
         public float yawRate;
         public float time;
-        /// <summary>Lateral load-transfer share carried by the front axle.</summary>
-        public float frontRollShare = 0.55f;
+        /// <summary>Lateral load-transfer share carried by the front axle (from the roll stiffness of springs and anti-roll bars).</summary>
+        public float frontRollShare;
 
         float ax, ay;
 
         public FlatGroundRig(VehicleSimulation sim)
         {
             this.sim = sim;
+            frontRollShare = FrontRollShare(sim.setup);
+        }
+
+        /// <summary>
+        /// Front share of the roll stiffness: per axle track² · (spring / 2 + anti-roll bar), the roll
+        /// moment of the wheel springs and the bar (whose force acts on the compression difference).
+        /// </summary>
+        public static float FrontRollShare(VehicleSetup s)
+        {
+            float kf = s.trackFront * s.trackFront * (0.5f * s.springFront + s.antiRollFront);
+            float kr = s.trackRear * s.trackRear * (0.5f * s.springRear + s.antiRollRear);
+            return kf / (kf + kr);
         }
 
         public Vector3 Position => new Vector3(positionXZ.X, 0f, positionXZ.Y);
