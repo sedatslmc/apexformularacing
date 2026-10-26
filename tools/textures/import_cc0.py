@@ -101,7 +101,7 @@ def write(img, path):
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def polyhaven_download(asset, res, tmp):
+def polyhaven_download(asset, res, tmp, prefer_jpg=False):
     """Downloads the 2k/4k maps of a Poly Haven texture (API: /info/<id>, /files/<id>)."""
     def get(url):
         req = urllib.request.Request(url, headers={"User-Agent": "ProjectApex-import/1.0"})
@@ -115,7 +115,9 @@ def polyhaven_download(asset, res, tmp):
         if not tag or res not in value:
             continue
         fmts = value[res]
-        fmt = "png" if "png" in fmts else "jpg" if "jpg" in fmts else None
+        # Normals stay lossless; colour, roughness and AO may come as JPG (a 4K PNG set is ~240 MB).
+        order = ("jpg", "png") if prefer_jpg and tag != "nor_gl" else ("png", "jpg")
+        fmt = next((f for f in order if f in fmts), None)
         if fmt is None:
             continue
         data = get(fmts[fmt]["url"])
@@ -132,6 +134,7 @@ def main(argv=None):
     ap.add_argument("source", nargs="?", help="folder or zip with the downloaded maps")
     ap.add_argument("--polyhaven", help="Poly Haven asset id (downloads; needs network access)")
     ap.add_argument("--res", default="2k")
+    ap.add_argument("--prefer-jpg", action="store_true", help="download colour, roughness and AO as JPG (normals stay PNG)")
     ap.add_argument("--name", required=True, help="set name the game loads (asphalt, kerb, ...)")
     ap.add_argument("--metres", type=float, help="real-world size of one texture tile (m)")
     ap.add_argument("--source-url", default="")
@@ -148,7 +151,7 @@ def main(argv=None):
     source_url, author, metres = a.source_url, a.author, a.metres
     if a.polyhaven:
         tmp = tempfile.mkdtemp(prefix="cc0_")
-        url, authors, dim_m = polyhaven_download(a.polyhaven, a.res, tmp)
+        url, authors, dim_m = polyhaven_download(a.polyhaven, a.res, tmp, a.prefer_jpg)
         source_url = source_url or url
         author = author or authors
         metres = metres or dim_m

@@ -4,13 +4,21 @@ namespace Apex.Game
 {
     /// <summary>
     /// Scanned CC0 texture sets (Poly Haven, ambientCG) imported with tools/textures/import_cc0.py into
-    /// Resources/Textures/CC0/&lt;set&gt;/ (BaseColor, Normal, MetallicSmoothness, Occlusion, optional
+    /// Resources/Textures/CC0/&lt;set&gt;/ (1K, committed) or Resources/Textures/CC0_Ultra/&lt;set&gt;/ (4K, fetched) (BaseColor, Normal, MetallicSmoothness, Occlusion, optional
     /// PaintBase, source.json). <see cref="TryApply"/> puts a set on a URP Lit material, tiled to the
     /// set's real-world size; without the files the caller keeps its procedural fallback.
     /// </summary>
     public static class SurfaceTextures
     {
         public const string Folder = "Textures/CC0";
+        /// <summary>4K sets fetched on demand (tools/textures/fetch_cc0.py --tier ultra, gitignored); preferred when present.</summary>
+        public const string UltraFolder = "Textures/CC0_Ultra";
+
+        /// <summary>Settings: prefer the 4K sets when fetched (comparison switch; mobile always uses the 1K sets).</summary>
+        public static bool UseUltra = true;
+
+        /// <summary>Whether 4K sets are present and usable on this platform (the settings row only appears then).</summary>
+        public static bool UltraAvailable => !Application.isMobilePlatform && Resources.Load<TextAsset>(UltraFolder + "/" + Asphalt + "/source") != null;
         /// <summary>Set names the circuit uses (the importer's --name).</summary>
         public const string Asphalt = "asphalt", Runoff = "runoff", Kerb = "kerb";
         /// <summary>Metres per UV unit of the road, kerb and run-off meshes.</summary>
@@ -28,12 +36,25 @@ namespace Apex.Game
             public string source, author, licence;
         }
 
-        public static Info Load(string set)
+        public static Info Load(string set) => Load(set, out _);
+
+        /// <summary>
+        /// The set's info and its Resources folder: the 4K set if fetched (not on mobile: memory), else the
+        /// committed 1K set. Note: everything under Resources goes into every build; a mobile build machine
+        /// should not have CC0_Ultra fetched (docs/CC0_MATERIALS.md).
+        /// </summary>
+        public static Info Load(string set, out string path)
         {
-            var json = Resources.Load<TextAsset>(Folder + "/" + set + "/source");
-            if (json == null) return null;
-            var info = JsonUtility.FromJson<Info>(json.text);
-            return info != null && info.metres > 0f ? info : null;
+            foreach (var folder in UseUltra && !Application.isMobilePlatform ? new[] { UltraFolder, Folder } : new[] { Folder })
+            {
+                path = folder + "/" + set + "/";
+                var json = Resources.Load<TextAsset>(path + "source");
+                if (json == null) continue;
+                var info = JsonUtility.FromJson<Info>(json.text);
+                if (info != null && info.metres > 0f) return info;
+            }
+            path = null;
+            return null;
         }
 
         /// <summary>
@@ -44,9 +65,8 @@ namespace Apex.Game
         /// </summary>
         public static bool TryApply(Material m, string set, float uvMetres, bool paint = false)
         {
-            var info = Load(set);
+            var info = Load(set, out string path);
             if (info == null || m == null) return false;
-            string path = Folder + "/" + set + "/";
             var baseMap = Resources.Load<Texture2D>(path + (paint ? "PaintBase" : "BaseColor")) ?? Resources.Load<Texture2D>(path + "BaseColor");
             if (baseMap == null) return false;
             var tiling = Vector2.one * (uvMetres / info.metres);

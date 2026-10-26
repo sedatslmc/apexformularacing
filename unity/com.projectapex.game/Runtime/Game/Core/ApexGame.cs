@@ -331,6 +331,7 @@ namespace Apex.Game
             showroomCar = null;
             world = new GameObject("World");
             EnvironmentBuilder.Quality = Settings.environmentDetail;
+            SurfaceTextures.UseUltra = Settings.ultraTextures;
             var circuit = CircuitBuilder.Build(def, world.transform);
             yield return null;
 

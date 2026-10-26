@@ -31,7 +31,7 @@
 
 **Auflösung:**
 - 1K (Fahrbahn 512 px/m, das Texeldichte-Ziel des Masterplans), etwa 10 MB für alle drei Sätze.
-- 2K/4K für die Ultra-Stufe erst mit Git LFS (Repo-Entscheidung des Product Owners).
+- **Ultra-Stufe 4K (PC):** wird bei Bedarf geladen, nicht eingecheckt (siehe unten).
 
 **Nässe:** Auch der Auslauf wird jetzt bei Regen nass dargestellt.
 
@@ -63,7 +63,37 @@
 - **Import-Einstellungen** (`Editor/CC0TextureImporter.cs`):
   - Normal-Map-Typ, Datenkarten linear, trilinear mit Anisotropie 8
   - Mobil höchstens 2048 px ASTC 6×6; PC höchstens 4096 px, BC7 bzw. BC5 für Normalen
-- **Repo-Größe:** Ein 2K-Satz hat etwa 10–20 MB als PNG. Für 4K-PC-Texturen ist Git LFS zu prüfen, bevor sie eingecheckt werden.
+- **Repo-Größe:** Im Repo liegen nur die 1K-Sätze (etwa 10 MB). Die 4K-Sätze sind gitignoriert.
+
+## Ultra-Stufe 4K (PC)
+**Status:**
+- **Implementiert, offline geprüft.**
+- **In Unity nicht gesehen.**
+
+**Laden** (dieselben drei Sätze, 4096 px; Farbe, Rauheit und AO als JPG von Poly Haven, Normalen verlustfrei):
+```sh
+python3 tools/textures/fetch_cc0.py --tier ultra     # ~5 min, ~176 MB nach Runtime/Resources/Textures/CC0_Ultra/
+python3 tools/textures/fetch_cc0.py --tier base      # 1K-Sätze neu erzeugen (eingecheckt)
+```
+- Die Satzliste steht in `tools/textures/cc0_sets.json`.
+
+**Warum nicht im Repo:**
+- Ohne LFS würde der Klon jeder Cloud-Sitzung etwa 176 MB größer.
+- Mit Git LFS sind Speicher und Bandbreite kontingentiert (1 GB/Monat im Gratiskontingent).
+- Ob LFS kommt, entscheidet der Product Owner.
+
+**Im Spiel:**
+- `SurfaceTextures` nimmt auf PC den 4K-Satz, wenn vorhanden, sonst 1K.
+- Mobil immer 1K.
+- Optionen → „Straßentexturen (ab nächster Session)“: Ultra (4K) / Standard (1K) für den A/B-Vergleich. Die Zeile erscheint nur, wenn die 4K-Sätze geladen sind.
+- **Achtung Mobil-Build:** Alles unter `Resources` wird mitgebaut. Auf einer Build-Maschine für Mobil darf `CC0_Ultra` nicht liegen.
+
+**Befund der Offline-Vorschau** (three.js, T1, Rennkamera-Abstand):
+- Bei Rennkamera-Abstand ist gegenüber 1K **kein sichtbarer Gewinn** zu erkennen; die Mip-Stufen gleichen sich an.
+- Die 4K-Normalenkarte hat deutlich stärkere Mikronormalen (Streuung 13 statt 8 von 255).
+- Im flachen Blick erzeugt sie in der Vorschau eine leichte Orangeverschiebung und Streifen. Ursache ist vermutlich Glanz-Aliasing (Specular Aliasing).
+- Im Unity-Editor mit dem Schalter zu prüfen: Flimmern bei Fahrt, Nahansicht der Kerbs, Boxengasse.
+- **Empfehlung, falls 4K flimmert:** Ultra auf 2K senken (`TIERS` in `fetch_cc0.py`) oder die Normalenstärke im Material reduzieren.
 
 ## Prüfung nach dem Import (Unity)
 - Rennkamera bei 300 km/h:

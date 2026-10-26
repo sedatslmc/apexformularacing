@@ -66,6 +66,8 @@ namespace Apex.Core
         /// <summary>A/B comparison: the player's car uses the setup and input from before the October 2026
         /// handling overhaul (AI cars always use the current one). Applies from the next session.</summary>
         public bool legacyHandling;
+        /// <summary>Road textures: the fetched 4K CC0 sets when present (false = the committed 1K sets). From the next session.</summary>
+        public bool ultraTextures = true;
         public string bestLapsJson = "";
 
         /// <summary>Upgrades older versions and clamps out-of-range values. Returns true if changed.</summary>

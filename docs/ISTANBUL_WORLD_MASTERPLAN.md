@@ -74,6 +74,7 @@
 | Bodenhaftung: jedes Objekt am Gelände bzw. der Straße ausrichten (kein Schweben), automatischer Test über alle Platzierungen | Code | geplant |
 | URP-Asset Ultra/Hoch/Mittel/Mobil (Schatten, Kaskaden, Render-Scale, MSAA bzw. TAA, SSAO nur ab Hoch) | Editor | geplant |
 | Asphalt, Auslauf und Kerbs mit gescannten CC0-Texturen (Poly Haven); Lizenzzeilen | Code + Assets (frei) | **importiert, offline geprüft**; Unity-Prüfung offen (`CC0_MATERIALS.md`) |
+| Ultra-Stufe: 4K-Sätze für PC, bei Bedarf geladen (`fetch_cc0.py --tier ultra`), A/B-Schalter in den Optionen | Code + Assets (frei) | **implementiert, offline geprüft**; kein sichtbarer Gewinn in der Vorschau, Unity-Prüfung offen |
 | Beton (Barrieren), Gehwege, Detail-Maps für Nahsicht | Code + Assets (frei) | geplant |
 | Reifenabrieb- und Bremsspur-Decals entlang der Ideallinie | Code + Textur | geplant |
 

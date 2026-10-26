@@ -102,7 +102,7 @@ const mats = {
 // UVs of road, kerbs and run-off are metric (10 m per unit), so repeat = 10 / tile size.
 if (params.get('cc0')) {
   const L = new THREE.TextureLoader();
-  const tex = (f, rep, srgb) => { const t = L.load('/cc0/' + f); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 16; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const tex = (f, rep, srgb) => { const t = L.load('/' + (params.get('cc0dir') || 'cc0') + '/' + f); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); t.anisotropy = 16; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
   const set = (name, metres, paint, color) => M({
     map: tex(name + (paint ? '_paint.jpg' : '_color.jpg'), 10 / metres, true), color: color ?? 0xffffff,
     normalMap: tex(name + '_normal.png', 10 / metres, false), roughnessMap: tex(name + '_rough.png', 10 / metres, false), roughness: 1, metalness: 0,
@@ -130,6 +130,9 @@ scene.add(new THREE.HemisphereLight(0x8fa9c8, 0x5b5040, 1.1));
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), M({ color: 0x6e6a5e, roughness: 1 }));
 ground.rotation.x = -Math.PI / 2; ground.position.y = +(params.get('groundY') || -0.2); ground.receiveShadow = true; scene.add(ground);
 
+let pending = 0, whenLoaded = null;
+THREE.DefaultLoadingManager.onStart = () => { pending++; };
+THREE.DefaultLoadingManager.onLoad = () => { pending = 0; if (whenLoaded) { const f = whenLoaded; whenLoaded = null; f(); } };
 new OBJLoader().load(params.get('obj'), (obj) => {
   obj.traverse((m) => {
     if (!m.isMesh) return;
@@ -144,7 +147,8 @@ new OBJLoader().load(params.get('obj'), (obj) => {
   const e = params.get('eye').split(',').map(Number);
   cam.position.set(-e[0], e[1], e[2]);
   cam.lookAt(fp);
-  renderer.render(scene, cam);
-  window.renderDone = true;
+  // Render only after every texture has loaded (4K maps take longer than the OBJ).
+  const done = () => { renderer.render(scene, cam); window.renderDone = true; };
+  if (pending === 0) done(); else whenLoaded = done;
 });
 </script></body></html>

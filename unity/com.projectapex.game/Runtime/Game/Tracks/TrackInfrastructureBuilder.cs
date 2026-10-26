@@ -334,33 +334,23 @@ namespace Apex.Game
             return m;
         }
 
-        /// <summary>Creates and registers the infrastructure materials (procedural textures) once.</summary>
+        static Texture2D asphaltAlbedo, asphaltNormal;
+        static bool? surfaceUltra;
+
+        /// <summary>Creates and registers the infrastructure materials (procedural textures) once; the road
+        /// surface materials again when the texture tier (<see cref="SurfaceTextures.UseUltra"/>) changed.</summary>
         public static void EnsureMaterials()
         {
-            if (materialsReady) return;
+            if (materialsReady)
+            {
+                if (surfaceUltra != SurfaceTextures.UseUltra) RegisterSurfaceMaterials();
+                return;
+            }
             materialsReady = true;
-            var asphaltA = AsphaltTexture(out var asphaltN);
-            // Road and run-off: the scanned CC0 sets when imported (tools/textures/import_cc0.py, see docs/CC0_MATERIALS.md), else procedural.
-            var road = Lit("Asphalt", new Color(0.62f, 0.62f, 0.64f), 0.22f, asphaltA, asphaltN, new Vector2(3.3f, 3.3f));
-            // Calibrated to aged city asphalt (the track scan is fresh, very dark asphalt).
-            if (SurfaceTextures.TryApply(road, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres))
-                SetColor(road, SurfaceTextures.AlbedoTint(SurfaceTextures.Asphalt, SurfaceTextures.AsphaltAlbedo));
-            ApexMaterials.Register("Asphalt", road);
-            var runoff = Lit("RunoffAsphalt", new Color(0.78f, 0.77f, 0.75f), 0.18f, asphaltA, asphaltN, new Vector2(6.25f, 6.25f));
-            // The run-off is older, paler asphalt: its own scan, or the road scan with a lighter tint.
-            if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Runoff, SurfaceTextures.RoadUvMetres))
-                SetColor(runoff, SurfaceTextures.AlbedoTint(SurfaceTextures.Runoff, SurfaceTextures.RunoffAlbedo));
-            else if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres))
-                SetColor(runoff, SurfaceTextures.AlbedoTint(SurfaceTextures.Asphalt, SurfaceTextures.RunoffAlbedo));
-            ApexMaterials.Register("RunoffAsphalt", runoff);
-            // Kerbs: red and white paint on the scanned kerb set (paint base tinted by the kerb colour); without it the plain palette colours stay.
-            if (SurfaceTextures.Load(SurfaceTextures.Kerb) != null)
-                foreach (var key in new[] { "KerbRed", "KerbWhite" })
-                {
-                    var kerb = Lit(key, ApexMaterials.Palette[key], 0.35f);
-                    SurfaceTextures.TryApply(kerb, SurfaceTextures.Kerb, SurfaceTextures.RoadUvMetres, paint: true);
-                    ApexMaterials.Register(key, kerb);
-                }
+            asphaltAlbedo = AsphaltTexture(out asphaltNormal);
+            var asphaltA = asphaltAlbedo;
+            var asphaltN = asphaltNormal;
+            RegisterSurfaceMaterials();
             ApexMaterials.Register(TrackInfrastructureGeometry.Patch, Lit("Patch", new Color(0.48f, 0.48f, 0.5f), 0.2f, asphaltA, asphaltN, new Vector2(1f, 1f)));
             ApexMaterials.Register(TrackInfrastructureGeometry.Concrete, Lit("BarrierConcrete", Color.white, 0.12f, ConcreteTexture()));
             ApexMaterials.Register(TrackInfrastructureGeometry.Armco, Lit("Armco", new Color(0.72f, 0.74f, 0.76f), 0.55f));
@@ -386,6 +376,35 @@ namespace Apex.Game
             for (int v = 0; v < TrackKitGeometry.BannerVariants; v++)
                 ApexMaterials.Register(TrackKitGeometry.Banner(v), Lit("KitBanner" + v, Color.white, 0.3f, BannerTexture(v)));
             ApexMaterials.Register(TrackKitGeometry.BannerBack, Lit("KitBannerBack", new Color(0.9f, 0.88f, 0.84f), 0.25f));
+        }
+
+        /// <summary>Road, run-off and kerb materials from the CC0 sets of the current tier (procedural fallback).</summary>
+        static void RegisterSurfaceMaterials()
+        {
+            surfaceUltra = SurfaceTextures.UseUltra;
+            var asphaltA = asphaltAlbedo;
+            var asphaltN = asphaltNormal;
+            // Road and run-off: the scanned CC0 sets when imported (tools/textures/import_cc0.py, see docs/CC0_MATERIALS.md), else procedural.
+            var road = Lit("Asphalt", new Color(0.62f, 0.62f, 0.64f), 0.22f, asphaltA, asphaltN, new Vector2(3.3f, 3.3f));
+            // Calibrated to aged city asphalt (the track scan is fresh, very dark asphalt).
+            if (SurfaceTextures.TryApply(road, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres))
+                SetColor(road, SurfaceTextures.AlbedoTint(SurfaceTextures.Asphalt, SurfaceTextures.AsphaltAlbedo));
+            ApexMaterials.Register("Asphalt", road);
+            var runoff = Lit("RunoffAsphalt", new Color(0.78f, 0.77f, 0.75f), 0.18f, asphaltA, asphaltN, new Vector2(6.25f, 6.25f));
+            // The run-off is older, paler asphalt: its own scan, or the road scan with a lighter tint.
+            if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Runoff, SurfaceTextures.RoadUvMetres))
+                SetColor(runoff, SurfaceTextures.AlbedoTint(SurfaceTextures.Runoff, SurfaceTextures.RunoffAlbedo));
+            else if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres))
+                SetColor(runoff, SurfaceTextures.AlbedoTint(SurfaceTextures.Asphalt, SurfaceTextures.RunoffAlbedo));
+            ApexMaterials.Register("RunoffAsphalt", runoff);
+            // Kerbs: red and white paint on the scanned kerb set (paint base tinted by the kerb colour); without it the plain palette colours stay.
+            if (SurfaceTextures.Load(SurfaceTextures.Kerb) != null)
+                foreach (var key in new[] { "KerbRed", "KerbWhite" })
+                {
+                    var kerb = Lit(key, ApexMaterials.Palette[key], 0.35f);
+                    SurfaceTextures.TryApply(kerb, SurfaceTextures.Kerb, SurfaceTextures.RoadUvMetres, paint: true);
+                    ApexMaterials.Register(key, kerb);
+                }
         }
 
         static Texture2D BannerTexture(int variant)

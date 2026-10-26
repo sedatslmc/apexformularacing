@@ -1,0 +1,8 @@
+{
+  "note": "CC0 texture sets of the circuit (Poly Haven). base: committed 1K sets in Resources/Textures/CC0; ultra: 4K sets fetched on demand into Resources/Textures/CC0_Ultra (gitignored). Fetch: python3 tools/textures/fetch_cc0.py --tier ultra",
+  "sets": [
+    {"name": "asphalt", "polyhaven": "asphalt_track", "paint_base": false},
+    {"name": "runoff", "polyhaven": "clean_asphalt", "paint_base": false},
+    {"name": "kerb", "polyhaven": "concrete_floor_worn_001", "paint_base": true}
+  ]
+}

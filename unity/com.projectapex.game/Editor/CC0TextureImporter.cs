@@ -4,7 +4,7 @@ using UnityEngine;
 namespace Apex.EditorTools
 {
     /// <summary>
-    /// Import settings for the scanned CC0 sets in Resources/Textures/CC0 (tools/textures/import_cc0.py):
+    /// Import settings for the scanned CC0 sets in Resources/Textures/CC0 and CC0_Ultra (tools/textures):
     /// normal maps as normal maps, data maps linear, trilinear filtering with anisotropy for road
     /// surfaces seen at grazing angles; mobile at most 2048 px ASTC 6x6, standalone at most 4096 px
     /// (the source size caps it). Quality of the compression is checked in the editor, not here.
@@ -14,7 +14,8 @@ namespace Apex.EditorTools
         void OnPreprocessTexture()
         {
             string path = assetPath.Replace('\\', '/');
-            if (!path.Contains("/Resources/Textures/CC0/")) return;
+            // Committed 1K sets (Textures/CC0) and fetched 4K sets (Textures/CC0_Ultra).
+            if (!path.Contains("/Resources/Textures/CC0/") && !path.Contains("/Resources/Textures/CC0_Ultra/")) return;
             var ti = (TextureImporter)assetImporter;
             string file = System.IO.Path.GetFileNameWithoutExtension(path);
             ti.mipmapEnabled = true;
