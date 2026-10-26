@@ -16,7 +16,7 @@
 | Stadt | prozedurale Blöcke mit prozeduralen Fassadentexturen, Dächer, Bäume | Dichte stimmt, Detail und Variation sind gering |
 | Material | URP Lit, Farbwerte und prozedurale Texturen (`ApexMaterials`), Nässe über Glätte/Albedo | keine Normal-, Masken- oder Detail-Maps, keine Trim-Sheets, keine Decals |
 | Licht | `SunModel` pro Tageszeit (goldene Stunde im WSW), Trilight-Ambient, linearer Nebel, prozeduraler Himmel | richtige Richtung und Farbe; vorher ohne Tonemapping, Bloom, Farbkorrektur, Reflexionssonden, GI oder AO |
-| Wasser | Fläche mit prozeduraler Normal-Map | keine Reflexion/Refraktion, kein Uferschaum |
+| Wasser | seit 2026-10-26 Shader `Apex/Water` (Fresnel, Sondenspiegelung, Sonnenglitzern, Uferschaum; `WATER_SHADER.md`), Fallback Lit mit Normal-Map | keine Refraktion; Editor-Prüfung offen |
 | Fahrzeug | `CarGeometry`, 3 LODs, Clearcoat (Complex Lit) | Platzhalter; Premium-Spezifikation in `VEHICLE_ASSET_SPEC.md` |
 
 ## 2. In diesem Schritt umgesetzt

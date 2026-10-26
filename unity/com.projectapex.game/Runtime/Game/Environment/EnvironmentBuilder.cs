@@ -153,6 +153,18 @@ namespace Apex.Game
             var wgo = AddMeshObject(root, "Bosphorus", new Dictionary<string, MeshBuilder> { ["EnvWater"] = water }, false);
             var wc = wgo.AddComponent<WaterSurfaceComponent>();
             wc.env = env;
+            // Shore distance for shallow tint and foam: 6 km around the circuit, 5.9 m (Low: 11.7 m) cells.
+            const float coastSize = 6000f;
+            int res = Quality == 0 ? 512 : 1024;
+            float minX = cx - coastSize * 0.5f, minZ = cz - coastSize * 0.5f;
+            var coast = CoastDistanceField.Build(minX, minZ, coastSize, res, field.RasterizeLand);
+            var coastTex = new Texture2D(res, res, TextureFormat.R8, false, true)
+            {
+                name = "CoastDistance", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear,
+            };
+            coastTex.SetPixelData(coast.Encode(WaterOptics.CoastMaxDistance), 0);
+            coastTex.Apply(false, true);
+            wc.SetCoast(coastTex, new Vector4(minX, minZ, 1f / coastSize, 1f / coastSize));
             var quay = new MeshBuilder();
             EnvironmentGeometry.QuayWall(quay, def.shoreline, true);
             if (def.farShoreline.Count > 1) EnvironmentGeometry.QuayWall(quay, def.farShoreline, false);
@@ -896,6 +908,40 @@ namespace Apex.Game
             waterNormal.Apply(true);
         }
 
+        /// <summary>
+        /// The Bosphorus surface: the Apex/Water shader under URP (Fresnel, probe reflections, sun glitter,
+        /// shore foam; values from <see cref="WaterOptics"/>), otherwise a glossy Lit material with the same normals.
+        /// </summary>
+        static Material WaterMaterial()
+        {
+            var shader = Resources.Load<Shader>("Shaders/ApexWater");
+            if (shader != null && shader.isSupported && GraphicsSettings.currentRenderPipeline != null)
+            {
+                var m = new Material(shader) { name = "Env_Water" };
+                m.SetTexture("_NormalMap", waterNormal);
+                m.SetFloat("_F0", WaterOptics.F0);
+                m.SetVector("_DeepColor", new Vector4(WaterOptics.DeepColor[0], WaterOptics.DeepColor[1], WaterOptics.DeepColor[2], 0f));
+                m.SetVector("_ShallowColor", new Vector4(WaterOptics.ShallowColor[0], WaterOptics.ShallowColor[1], WaterOptics.ShallowColor[2], 0f));
+                m.SetFloat("_FoamAlbedo", WaterOptics.FoamAlbedo);
+                m.SetFloat("_FoamWidth", WaterOptics.FoamWidth);
+                m.SetFloat("_ShallowWidth", WaterOptics.ShallowWidth);
+                m.SetFloat("_CoastMaxDistance", WaterOptics.CoastMaxDistance);
+                m.SetFloat("_Roughness", WaterOptics.Roughness(5.5f));
+                return m;
+            }
+            var water = new Material(ApexMaterials.LitShader()) { name = "Env_Water" };
+            SetColour(water, new Color(0.07f, 0.18f, 0.23f));
+            if (water.HasProperty("_Smoothness")) water.SetFloat("_Smoothness", 0.93f);
+            if (water.HasProperty("_Glossiness")) water.SetFloat("_Glossiness", 0.93f);
+            if (water.HasProperty("_BumpMap"))
+            {
+                water.SetTexture("_BumpMap", waterNormal);
+                water.EnableKeyword("_NORMALMAP");
+                if (water.HasProperty("_BumpScale")) water.SetFloat("_BumpScale", 0.6f);
+            }
+            return water;
+        }
+
         static void BuildFenceTexture()
         {
             const int n = 64;
@@ -949,17 +995,7 @@ namespace Apex.Game
                 env.AddLight(m, new Color(1f, 1f, 1f) * 1.1f);
                 env.AddWettable(m);
             }
-            var water = new Material(ApexMaterials.LitShader()) { name = "Env_Water" };
-            SetColour(water, new Color(0.07f, 0.18f, 0.23f));
-            if (water.HasProperty("_Smoothness")) water.SetFloat("_Smoothness", 0.93f);
-            if (water.HasProperty("_Glossiness")) water.SetFloat("_Glossiness", 0.93f);
-            if (water.HasProperty("_BumpMap"))
-            {
-                water.SetTexture("_BumpMap", waterNormal);
-                water.EnableKeyword("_NORMALMAP");
-                if (water.HasProperty("_BumpScale")) water.SetFloat("_BumpScale", 0.6f);
-            }
-            ApexMaterials.Register("EnvWater", water);
+            ApexMaterials.Register("EnvWater", WaterMaterial());
             var fence = new Material(ApexMaterials.LitShader()) { name = "Env_CatchFence", enableInstancing = true };
             SetTexture(fence, "_BaseMap", "_MainTex", fenceTex);
             SetColour(fence, Color.white);

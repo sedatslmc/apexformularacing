@@ -1,0 +1,159 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js"}}</script>
+</head><body>
+<script type="module">
+// Offline preview of the Apex/Water shader (Runtime/Resources/Shaders/ApexWater.shader): the same fragment
+// math in GLSL, the same procedural wave texture as EnvironmentBuilder.BuildWaterNormal and the same
+// constants as WaterOptics. Differences to Unity: the reflection is an analytic sky (no city in the probe),
+// the coast is a synthetic quay (x < 0 is land) with a pier, there is no shadow map. Not a game capture.
+// Parameters: &sky=<json from `dotnet run -- sky-json`>, &eye=x,y,z, &target=x,y,z, &fov, &wind=m/s, &t=seconds.
+import * as THREE from 'three';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 1600), H = +(params.get('h') || 900);
+const sky = JSON.parse(params.get('sky'));
+const wind = +(params.get('wind') || 5.5), time = +(params.get('t') || 12);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = Math.pow(2, sky.postExposure || 0);
+document.body.appendChild(renderer.domElement);
+
+// --- EnvironmentBuilder.BuildWaterNormal (128 px, six tiling waves) ---
+const n = 128, px = new Uint8Array(n * n * 4);
+const waves = [[3, 1, 0.5], [-2, 4, 0.35], [5, -3, 0.25], [1, 7, 0.18], [-7, -2, 0.15], [9, 5, 0.1]];
+for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+  let dx = 0, dy = 0;
+  for (const [kx, ky, amp] of waves) {
+    const ph = 2 * Math.PI * (kx * x + ky * y) / n + kx * 1.3, c = Math.cos(ph) * amp;
+    dx += c * kx * 0.12; dy += c * ky * 0.12;
+  }
+  const l = Math.hypot(dx, dy, 1), i = (y * n + x) * 4;
+  px[i] = (-dx / l * 0.5 + 0.5) * 255; px[i + 1] = (-dy / l * 0.5 + 0.5) * 255; px[i + 2] = (1 / l * 0.5 + 0.5) * 255; px[i + 3] = 255;
+}
+const normalTex = new THREE.DataTexture(px, n, n, THREE.RGBAFormat);
+normalTex.wrapS = normalTex.wrapT = THREE.RepeatWrapping;
+normalTex.magFilter = THREE.LinearFilter; normalTex.minFilter = THREE.LinearMipmapLinearFilter;
+normalTex.generateMipmaps = true; normalTex.anisotropy = 8; normalTex.needsUpdate = true;
+
+// --- synthetic coast: quay wall along x = 0 (land at x < 0) and a 12 m pier from z = 60..72 out to x = 80 ---
+const cr = 512, size = 1024, minX = -100, minZ = -400, cell = size / cr, coast = new Uint8Array(cr * cr * 4);
+for (let j = 0; j < cr; j++) for (let i = 0; i < cr; i++) {
+  const x = minX + (i + 0.5) * cell, z = minZ + (j + 0.5) * cell;
+  let d = Math.max(0, x);
+  const pdx = Math.max(0, x - 80), pdz = Math.max(0, Math.max(60 - z, z - 72));
+  d = Math.min(d, Math.hypot(pdx, pdz));
+  const k = (j * cr + i) * 4; coast[k] = Math.min(255, d / 64 * 255);
+}
+const coastTex = new THREE.DataTexture(coast, cr, cr, THREE.RGBAFormat);
+coastTex.magFilter = coastTex.minFilter = THREE.LinearFilter; coastTex.needsUpdate = true;
+
+// --- WaterOptics ---
+const F0 = ((1.34 - 1) / (1.34 + 1)) ** 2;
+const rough = Math.sqrt(0.003 + 0.00512 * Math.min(Math.max(wind, 0), 20));
+const sea = Math.min(Math.max(0.3 + 0.08 * wind, 0.3), 1.2);
+const windDir = new THREE.Vector2(Math.sin(205 * Math.PI / 180), Math.cos(205 * Math.PI / 180));  // from 25° true
+const layer = (tile, turn, weight) => {
+  const a = turn * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+  const dx = windDir.x * c + windDir.y * s, dz = -windDir.x * s + windDir.y * c;
+  const speed = Math.sqrt(9.81 * (tile / 3.5) / (2 * Math.PI));
+  const o = (v) => v - Math.floor(v);
+  return new THREE.Vector4(o(-dx * speed / tile * time), o(-dz * speed / tile * time), 1 / tile, weight * sea);
+};
+const lin = (c) => new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace);
+// Unity Light.color/intensity (no 1/pi) -> linear radiance multiplier.
+const sunCol = lin(sky.sun).multiplyScalar(sky.intensity);
+const az = (sky.azimuth + (sky.north || 0)) * Math.PI / 180, el = Math.max(2, sky.elevation) * Math.PI / 180;
+// Light direction towards the sun, with the x mirror of kit.html (Unity left-handed -> three.js).
+const L = new THREE.Vector3(-Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el));
+
+const mat = new THREE.ShaderMaterial({
+  uniforms: {
+    _NormalMap: { value: normalTex }, _CoastTex: { value: coastTex },
+    _CoastRect: { value: new THREE.Vector4(minX, minZ, 1 / size, 1 / size) },
+    _WaveA: { value: layer(64, 0, 0.55) }, _WaveB: { value: layer(23, 28, 0.4) }, _WaveC: { value: layer(8.5, -32, 0.3) },
+    _Roughness: { value: rough }, _F0: { value: F0 },
+    _DeepColor: { value: new THREE.Vector3(0.006, 0.03, 0.04) }, _ShallowColor: { value: new THREE.Vector3(0.02, 0.075, 0.07) },
+    _FoamAlbedo: { value: 0.75 }, _FoamWidth: { value: 4 }, _ShallowWidth: { value: 45 }, _CoastMaxDistance: { value: 64 }, _DetailDistance: { value: 350 },
+    lightDir: { value: L }, lightColor: { value: new THREE.Vector3(sunCol.r, sunCol.g, sunCol.b) },
+    ambientUp: { value: (() => { const c = lin(sky.ambientSky); return new THREE.Vector3(c.r, c.g, c.b); })() },
+    skyZenith: { value: (() => { const c = lin(sky.ambientSky); return new THREE.Vector3(c.r, c.g, c.b); })() },
+    skyHorizon: { value: (() => { const c = lin(sky.fog); return new THREE.Vector3(c.r, c.g, c.b); })() },
+    fogColor: { value: (() => { const c = lin(sky.fog); return new THREE.Vector3(c.r, c.g, c.b); })() },
+    camPos: { value: new THREE.Vector3() },
+  },
+  vertexShader: `varying vec3 vPos; void main(){ vec4 w = modelMatrix * vec4(position,1.0); vPos = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `
+    precision highp float;
+    uniform sampler2D _NormalMap, _CoastTex; uniform vec4 _CoastRect, _WaveA, _WaveB, _WaveC;
+    uniform float _Roughness, _F0, _FoamAlbedo, _FoamWidth, _ShallowWidth, _CoastMaxDistance, _DetailDistance;
+    uniform vec3 _DeepColor, _ShallowColor, lightDir, lightColor, ambientUp, skyZenith, skyHorizon, fogColor, camPos;
+    varying vec3 vPos;
+    // Game coordinates: the scene is mirrored on x (as kit.html), so world x = -game x.
+    vec2 gamePos(vec3 p) { return vec2(-p.x, p.z); }
+    vec2 waveSlope(vec2 p, vec4 w) { vec3 n = texture2D(_NormalMap, p * w.z + w.xy).rgb * 2.0 - 1.0; return n.xy * w.w / max(n.z, 0.2); }
+    float schlick(float f0, float c) { float m = 1.0 - clamp(c, 0.0, 1.0); float m2 = m * m; return f0 + (1.0 - f0) * m2 * m2 * m; }
+    // Stand-in for the reflection probe: sky gradient plus a sun halo, blurred by roughness.
+    vec3 envSky(vec3 r, float pr) {
+      vec3 c = mix(skyHorizon, skyZenith, pow(clamp(r.y, 0.0, 1.0), 0.45));
+      float s = max(dot(r, lightDir), 0.0);
+      c += lightColor * 0.08 * pow(s, mix(400.0, 20.0, pr));
+      return c;
+    }
+    void main() {
+      vec2 p = gamePos(vPos);
+      vec3 toCam = camPos - vPos; float dist = length(toCam); vec3 V = toCam / max(dist, 1e-3);
+      float detail = clamp(1.0 - dist / _DetailDistance, 0.0, 1.0);
+      vec2 slope = waveSlope(p, _WaveA) + waveSlope(p, _WaveB) + waveSlope(p, _WaveC);
+      slope *= mix(0.3, 1.0, detail);
+      vec3 N = normalize(vec3(-slope.x, 1.0, slope.y));   // mirrored x
+      float alpha = mix(_Roughness * 0.45, _Roughness, 1.0 - detail);
+      float pr = sqrt(alpha);
+      float coast = texture2D(_CoastTex, (p - _CoastRect.xy) * _CoastRect.zw).r * _CoastMaxDistance;
+      float NdotV = clamp(dot(N, V), 0.0, 1.0);
+      float F = schlick(_F0, NdotV);
+      vec3 R = reflect(-V, N); R.y = abs(R.y);
+      vec3 env = envSky(R, pr);
+      vec3 Lh = lightDir; vec3 H = normalize(Lh + V);
+      float NdotL = clamp(dot(N, Lh), 0.0, 1.0), NdotH = clamp(dot(N, H), 0.0, 1.0), LdotH = clamp(dot(Lh, H), 0.0, 1.0);
+      float a2 = alpha * alpha; float d = NdotH * NdotH * (a2 - 1.0) + 1.00001;
+      float spec = min(a2 / ((d * d) * max(0.1, LdotH * LdotH) * (alpha * 4.0 + 2.0)), 100.0);
+      vec3 glitter = lightColor * (NdotL * spec * schlick(_F0, LdotH));
+      vec3 incoming = ambientUp + lightColor * clamp(Lh.y, 0.0, 1.0);
+      float shallow = 1.0 - clamp(coast / _ShallowWidth, 0.0, 1.0);
+      vec3 body = mix(_DeepColor, _ShallowColor, shallow * shallow);
+      vec3 color = body * incoming * (1.0 - F) + env * F + glitter;
+      float band = 1.0 - clamp(coast / _FoamWidth, 0.0, 1.0);
+      float n1 = texture2D(_NormalMap, p * 0.37 + _WaveC.xy * 2.0).r;
+      float n2 = texture2D(_NormalMap, p * 0.11 - _WaveB.xy).g;
+      float pattern = n1 * n2 * 2.2;
+      float foam = clamp((band * pattern - 0.3) * 4.0, 0.0, 1.0) * mix(0.5, 1.0, detail);
+      color = mix(color, _FoamAlbedo * incoming, foam);
+      float fog = clamp((dist - 600.0) / (8000.0 - 600.0), 0.0, 1.0);
+      color = mix(color, fogColor, fog);
+      gl_FragColor = vec4(color, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+
+const scene = new THREE.Scene();
+scene.background = lin(sky.fog);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(40000, 40000), mat);
+water.rotation.x = -Math.PI / 2; water.position.y = -0.4;
+scene.add(water);
+// Quay (land at game x < 0 -> three.js x > 0) and pier, plain stone.
+const stone = new THREE.MeshLambertMaterial({ color: lin([0.62, 0.6, 0.55]) });
+scene.add(new THREE.HemisphereLight(lin(sky.ambientSky), lin(sky.ambientGround), Math.PI));
+const sun = new THREE.DirectionalLight(lin(sky.sun), sky.intensity * Math.PI); sun.position.copy(L); scene.add(sun);
+const quay = new THREE.Mesh(new THREE.BoxGeometry(2000, 2, 4000), stone); quay.position.set(1000, 0.6, 0); scene.add(quay);
+const pier = new THREE.Mesh(new THREE.BoxGeometry(80, 1.6, 12), stone); pier.position.set(-40, 0.4, 66); scene.add(pier);
+
+const cam = new THREE.PerspectiveCamera(+(params.get('fov') || 55), W / H, 0.1, 30000);
+const e = (params.get('eye') || '6,2.5,-40').split(',').map(Number), t = (params.get('target') || '120,0,400').split(',').map(Number);
+cam.position.set(-e[0], e[1], e[2]); cam.lookAt(-t[0], t[1], t[2]);
+mat.uniforms.camPos.value.copy(cam.position);
+renderer.render(scene, cam);
+window.renderDone = true;
+</script></body></html>

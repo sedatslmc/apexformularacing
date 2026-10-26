@@ -166,6 +166,19 @@ namespace Apex.Environment
             return MathF.Max(h, baseLevel);
         }
 
+        /// <summary>Land cells of a square grid for <see cref="CoastDistanceField"/> (fast scanlines with land outlines).</summary>
+        public void RasterizeLand(bool[] mask, int res, float minX, float minZ, float cell)
+        {
+            if (land.HasLand)
+            {
+                land.RasterizeLand(mask, res, minX, minZ, cell);
+                return;
+            }
+            for (int z = 0; z < res; z++)
+                for (int x = 0; x < res; x++)
+                    mask[z * res + x] = !IsWater(minX + (x + 0.5f) * cell, minZ + (z + 0.5f) * cell);
+        }
+
         public bool IsWater(float x, float z)
         {
             if (land.HasLand) return !land.IsLand(x, z);

@@ -168,6 +168,7 @@ namespace Apex.Game
             if (environment != null)
             {
                 environment.SetWetness(wet);
+                environment.RainIntensity = rainI;
                 // Heavy overcast and rain switch some lights on early.
                 environment.SetArtificialLight(Mathf.Max(light.artificial, cloud * 0.35f));
             }

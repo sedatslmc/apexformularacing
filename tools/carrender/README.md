@@ -18,3 +18,6 @@ Bei Unity-Lit sehen die Bilder nur ähnlich aus, nicht identisch. Verbindlich is
 - `&sky=<json>`: Sonne, Trilight-Umgebungslicht, Dunst und Belichtung aus `SkyModel`; das JSON liefert
   `cd build/Apex.Tuning && dotnet run -c Release -- sky-json <Tageszeit> [Bewölkung] [Nordrichtung]` (URL-kodiert anhängen).
   Vergleich alt/neu: `docs/LIGHTING_AND_GRAPHICS.md`.
+
+## Wasser-Shader-Vorschau (`water.html`)
+GLSL-Portierung von `Apex/Water` mit künstlichem Kai; Aufruf und Unterschiede zu Unity: `docs/WATER_SHADER.md`.

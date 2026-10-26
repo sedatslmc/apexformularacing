@@ -87,7 +87,7 @@
 | Bosporus-Brücke (Kauf + Retopo oder eigene parametrische Brücke) | extern bzw. Code | Bewertung offen (`BRIDGE_ASSET_EVALUATION.md`) |
 | Fassaden-Kit Ortaköy (Läden, Erker, Gesimse, Dächer) | **extern** | Angebote einholen |
 | Kai, Uferpromenade, Platz: Pflaster, Geländer, Poller, Bänke, Laternen, Café-Möbel | Code (Platzierung) + Assets | geplant |
-| Wasser-Shader (Wellen-Normals in Schichten, Fresnel, Sonnenglitzer, Tiefenfarbe, Uferschaum) | Shader (Editor-Prüfung nötig) | geplant |
+| Wasser-Shader (Wellen-Normals in Schichten, Fresnel, Sonnenglitzer, Tiefenfarbe, Uferschaum) | Shader (Editor-Prüfung nötig) | **geschrieben, Physik getestet, offline-Vorschau**; nicht kompiliert, Editor-Prüfung offen (`WATER_SHADER.md`) |
 | Reflexionssonde Ortaköy, Adaptive Probe Volume | Editor | geplant |
 | Flaggen an Platz und Promenade (Masten), Event-Banner | Code | geplant |
 

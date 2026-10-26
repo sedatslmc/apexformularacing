@@ -20,6 +20,8 @@ namespace Apex.Game
         public readonly List<Vector3> grandstandCentres = new List<Vector3>();
 
         public float WindSpeed { get; private set; }
+        /// <summary>Rain intensity 0..1 (set by WeatherVisuals; roughens the water).</summary>
+        public float RainIntensity { get; set; }
         public Vector3 WindDirection
         {
             get
@@ -460,25 +462,76 @@ namespace Apex.Game
         }
     }
 
-    /// <summary>Scrolls the strait's normal map with the wind (cheap animated water, no planar reflections).</summary>
+    /// <summary>
+    /// Drives the strait's material. With the Apex/Water shader: three wave layers drifting downwind at
+    /// deep-water speeds, Cox–Munk roughness from wind and rain, and the coast-distance texture
+    /// (<see cref="WaterOptics"/>). With the Lit fallback: one scrolling normal map.
+    /// </summary>
     public sealed class WaterSurfaceComponent : MonoBehaviour
     {
         public EnvironmentInstance env;
         Material mat;
+        bool custom;
         Vector2 offset;
+        readonly Vector2[] layerOffsets = new Vector2[3];
+        Texture2D coast;
+        Vector4 coastRect;
+        static readonly int[] WaveIds = { Shader.PropertyToID("_WaveA"), Shader.PropertyToID("_WaveB"), Shader.PropertyToID("_WaveC") };
+        static readonly int RoughnessId = Shader.PropertyToID("_Roughness");
 
-        void Start() => mat = GetComponent<MeshRenderer>()?.sharedMaterial;
+        /// <summary>Coast-distance texture and its world rectangle (minX, minZ, 1/sizeX, 1/sizeZ); owned by this component.</summary>
+        public void SetCoast(Texture2D tex, Vector4 rect)
+        {
+            coast = tex;
+            coastRect = rect;
+            ApplyCoast();
+        }
+
+        void Start()
+        {
+            mat = GetComponent<MeshRenderer>()?.sharedMaterial;
+            custom = mat != null && mat.HasProperty("_WaveA");
+            ApplyCoast();
+        }
+
+        void ApplyCoast()
+        {
+            if (!custom || coast == null) return;
+            mat.SetTexture("_CoastTex", coast);
+            mat.SetVector("_CoastRect", coastRect);
+        }
 
         void Update()
         {
             if (mat == null) return;
             var w = env != null ? env.WindDirection : Vector3.forward;
             float speed = env != null ? env.WindSpeed : 4f;
+            if (custom)
+            {
+                var layers = WaterOptics.Layers(w.x, w.z, speed);
+                for (int i = 0; i < layers.Length && i < WaveIds.Length; i++)
+                {
+                    var l = layers[i];
+                    // UV offset of a layer moving at its phase speed (wrapped to keep float precision).
+                    var o = layerOffsets[i] - new Vector2(l.dirX, l.dirZ) * (l.speed / l.tile * Time.deltaTime);
+                    o.x -= Mathf.Floor(o.x);
+                    o.y -= Mathf.Floor(o.y);
+                    layerOffsets[i] = o;
+                    mat.SetVector(WaveIds[i], new Vector4(o.x, o.y, 1f / l.tile, l.strength));
+                }
+                mat.SetFloat(RoughnessId, WaterOptics.Roughness(speed, env != null ? env.RainIntensity : 0f));
+                return;
+            }
             // Wavelets drift downwind at roughly 0.1 x wind speed (uv unit = 24 m).
             offset += new Vector2(w.x, w.z) * (0.1f * speed / 24f) * Time.deltaTime;
             offset.x %= 1f; offset.y %= 1f;
             mat.mainTextureOffset = offset;
             if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", Mathf.Lerp(0.35f, 1f, Mathf.Clamp01(speed / 10f)));
+        }
+
+        void OnDestroy()
+        {
+            if (coast != null) Destroy(coast);
         }
     }
 

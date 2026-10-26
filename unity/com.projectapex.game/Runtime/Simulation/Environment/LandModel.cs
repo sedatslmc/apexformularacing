@@ -93,6 +93,36 @@ namespace Apex.Environment
         /// <summary>Id of the land mass containing the point, or null over water.</summary>
         public string MassAt(float x, float z) => Find(x, z)?.id;
 
+        /// <summary>
+        /// Marks land cell centres on a square grid (mask[z * res + x]) by scanlines: per row the
+        /// crossings of every outline edge, filled even-odd. Same result as <see cref="IsLand"/> per cell, fast.
+        /// </summary>
+        public void RasterizeLand(bool[] mask, int res, float minX, float minZ, float cell)
+        {
+            var xs = new List<float>();
+            foreach (var m in masses)
+            {
+                int n = m.x.Length;
+                for (int row = 0; row < res; row++)
+                {
+                    float z = minZ + (row + 0.5f) * cell;
+                    if (z < m.minZ || z > m.maxZ) continue;
+                    xs.Clear();
+                    for (int i = 0, j = n - 1; i < n; j = i++)
+                        if ((m.z[i] > z) != (m.z[j] > z))
+                            xs.Add((m.x[j] - m.x[i]) * (z - m.z[i]) / (m.z[j] - m.z[i]) + m.x[i]);
+                    xs.Sort();
+                    for (int k = 0; k + 1 < xs.Count; k += 2)
+                    {
+                        // Cells whose centre lies in [xs[k], xs[k+1]).
+                        int c0 = Math.Max(0, (int)MathF.Ceiling((xs[k] - minX) / cell - 0.5f));
+                        int c1 = Math.Min(res - 1, (int)MathF.Ceiling((xs[k + 1] - minX) / cell - 0.5f) - 1);
+                        for (int c = c0; c <= c1; c++) mask[row * res + c] = true;
+                    }
+                }
+            }
+        }
+
         /// <summary>Distance to the coast of the containing mass (0 over water).</summary>
         public float CoastDistance(float x, float z)
         {
