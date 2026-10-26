@@ -26,3 +26,7 @@ build/refs/
 export/
 unity/Logs-Setup/
 tools/carrender/node_modules/
+
+# Geo source data (fetched by tools/geo/fetch_dem.sh, OSM extracts provided separately)
+data/geo/dem/*.tif
+data/geo/osm/*.osm
