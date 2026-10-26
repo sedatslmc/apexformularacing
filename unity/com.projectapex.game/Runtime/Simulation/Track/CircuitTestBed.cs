@@ -151,8 +151,8 @@ namespace Apex.Tracks
                 if (digitalInput)
                 {
                     float k = ApexMath.Clamp01(rig.ForwardSpeed / 60f);
-                    steerKey.pressRate = InputLogic.InputTuning.SteerPressRate(k);
-                    steerKey.releaseRate = InputLogic.InputTuning.SteerReleaseRate(k);
+                    steerKey.pressRate = InputLogic.InputTuning.SteerPressRate(k, sim.setup.legacy);
+                    steerKey.releaseRate = InputLogic.InputTuning.SteerReleaseRate(k, sim.setup.legacy);
                     steerKey.reverseRate = InputLogic.InputTuning.SteerReverseRate;
                     float key = 0f;
                     if (MathF.Abs(c.steer) > 0.05f && (c.steer - steerKey.Value) * MathF.Sign(c.steer) > 0.03f) key = MathF.Sign(c.steer);

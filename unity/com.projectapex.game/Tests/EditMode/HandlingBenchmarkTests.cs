@@ -66,14 +66,30 @@ namespace Apex.Tests
         }
 
         [Test]
-        public void StickCurveHasDeadZoneFullLockAndFineCentre()
+        public void LegacySetupReproducesThePreOverhaulBaseline()
         {
-            Assert.That(InputTuning.StickSteer(0.04f), Is.EqualTo(0f));
+            // The in-game A/B switch is only useful if "Alt" really is the old car.
+            var legacy = VehicleSetup.Legacy();
+            Assert.That(legacy.escEnabled, Is.False);
+            Assert.That(legacy.legacy, Is.True);
+            var oldC = new HandlingBenchmark(legacy, 1).CorneringCapacity(80f);
+            var newC = new HandlingBenchmark(null, 1).CorneringCapacity(80f);
+            TestContext.WriteLine($"80 km/h: legacy {oldC.maxLateralG:F2} g / {oldC.Balance:F2}, new {newC.maxLateralG:F2} g / {newC.Balance:F2}");
+            Assert.That(oldC.maxLateralG, Is.EqualTo(1.72f).Within(0.05f));
+            Assert.That(oldC.Balance, Is.GreaterThan(1.8f), "old car pushes at the limit");
+            Assert.That(InputTuning.SteerPressRate(1f, true), Is.LessThan(InputTuning.SteerPressRate(1f)));
+            Assert.That(InputTuning.StickSteer(0.5f, true), Is.EqualTo(0.5f), "old stick was linear");
+        }
+
+        [Test]
+        public void StickCurveHasFullLockAndFineCentre()
+        {
+            Assert.That(InputTuning.StickSteer(0f), Is.EqualTo(0f));
             Assert.That(InputTuning.StickSteer(1f), Is.EqualTo(1f).Within(1e-5f));
             Assert.That(InputTuning.StickSteer(-1f), Is.EqualTo(-1f).Within(1e-5f));
             float half = InputTuning.StickSteer(0.5f);
             Assert.That(half, Is.InRange(0.3f, 0.5f), "finer than linear around the centre");
-            Assert.That(InputTuning.StickSteer(0.07f), Is.GreaterThan(0f).And.LessThan(0.01f), "starts from zero just outside the dead zone");
+            Assert.That(InputTuning.StickSteer(0.05f), Is.GreaterThan(0f).And.LessThan(0.05f), "no second dead zone on top of the Input System's");
         }
     }
 }

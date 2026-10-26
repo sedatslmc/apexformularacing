@@ -489,13 +489,15 @@ namespace Apex.Game
                     change = d => s.ApplyProfile((DrivingProfile)Wrap((int)s.drivingProfile + (d < 0 ? -1 : 1), 3)) },
                 new Row { label = "Traktionskontrolle", value = () => TcName(s.tractionLevel),
                     change = d => { s.tractionLevel = Wrap(s.tractionLevel + (d < 0 ? -1 : 1), 4); s.drivingProfile = DrivingProfile.Custom; } },
-                new Row { label = "ABS", value = () => s.abs ? "An" : "Aus (nur mit analogen Pedalen)", change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
+                new Row { label = "ABS", value = () => s.abs ? "An" : "Aus (empfohlen mit analogen Pedalen)", change = d => { s.abs = !s.abs; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Lenkhilfe", value = () => s.steeringAssistLevel == 0 ? "Aus" : s.steeringAssistLevel == 1 ? "Leicht" : "Voll",
                     change = d => { s.steeringAssistLevel = Wrap(s.steeringAssistLevel + (d < 0 ? -1 : 1), 3); s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Tempoabhängige Lenkung", value = () => s.speedSensitiveSteering ? "An" : "Aus (Lenkrad/Gamepad)",
                     change = d => { s.speedSensitiveSteering = !s.speedSensitiveSteering; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Automatikgetriebe", value = () => OnOff(s.autoGearbox), change = d => { s.autoGearbox = !s.autoGearbox; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Bremsbalance vorne", value = () => $"{s.brakeBiasFront * 100f:0} %", change = d => s.brakeBiasFront += (d == 0 ? 1 : d) * 0.01f },
+                new Row { label = "Fahrverhalten (Vergleich, ab nächster Session)", value = () => s.legacyHandling ? "Alt (vor Okt. 2026)" : "Neu (Okt. 2026)",
+                    change = d => s.legacyHandling = !s.legacyHandling },
                 new Row { label = "Boxen-Assistent", value = () => OnOff(s.pitAssist), change = d => s.pitAssist = !s.pitAssist },
                 new Row { label = "Neigung: max. Winkel", value = () => $"{s.tiltMaxAngleDeg:0}°", change = d => s.tiltMaxAngleDeg += d == 0 ? 5 : d * 5 },
                 new Row { label = "Neigung: Empfindlichkeit", value = () => $"{s.tiltSensitivity:0.0}", change = d => s.tiltSensitivity += (d == 0 ? 1 : d) * 0.1f },
@@ -508,14 +510,36 @@ namespace Apex.Game
                 new Row { label = "HUD-Größe", value = () => $"{s.hudScale * 100f:0} %", change = d => s.hudScale += (d == 0 ? 1 : d) * 0.05f },
                 new Row { label = "Geschwindigkeit", value = () => s.speedInMph ? "mph" : "km/h", change = d => s.speedInMph = !s.speedInMph },
                 new Row { label = "Reduzierte Bewegung", value = () => OnOff(s.reducedMotion), change = d => s.reducedMotion = !s.reducedMotion },
-                new Row { label = "Umgebungsdetails", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
+                new Row { label = "Grafikstufe", value = () => GraphicsTierLabel(s.graphicsTier),
+                    change = d =>
+                    {
+                        // -1 (Auto) .. Ultra; the tier also sets its environment density and road textures.
+                        s.graphicsTier = Wrap(s.graphicsTier + 1 + (d < 0 ? -1 : 1), GraphicsPreset.TierCount + 1) - 1;
+                        var p = GraphicsPreset.For(GraphicsQuality.Resolve(s.graphicsTier));
+                        s.environmentDetail = p.environmentDetail;
+                        s.ultraTextures = p.ultraTextures;
+                    } },
+                new Row { label = "Umgebungsdetails (ab nächster Session)", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
                     change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
+            // Only where 4K road textures were fetched (tools/textures/fetch_cc0.py --tier ultra) and not on mobile.
+            if (SurfaceTextures.UltraAvailable)
+                rows.Insert(rows.Count - 1, new Row { label = "Straßentexturen (ab nächster Session)", value = () => s.ultraTextures ? "Ultra (4K)" : "Standard (1K)",
+                    change = d => s.ultraTextures = !s.ultraTextures });
             // Only with URP: the built-in pipeline has no post-processing stack here.
             if (PostFxStack.Supported)
-                rows.Insert(rows.Count - 1, new Row { label = "Nachbearbeitung (Farbe, Bloom, FXAA)", value = () => OnOff(s.postProcessing), change = d => s.postProcessing = !s.postProcessing });
+                rows.Insert(rows.Count - 1, new Row { label = "Nachbearbeitung (Farbe, Bloom)", value = () => OnOff(s.postProcessing), change = d => s.postProcessing = !s.postProcessing });
             return rows;
+        }
+
+        static string GraphicsTierLabel(int setting)
+        {
+            string name = GraphicsPreset.Name(GraphicsQuality.Resolve(setting));
+            string label = setting < 0 ? "Auto (" + name + ")" : name;
+            // Honest label: the tier asks for SSAO, but this renderer has no SSAO feature.
+            if (GraphicsQuality.Current.ssao && !GraphicsQuality.SsaoAvailable && PostFxStack.Supported) label += ", ohne SSAO";
+            return label;
         }
 
         void DrawSettings()
@@ -563,6 +587,7 @@ namespace Apex.Game
             input.ApplySettings(Settings);
             ApplyAssists();
             if (weatherVisuals != null) weatherVisuals.postProcessing = Settings.postProcessing;
+            ApplyGraphics();
             SaveService.SaveSettings(Settings);
         }
 

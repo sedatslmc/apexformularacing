@@ -167,7 +167,9 @@ namespace Apex.Game
             if (d.CurrentPhase == RaceDirector.Phase.Lights) DrawLights(safe, d);
             DrawToasts(safe);
             if (showMap && hudPreset == 0) DrawMiniMap(safe);
-            if (showTelemetry) DrawTelemetry(safe, p.Sim);
+            if (p.car.setup.legacy)
+                ApexStyle.Text(new Rect(safe.center.x - 160f, safe.y + 8f, 320f, 26f), "ALTES FAHRVERHALTEN (VERGLEICH)", 16, ApexStyle.Caution, FontStyle.Bold, TextAnchor.MiddleCenter);
+            if (showTelemetry) DrawTelemetry(safe, p);
             if (radioOpen) DrawRadio(safe);
             if (p.pit.stage == PitState.Stage.Stopped) DrawPitTimer(safe, p);
             DrawTouchButtons();
@@ -418,9 +420,10 @@ namespace Apex.Game
             ApexStyle.Text(new Rect(r.x, r.y + 38f, r.width, 28f), $"Neue Reifen: {CompoundSpec.For(ps.nextCompound).name}", 18, CompoundColour(ps.nextCompound), FontStyle.Normal, TextAnchor.MiddleCenter);
         }
 
-        void DrawTelemetry(Rect safe, VehicleSimulation sim)
+        void DrawTelemetry(Rect safe, RaceCar car)
         {
-            var r = new Rect(safe.xMax - 600f, safe.y + 240f, 580f, 360f);
+            var sim = car.Sim;
+            var r = new Rect(safe.xMax - 600f, safe.y + 240f, 580f, 386f);
             ApexStyle.Box(r, ApexStyle.Panel);
             Zone("Telemetry", r);
             float y = r.y + 10f;
@@ -440,6 +443,14 @@ namespace Apex.Game
                 var t = sim.tires[i];
                 Line($"{w.label} {w.load,5:0}N sr {w.slipRatio:+0.00;-0.00} sa {w.slipAngle * ApexMath.Rad2Deg:+0.0;-0.0}° {w.compression * 1000f:0}mm {t.temperature:0}°C {t.wear * 100f:0}% g{w.grip:0.00} {w.surface}");
             }
+            // Handling validation: slip use per axle (> 1 = past the grip peak), lateral g, yaw rate, body slip.
+            var body = car.car.Body;
+            var lv = car.car.transform.InverseTransformDirection(RigidbodyCompat.GetVelocity(body));
+            float yaw = body.angularVelocity.y;
+            float useF = Mathf.Max(Mathf.Abs(sim.wheels[0].slipAngle), Mathf.Abs(sim.wheels[1].slipAngle)) / sim.tireFront.slipAnglePeak;
+            float useR = Mathf.Max(Mathf.Abs(sim.wheels[2].slipAngle), Mathf.Abs(sim.wheels[3].slipAngle)) / sim.tireRear.slipAnglePeak;
+            float beta = lv.z > 1f ? Mathf.Atan2(lv.x, lv.z) * Mathf.Rad2Deg : 0f;
+            Line($"{(sim.setup.legacy ? "ALT" : "NEU")}  Schlupf V {useF:0.00} H {useR:0.00}  quer {Mathf.Abs(yaw * lv.z) / 9.81f:0.00} g  Gier {yaw * Mathf.Rad2Deg:+0;-0}°/s  β {beta:+0.0;-0.0}°{(sim.EscActive ? "  ESC" : "")}{(sim.AbsActive ? "  ABS" : "")}");
             Line($"Strecke nass {sim.trackWetness * 100f:0} %  {sim.trackTemperature:0}°C  Physik {1f / Time.fixedDeltaTime:0} Hz");
             Line($"Neigung {input.RollDeg:+0;-0}°  Zuverl. {input.TiltReliability:0.00}");
         }

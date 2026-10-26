@@ -5,12 +5,12 @@ using Apex.Weather;
 namespace Apex.Environment
 {
     /// <summary>
-    /// Key light per time of day for Istanbul (41° N) in early autumn, as true
-    /// azimuth/elevation, rotated into the game frame with the circuit's true-north
-    /// bearing. Golden hour and sunset put the sun in the west-south-west, so it lights
-    /// the west-facing Asian shore across the water and back-lights the European
-    /// slopes; at night a dim, cool moon replaces it and artificial light takes over.
-    /// Colours are kept moderate (no neon, no extreme bloom).
+    /// Key light per time of day for Istanbul in early autumn, as true azimuth/elevation,
+    /// rotated into the game frame with the circuit's true-north bearing. Derived from
+    /// <see cref="SkyModel"/> (real sun position on the race weekend, clear-sky atmosphere):
+    /// golden hour and sunset put the sun in the west, so it lights the west-facing Asian
+    /// shore across the water and back-lights the European slopes; at night a dim, cool
+    /// moon replaces it and artificial light takes over.
     /// </summary>
     public static class SunModel
     {
@@ -21,26 +21,31 @@ namespace Apex.Environment
             public float elevation;
             public float r, g, b;
             public float intensity;
-            /// <summary>Ambient multiplier and whether street/window lights are on (0..1).</summary>
+            /// <summary>Ambient brightness relative to midday and whether street/window lights are on (0..1).</summary>
             public float ambient;
             public float artificial;
         }
 
         public static Light Get(TimeOfDay time)
         {
-            switch (time)
+            var sky = SkyModel.Get(time);
+            var noon = SkyModel.Get(TimeOfDay.Day);
+            return new Light
             {
-                case TimeOfDay.Morning: return new Light { azimuthTrue = 105f, elevation = 20f, r = 1f, g = 0.9f, b = 0.8f, intensity = 1.1f, ambient = 0.9f };
-                case TimeOfDay.Day: return new Light { azimuthTrue = 185f, elevation = 47f, r = 1f, g = 0.97f, b = 0.92f, intensity = 1.35f, ambient = 1f };
-                case TimeOfDay.Dusk: return new Light { azimuthTrue = 262f, elevation = 2.5f, r = 1f, g = 0.55f, b = 0.36f, intensity = 0.7f, ambient = 0.6f, artificial = 0.6f };
-                case TimeOfDay.Night: return new Light { azimuthTrue = 140f, elevation = 38f, r = 0.55f, g = 0.65f, b = 0.9f, intensity = 0.16f, ambient = 0.28f, artificial = 1f };
-                default: return new Light { azimuthTrue = 252f, elevation = 11f, r = 1f, g = 0.78f, b = 0.55f, intensity = 1.15f, ambient = 0.8f, artificial = 0.15f };
-            }
+                azimuthTrue = sky.azimuthTrue,
+                elevation = sky.elevation,
+                r = sky.sunColor.r, g = sky.sunColor.g, b = sky.sunColor.b,
+                intensity = sky.sunIntensity,
+                ambient = sky.ambientSky.Luminance / Math.Max(1e-4f, noon.ambientSky.Luminance),
+                artificial = sky.artificial,
+            };
         }
 
         /// <summary>Game-frame azimuth (deg, 0 = +z, clockwise) of the light source.</summary>
-        public static float GameAzimuth(Light l, float trueNorthBearing) =>
-            ApexMath.PosMod(l.azimuthTrue + (float.IsNaN(trueNorthBearing) ? 0f : trueNorthBearing), 360f);
+        public static float GameAzimuth(Light l, float trueNorthBearing) => GameAzimuth(l.azimuthTrue, trueNorthBearing);
+
+        public static float GameAzimuth(float azimuthTrue, float trueNorthBearing) =>
+            ApexMath.PosMod(azimuthTrue + (float.IsNaN(trueNorthBearing) ? 0f : trueNorthBearing), 360f);
     }
 
     /// <summary>

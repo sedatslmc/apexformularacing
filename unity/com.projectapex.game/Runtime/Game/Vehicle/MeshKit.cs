@@ -524,6 +524,19 @@ namespace Apex.Game
             for (int i = verts.Count - count; i < verts.Count; i++) verts[i] = offset + f(verts[i] - offset);
         }
 
+        /// <summary>Appends another builder's triangles with its vertices mapped by f (module instances).
+        /// f must be orientation-preserving (positive determinant) to keep the faces' winding.</summary>
+        public void Append(MeshBuilder src, Func<Vector3, Vector3> f)
+        {
+            int o = verts.Count;
+            for (int i = 0; i < src.verts.Count; i++)
+            {
+                verts.Add(f(src.verts[i]));
+                uvs.Add(src.uvs[i]);
+            }
+            foreach (int t in src.tris) tris.Add(o + t);
+        }
+
         public IReadOnlyList<Vector3> Vertices => verts;
         public IReadOnlyList<Vector2> UVs => uvs;
         public IReadOnlyList<int> Triangles => tris;

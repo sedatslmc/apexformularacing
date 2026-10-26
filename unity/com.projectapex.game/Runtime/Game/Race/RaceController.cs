@@ -97,6 +97,9 @@ namespace Apex.Game
         float strategyTimer;
         float flagTimer;
 
+        /// <summary>Player car on <see cref="VehicleSetup.Legacy"/> (settings → "Fahrverhalten"); set before Setup.</summary>
+        public bool legacyPlayerHandling;
+
         public void Setup(CircuitInstance circuit, SessionConfig config, SessionType type, IList<int> gridDrivers, Color playerPaint, int playerNumber, string playerName)
         {
             Circuit = circuit;
@@ -140,7 +143,8 @@ namespace Apex.Game
                 }
                 var primary = rc.isPlayer ? playerPaint : new Color(team.r, team.g, team.b);
                 var accent = new Color(team.ar, team.ag, team.ab);
-                rc.car = CarBuilder.Build((rc.isPlayer ? "Player_" : "AI_") + rc.code, new VehicleSetup(), primary, accent);
+                var carSetup = rc.isPlayer && legacyPlayerHandling ? VehicleSetup.Legacy() : new VehicleSetup();
+                rc.car = CarBuilder.Build((rc.isPlayer ? "Player_" : "AI_") + rc.code, carSetup, primary, accent);
                 rc.car.transform.SetParent(transform, false);
                 var visuals = rc.car.GetComponent<CarVisuals>();
                 if (visuals != null) visuals.detailed = rc.isPlayer;

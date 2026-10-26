@@ -32,3 +32,8 @@ data/geo/dem/*.tif
 data/geo/osm/*.osm
 
 data/geo/osm/bosphorus_osm.json
+tools/carrender/flag_tex.png
+tools/carrender/cc0/
+unity/com.projectapex.game/Runtime/Resources/Textures/CC0_Ultra/
+tools/carrender/cc0_1k/
+tools/carrender/cc0_4k/

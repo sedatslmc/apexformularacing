@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Same as Apex.Editor.CompileCheck, with APEX_URP defined against the URP API stubs
+       (build/URPStubRef): checks the editor code paths that need the URP package. -->
+  <Import Project="../UnityRefs.props" />
+  <PropertyGroup>
+    <AssemblyName>Apex.Editor</AssemblyName>
+    <DefineConstants>UNITY_5_3_OR_NEWER;UNITY_2019_4_OR_NEWER;UNITY_2020_3_OR_NEWER;UNITY_2021_1_OR_NEWER;UNITY_EDITOR;APEX_URP</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/com.projectapex.game/Editor/**/*.cs" />
+    <Reference Include="$(ApexRefs)sdk/lib/UnityEditor.dll" Private="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Apex.Simulation/Apex.Simulation.csproj" />
+    <ProjectReference Include="../Apex.Runtime.CompileCheck.URP/Apex.Runtime.CompileCheck.URP.csproj" />
+    <ProjectReference Include="../URPStubRef/URPStubRef.csproj" />
+  </ItemGroup>
+</Project>

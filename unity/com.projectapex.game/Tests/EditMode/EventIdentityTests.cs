@@ -99,5 +99,20 @@ namespace Apex.Tests
                     }
                 }
         }
+
+        [Test]
+        public void FenceBannersUseTheEventPaletteAndAreOpaque()
+        {
+            for (int v = 0; v < 3; v++)
+            {
+                var px = Apex.Environment.EventArt.Banner(v, 192, 64);
+                Assert.That(px.Length, Is.EqualTo(192 * 64 * 4));
+                for (int k = 3; k < px.Length; k += 4) Assert.That(px[k], Is.EqualTo(1f));
+                // A pixel in the plain background at the far right top corner has the variant's base colour.
+                int c = ((63 * 192) + 191) * 4;
+                var bg = v == 0 ? Apex.Environment.EventArt.Navy : v == 1 ? Apex.Environment.EventArt.Red : Apex.Environment.EventArt.Turquoise;
+                for (int i = 0; i < 3; i++) Assert.That(px[c + i], Is.EqualTo(bg[i]).Within(0.02f));
+            }
+        }
     }
 }

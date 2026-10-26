@@ -20,6 +20,8 @@ namespace Apex.Game
         public readonly List<Vector3> grandstandCentres = new List<Vector3>();
 
         public float WindSpeed { get; private set; }
+        /// <summary>Rain intensity 0..1 (set by WeatherVisuals; roughens the water).</summary>
+        public float RainIntensity { get; set; }
         public Vector3 WindDirection
         {
             get
@@ -96,7 +98,11 @@ namespace Apex.Game
         }
     }
 
-    /// <summary>Turkish flag on a pole; cloth animated from the shared wind (see <see cref="FlagCloth"/>).</summary>
+    /// <summary>
+    /// Turkish flag on a pole; cloth animated from the shared wind (see <see cref="FlagCloth"/>).
+    /// Detail 0..2 for ordinary flags (fewer vertices and updates with distance); <see cref="HeroDetail"/>
+    /// for the monumental flag (fine cloth grid, updated every frame, own pole built by the caller).
+    /// </summary>
     public sealed class FlagComponent : MonoBehaviour
     {
         EnvironmentInstance env;
@@ -107,25 +113,40 @@ namespace Apex.Game
         float length, height, phase, yaw;
         int frame;
 
+        public const int HeroDetail = -1;
+        /// <summary>Distance (m) from the pole axis to the hoist (a thick pole would otherwise cut through the cloth).</summary>
+        public float hoistOffset;
+
         public void Setup(EnvironmentInstance environment, Vector3 basePos, float flagLength, float pole, int detailLevel, Material flagMat)
         {
+            bool hero = detailLevel == HeroDetail;
             env = environment;
             detail = detailLevel;
             length = flagLength;
             height = flagLength / TurkishFlagDesign.AspectRatio;
             phase = basePos.x * 0.013f + basePos.z * 0.007f;
             transform.position = basePos;
+            if (!hero) BuildPole(pole);
+            cloth = new GameObject("Cloth").transform;
+            cloth.SetParent(transform, false);
+            cloth.localPosition = Vector3.up * (pole - 0.05f) + Vector3.right * 0f;
+            nu = hero ? 46 : detail == 0 ? 16 : detail == 1 ? 11 : 6;
+            nv = hero ? 31 : detail == 0 ? 10 : detail == 1 ? 7 : 4;
+            BuildCloth(flagMat, hero || detail == 0);
+        }
+
+        void BuildPole(float pole)
+        {
             var poleMb = new MeshBuilder();
             float r = Mathf.Clamp(pole * 0.012f, 0.04f, 0.25f);
             poleMb.Tube(Vector3.zero, Vector3.up * (pole + 0.25f), r, detail == 2 ? 4 : 8, true);
             poleMb.Box(Vector3.up * (pole + 0.3f), Vector3.one * r * 2.6f);
             var poleGo = EnvironmentBuilder.AddMeshObject(transform, "Pole", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.FlagPole] = poleMb }, detail < 2, false);
             poleGo.transform.localPosition = Vector3.zero;
-            cloth = new GameObject("Cloth").transform;
-            cloth.SetParent(transform, false);
-            cloth.localPosition = Vector3.up * (pole - 0.05f) + Vector3.right * 0f;
-            nu = detail == 0 ? 16 : detail == 1 ? 11 : 6;
-            nv = detail == 0 ? 10 : detail == 1 ? 7 : 4;
+        }
+
+        void BuildCloth(Material flagMat, bool shadows)
+        {
             verts = new Vector3[nu * nv];
             var uv = new Vector2[nu * nv];
             var tris = new List<int>();
@@ -152,7 +173,7 @@ namespace Apex.Game
             cloth.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
             var mr = cloth.gameObject.AddComponent<MeshRenderer>();
             mr.sharedMaterial = flagMat;
-            mr.shadowCastingMode = detail == 0 ? ShadowCastingMode.On : ShadowCastingMode.Off;
+            mr.shadowCastingMode = shadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
             yaw = TargetYaw();
         }
 
@@ -169,7 +190,7 @@ namespace Apex.Game
                 for (int i = 0; i < nu; i++)
                 {
                     var p = FlagCloth.Evaluate(i / (nu - 1f), j / (nv - 1f), length, height, speed, t, phase);
-                    verts[j * nu + i] = new Vector3(p.X, p.Y, p.Z);
+                    verts[j * nu + i] = new Vector3(p.X + hoistOffset, p.Y, p.Z);
                 }
         }
 
@@ -179,7 +200,7 @@ namespace Apex.Game
             var cam = Camera.main;
             float dist = cam != null ? (cam.transform.position - transform.position).magnitude : 0f;
             // Distant flags update less often; very distant ones keep their last pose.
-            int interval = dist < 250f ? 1 : dist < 900f ? 3 : 8;
+            int interval = detail == HeroDetail ? (dist < 3000f ? 1 : 2) : dist < 250f ? 1 : dist < 900f ? 3 : 8;
             if (dist > 4000f || (++frame % interval) != 0) return;
             yaw = Mathf.MoveTowardsAngle(yaw, TargetYaw(), 20f * Time.deltaTime * interval);
             cloth.rotation = Quaternion.Euler(0f, yaw, 0f);
@@ -441,25 +462,76 @@ namespace Apex.Game
         }
     }
 
-    /// <summary>Scrolls the strait's normal map with the wind (cheap animated water, no planar reflections).</summary>
+    /// <summary>
+    /// Drives the strait's material. With the Apex/Water shader: three wave layers drifting downwind at
+    /// deep-water speeds, Cox–Munk roughness from wind and rain, and the coast-distance texture
+    /// (<see cref="WaterOptics"/>). With the Lit fallback: one scrolling normal map.
+    /// </summary>
     public sealed class WaterSurfaceComponent : MonoBehaviour
     {
         public EnvironmentInstance env;
         Material mat;
+        bool custom;
         Vector2 offset;
+        readonly Vector2[] layerOffsets = new Vector2[3];
+        Texture2D coast;
+        Vector4 coastRect;
+        static readonly int[] WaveIds = { Shader.PropertyToID("_WaveA"), Shader.PropertyToID("_WaveB"), Shader.PropertyToID("_WaveC") };
+        static readonly int RoughnessId = Shader.PropertyToID("_Roughness");
 
-        void Start() => mat = GetComponent<MeshRenderer>()?.sharedMaterial;
+        /// <summary>Coast-distance texture and its world rectangle (minX, minZ, 1/sizeX, 1/sizeZ); owned by this component.</summary>
+        public void SetCoast(Texture2D tex, Vector4 rect)
+        {
+            coast = tex;
+            coastRect = rect;
+            ApplyCoast();
+        }
+
+        void Start()
+        {
+            mat = GetComponent<MeshRenderer>()?.sharedMaterial;
+            custom = mat != null && mat.HasProperty("_WaveA");
+            ApplyCoast();
+        }
+
+        void ApplyCoast()
+        {
+            if (!custom || coast == null) return;
+            mat.SetTexture("_CoastTex", coast);
+            mat.SetVector("_CoastRect", coastRect);
+        }
 
         void Update()
         {
             if (mat == null) return;
             var w = env != null ? env.WindDirection : Vector3.forward;
             float speed = env != null ? env.WindSpeed : 4f;
+            if (custom)
+            {
+                var layers = WaterOptics.Layers(w.x, w.z, speed);
+                for (int i = 0; i < layers.Length && i < WaveIds.Length; i++)
+                {
+                    var l = layers[i];
+                    // UV offset of a layer moving at its phase speed (wrapped to keep float precision).
+                    var o = layerOffsets[i] - new Vector2(l.dirX, l.dirZ) * (l.speed / l.tile * Time.deltaTime);
+                    o.x -= Mathf.Floor(o.x);
+                    o.y -= Mathf.Floor(o.y);
+                    layerOffsets[i] = o;
+                    mat.SetVector(WaveIds[i], new Vector4(o.x, o.y, 1f / l.tile, l.strength));
+                }
+                mat.SetFloat(RoughnessId, WaterOptics.Roughness(speed, env != null ? env.RainIntensity : 0f));
+                return;
+            }
             // Wavelets drift downwind at roughly 0.1 x wind speed (uv unit = 24 m).
             offset += new Vector2(w.x, w.z) * (0.1f * speed / 24f) * Time.deltaTime;
             offset.x %= 1f; offset.y %= 1f;
             mat.mainTextureOffset = offset;
             if (mat.HasProperty("_BumpScale")) mat.SetFloat("_BumpScale", Mathf.Lerp(0.35f, 1f, Mathf.Clamp01(speed / 10f)));
+        }
+
+        void OnDestroy()
+        {
+            if (coast != null) Destroy(coast);
         }
     }
 

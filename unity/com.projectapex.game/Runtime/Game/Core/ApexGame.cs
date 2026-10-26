@@ -86,6 +86,7 @@ namespace Apex.Game
             Config.Validate();
             showTelemetry = Settings.showTelemetry;
             SetupCameraAndLighting();
+            ApplyGraphics();
             input = gameObject.AddComponent<InputRouter>();
             input.ApplySettings(Settings);
             sm.Changed += OnStateChanged;
@@ -139,20 +140,27 @@ namespace Apex.Game
                 sun.type = LightType.Directional;
                 sun.shadows = LightShadows.Soft;
             }
-            ResetMenuLighting();
             var sky = Resources.Load<Material>(ApexMaterials.ResourceFolder + "/Sky");
-            if (sky == null)
+            // A runtime copy: time of day changes exposure and atmosphere, and must not edit the project's material.
+            if (sky != null) sky = new Material(sky);
+            else
             {
                 var shader = Shader.Find("Skybox/Procedural");
                 if (shader != null) sky = new Material(shader);
             }
             if (sky != null) RenderSettings.skybox = sky;
             RenderSettings.ambientMode = AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.55f, 0.65f, 0.78f);
-            RenderSettings.ambientEquatorColor = new Color(0.55f, 0.55f, 0.52f);
-            RenderSettings.ambientGroundColor = new Color(0.25f, 0.24f, 0.2f);
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
+            ResetMenuLighting();
+        }
+
+        /// <summary>Applies the graphics tier from the settings (live: shadows, AA, SSAO, reflections, LOD).</summary>
+        void ApplyGraphics()
+        {
+            var p = GraphicsPreset.For(GraphicsQuality.Resolve(Settings.graphicsTier));
+            GraphicsQuality.Apply(p, cam, sun);
+            if (weatherVisuals != null) weatherVisuals.ApplyGraphics(p);
         }
 
         void ResetMenuLighting()
@@ -162,11 +170,15 @@ namespace Apex.Game
             sun.shadowStrength = 0.9f;
             sun.transform.rotation = Quaternion.Euler(38f, 35f, 0f);
             RenderSettings.ambientIntensity = 1f;
+            RenderSettings.ambientSkyColor = new Color(0.55f, 0.65f, 0.78f);
+            RenderSettings.ambientEquatorColor = new Color(0.55f, 0.55f, 0.52f);
+            RenderSettings.ambientGroundColor = new Color(0.25f, 0.24f, 0.2f);
             RenderSettings.fogColor = new Color(0.72f, 0.78f, 0.84f);
             RenderSettings.fogStartDistance = 300f;
             RenderSettings.fogEndDistance = 3500f;
             var sky = RenderSettings.skybox;
             if (sky != null && sky.HasProperty("_Exposure")) sky.SetFloat("_Exposure", 1.3f);
+            if (sky != null && sky.HasProperty("_AtmosphereThickness")) sky.SetFloat("_AtmosphereThickness", 0.9f);
         }
 
         public static Color PaintColour(int index)
@@ -331,6 +343,7 @@ namespace Apex.Game
             showroomCar = null;
             world = new GameObject("World");
             EnvironmentBuilder.Quality = Settings.environmentDetail;
+            SurfaceTextures.UseUltra = Settings.ultraTextures;
             var circuit = CircuitBuilder.Build(def, world.transform);
             yield return null;
 
@@ -340,7 +353,9 @@ namespace Apex.Game
             var raceGo = new GameObject("Race");
             raceGo.transform.SetParent(world.transform, false);
             Race = raceGo.AddComponent<RaceController>();
+            Race.legacyPlayerHandling = Settings.legacyHandling;
             Race.Setup(circuit, cfg, type, grid, PlayerPaint(), Career.carNumber, "Du");
+            input.legacyHandling = Race.Player.car.setup.legacy;
             if (kind == SessionKind.Practice || kind == SessionKind.TimeTrial) Race.Director.rules.sessionSeconds = 0f;
             Race.Input = input;
             Race.Message += (t, c, p) => ShowMessage(t, c, p >= 2 ? 3f : 2.2f, p >= 1);

@@ -63,6 +63,13 @@ namespace Apex.Core
         public int environmentDetail = 1;
         /// <summary>URP post-processing (tonemapping, colour grade, bloom, FXAA); only offered with URP.</summary>
         public bool postProcessing = true;
+        /// <summary>A/B comparison: the player's car uses the setup and input from before the October 2026
+        /// handling overhaul (AI cars always use the current one). Applies from the next session.</summary>
+        public bool legacyHandling;
+        /// <summary>Road textures: the fetched 4K CC0 sets when present (false = the committed 1K sets). From the next session.</summary>
+        public bool ultraTextures = true;
+        /// <summary>Graphics tier (<see cref="GraphicsTier"/>); -1 = automatic for the device. Render settings apply live.</summary>
+        public int graphicsTier = -1;
         public string bestLapsJson = "";
 
         /// <summary>Upgrades older versions and clamps out-of-range values. Returns true if changed.</summary>
@@ -102,6 +109,7 @@ namespace Apex.Core
             changed |= ClampInt(ref tractionLevel, 0, 3);
             changed |= ClampInt(ref steeringAssistLevel, 0, 2);
             changed |= ClampInt(ref environmentDetail, 0, 2);
+            changed |= ClampInt(ref graphicsTier, -1, GraphicsPreset.TierCount - 1);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
             {
                 ApplyProfile(DrivingProfile.Balanced);

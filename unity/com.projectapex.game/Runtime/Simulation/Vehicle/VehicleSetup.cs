@@ -119,6 +119,28 @@ namespace Apex.Vehicle
         public EngineModel engine = new EngineModel();
         public Gearbox gearbox = new Gearbox();
 
+        /// <summary>Stability control with the steering assist (new in the October 2026 handling).</summary>
+        public bool escEnabled = true;
+        /// <summary>True for <see cref="Legacy"/>: the input layer also uses the old ramps and stick curve.</summary>
+        public bool legacy;
+
+        /// <summary>The setup before the October 2026 handling overhaul (PR #10), unchanged, for a
+        /// direct in-game comparison (settings → "Fahrverhalten"). See docs/HANDLING_OVERHAUL.md.</summary>
+        public static VehicleSetup Legacy() => new VehicleSetup
+        {
+            springFront = 140000f,
+            springRear = 125000f,
+            antiRollFront = 60000f,
+            antiRollRear = 40000f,
+            ackermann = 0.12f,
+            downforceArea = 3.6f,
+            aeroBalanceFront = 0.43f,
+            tireFront = new TireModel { nominalLoad = 2800f },
+            tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f },
+            escEnabled = false,
+            legacy = true,
+        };
+
         public float FrontAxleZ => wheelbase * (1f - weightFront);
         public float RearAxleZ => -wheelbase * weightFront;
 

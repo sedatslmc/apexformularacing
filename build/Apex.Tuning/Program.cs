@@ -8,6 +8,8 @@ using Apex.Tracks;
 using Apex.Vehicle;
 // Usage: dotnet run -- launch | brake | steer | slide | aero | validate | line | field | lap <track_id> [trace]
 // Road surface (Bosphorus fix): surface <track> [grid|lap|all] | validate-road <track> [out.txt] | limits <track> <csv>
+// Lighting: sky [cloud 0..1] (sun position, colours, exposure per time of day; graphics tiers)
+//   | sky-json <TimeOfDay> [cloud] [true north deg] (values for tools/carrender/kit.html &sky=)
 //   | handling [profile 0|1|2] | tune [profile] key=value… | step-trace <kmh> [frac] [profile] | corners <track> [pace] | vmax | probe-surface <track> <from> <to> | trace <track> <from> <to> [pace] | profile-csv <json> <csv>
 const float Dt = 1f / 120f;
 string mode = args.Length > 0 ? args[0] : "launch";
@@ -598,6 +600,60 @@ else if (mode == "profile-csv")
             g.Wrap(g.Distances[i] - bed.def.startLineDistance), Y(i), g.GradeAt(g.Distances[i]), kappa, v, MathF.Abs(kappa) / MathF.Max(l, 1e-6f)));
     }
     Console.WriteLine("wrote " + args[2]);
+}
+else if (mode == "sky")
+{
+    float cloud = args.Length > 1 ? float.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture) : 0f;
+    Console.WriteLine($"sunset {Apex.Environment.SolarPosition.IstanbulSunset(Apex.Environment.SkyModel.Year, Apex.Environment.SkyModel.Month, Apex.Environment.SkyModel.Day):0.00} h local, cloud {cloud:0.00}");
+    foreach (Apex.Weather.TimeOfDay t in Enum.GetValues(typeof(Apex.Weather.TimeOfDay)))
+    {
+        var l = Apex.Environment.SkyModel.Get(t, cloud);
+        double h = Apex.Environment.SkyModel.ClockHours(t);
+        Console.WriteLine($"{t,-10} {(int)h:00}:{(h % 1) * 60:00}  el {l.elevation,5:0.0} az {l.azimuthTrue,5:0.0}  sun {l.sunColor} x{l.sunIntensity:0.00}  shadow {l.shadowStrength:0.00}  EV +{l.exposureEv:0.0}  direct {l.directKlux:0.0} sky {l.skyKlux:0.0} klux");
+        Console.WriteLine($"           ambient sky {l.ambientSky} equator {l.ambientEquator} ground {l.ambientGround}  fog {l.fog}  skyExp {l.skyExposure:0.00} atm {l.atmosphereThickness:0.00} art {l.artificial:0.00}");
+    }
+    for (int i = 0; i < Apex.Core.GraphicsPreset.TierCount; i++)
+    {
+        var p = Apex.Core.GraphicsPreset.For((Apex.Core.GraphicsTier)i);
+        Console.WriteLine($"{Apex.Core.GraphicsPreset.Name(p.tier),-7} scale {p.renderScale:0.00} msaa {p.msaa} aa {p.antialiasing} shadows {p.shadowDistance:0} m x{p.shadowCascades} @{p.shadowResolution} splits {p.split1:0.000}/{p.split2:0.000}/{p.split3:0.000} ssao {p.ssao} probe {p.reflectionResolution} world {p.reflectionCapturesWorld} every {p.reflectionInterval:0.0}s lodBias {p.lodBias:0.00}");
+    }
+}
+else if (mode == "sky-json")
+{
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var t = Enum.Parse<Apex.Weather.TimeOfDay>(args[1]);
+    float cloud = args.Length > 2 ? float.Parse(args[2], inv) : 0f;
+    float north = args.Length > 3 ? float.Parse(args[3], inv) : 0f;
+    var l = Apex.Environment.SkyModel.Get(t, cloud);
+    var g = Apex.Environment.ColorGrading.Get(t, cloud, 0f);
+    string C(Apex.Environment.SkyModel.Rgb c) => string.Format(inv, "[{0:0.0000},{1:0.0000},{2:0.0000}]", c.r, c.g, c.b);
+    Console.WriteLine(string.Format(inv, "{{\"azimuth\":{0:0.00},\"elevation\":{1:0.00},\"north\":{2:0.00},\"sun\":{3},\"intensity\":{4:0.0000},\"ambientSky\":{5},\"ambientEquator\":{6},\"ambientGround\":{7},\"fog\":{8},\"postExposure\":{9:0.000}}}",
+        l.azimuthTrue, l.elevation, north, C(l.sunColor), l.sunIntensity, C(l.ambientSky), C(l.ambientEquator), C(l.ambientGround), C(l.fog), g.postExposure));
+}
+else if (mode == "flagsite")
+{
+    // Search the monumental flag site (slow, offline): flagsite <track>. Store the result in the circuit file (build_track_a.py).
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json), withTerrain: false);
+    var site = new Apex.Environment.MonumentalFlagSite(new Apex.Environment.TerrainField(bed.g, bed.def), bed.g, new TrackClearance(bed.surface), bed.def);
+    Console.WriteLine(site.found
+        ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "monumental_flag game [{0:F1}, {1:F1}], ground {2:F1} m, visible from {3:P0} of the lap, {4:F0} m from the nearest barrier line", site.position.X, site.position.Z, site.position.Y, site.visibleShare, site.trackMargin)
+        : "no site found");
+}
+else if (mode == "errors")
+{
+    // Driver-error matrix per profile and setup: does a mistake cost control where it should?
+    foreach (var (name, legacy) in new[] { ("new", false), ("legacy", true) })
+        foreach (var (pname, prof, tcOff) in new[] { ("Einsteiger", 0, 0), ("Ausgewogen", 1, 0), ("Profi", 2, 0), ("Profi TC aus", 2, 1), ("Profi frei", 2, 2) })
+        {
+            var hb = new HandlingBenchmark(legacy ? VehicleSetup.Legacy() : null, prof);
+            // 1: TC off; 2: TC off and no speed-sensitive lock limit ("Individuell", wheel/gamepad).
+            if (tcOff >= 1) hb.configure = sm => { sm.tractionLevel = 0; sm.speedSensitiveSteering = tcOff < 2; };
+            string LimitRow(HandlingBenchmark.Limit l) => $"full lock 250: {(l.spun ? "DREHER" : "stabil")} ({l.maxBetaDeg:0.0}°)";
+            string Row(HandlingBenchmark.Transient t) => $"{t.manoeuvre} {t.kmh:0}: {(t.spun ? "DREHER" : "stabil")} ({t.maxBetaDeg:0.0}°)";
+            Console.WriteLine($"{name,-6} {pname,-12} | {Row(hb.PowerExit(50f, 1f))} | {Row(hb.PowerExit(90f, 1f))} | {Row(hb.LiftOff(120f))} | {Row(hb.LiftOff(200f))} | {Row(hb.BrakeTurnIn(200f))} | {LimitRow(hb.LimitStep(250f))}");
+        }
 }
 else if (mode == "handling")
 {

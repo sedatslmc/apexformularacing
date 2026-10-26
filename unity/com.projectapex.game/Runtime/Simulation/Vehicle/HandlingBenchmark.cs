@@ -34,6 +34,8 @@ namespace Apex.Vehicle
 
         public readonly VehicleSetup setup;
         public readonly int profile;
+        /// <summary>Optional override after the profile assists are set (e.g. TC off for "all off").</summary>
+        public Action<VehicleSimulation> configure;
 
         public HandlingBenchmark(VehicleSetup setup = null, int profile = 1)
         {
@@ -51,6 +53,7 @@ namespace Apex.Vehicle
                 default: sim.tractionLevel = 2; sim.steeringAssist = 0.5f; break;
             }
             sim.speedSensitiveSteering = true;
+            configure?.Invoke(sim);
             var rig = new SurfaceRig(sim, Pad());
             rig.Place(new Vector3(-2500f, 0f, -2500f), Vector3.UnitZ);
             // Settle on the springs before setting speed.
@@ -247,6 +250,49 @@ namespace Apex.Vehicle
                 if (i >= 60) { sim.throttle = 1f; sim.brake = 0f; }
                 else HoldSpeed(sim, r.ForwardSpeed, v0);
                 r.Step(Dt);
+                float b = MathF.Abs(Beta(r)) * ApexMath.Rad2Deg;
+                t.maxBetaDeg = MathF.Max(t.maxBetaDeg, b);
+                if (b > 15f) { t.spun = true; break; }
+            }
+            return t;
+        }
+
+        /// <summary>
+        /// Lift-off oversteer: settle near the limit at `steer`, then lift the throttle completely and add
+        /// a little more steering, as a driver who runs wide and panics. Weight moves forward, the rear
+        /// unloads; a car with no assists should be able to rotate here.
+        /// </summary>
+        public Transient LiftOff(float kmh, float steer = 0.85f)
+        {
+            var r = NewRig(kmh, out var sim);
+            var t = new Transient { kmh = kmh, manoeuvre = "lift-off" };
+            float v0 = kmh / 3.6f;
+            for (int i = 0; i < 120 * 4; i++)
+            {
+                bool lifted = i >= 180;
+                sim.steer = lifted ? MathF.Min(1f, steer + 0.15f) : steer;
+                if (lifted) { sim.throttle = 0f; sim.brake = 0f; }
+                else HoldSpeed(sim, r.ForwardSpeed, v0);
+                r.Step(Dt);
+                float b = MathF.Abs(Beta(r)) * ApexMath.Rad2Deg;
+                t.maxBetaDeg = MathF.Max(t.maxBetaDeg, b);
+                if (b > 15f) { t.spun = true; break; }
+            }
+            return t;
+        }
+
+        /// <summary>Braking error: turn in at full lock while braking hard from speed (late, locked-up entry).</summary>
+        public Transient BrakeTurnIn(float kmh)
+        {
+            var r = NewRig(kmh, out var sim);
+            var t = new Transient { kmh = kmh, manoeuvre = "brake + full lock" };
+            for (int i = 0; i < 120 * 3; i++)
+            {
+                sim.throttle = 0f;
+                sim.brake = 1f;
+                sim.steer = i >= 24 ? 1f : 0f;
+                r.Step(Dt);
+                if (r.ForwardSpeed < 8f) break;
                 float b = MathF.Abs(Beta(r)) * ApexMath.Rad2Deg;
                 t.maxBetaDeg = MathF.Max(t.maxBetaDeg, b);
                 if (b > 15f) { t.spun = true; break; }

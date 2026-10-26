@@ -3,7 +3,9 @@
     "rootNamespace": "Apex.EditorTools",
     "references": [
         "Apex.Simulation",
-        "Apex.Runtime"
+        "Apex.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [
         "Editor"
@@ -14,6 +16,12 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "17.0.0",
+            "define": "APEX_URP"
+        }
+    ],
     "noEngineReferences": false
 }

@@ -58,6 +58,8 @@ namespace Apex.Tracks
     public sealed class RoadSurface
     {
         public const float LineWidth = 0.3f;
+        /// <summary>Metres per UV unit of the road, kerb and run-off ribbons (texture tiling is derived from it).</summary>
+        public const float UvMetres = 10f;
         public const float RunoffWidth = 16f;
         public const float RunoffDrop = 0.12f;
         public const float WallHeight = 1.1f;
@@ -125,7 +127,7 @@ namespace Apex.Tracks
             g.Positions[i] + g.Rights[i] * lateral + new Vector3(0f, height, 0f);
 
         /// <summary>Ribbon between two lateral offsets (x,y = left offset/height, z,w = right) along the track.</summary>
-        public static void Ribbon(SurfaceMesh md, int sub, TrackGeometry g, Func<int, Vector4> offsets, float uvScale = 0.1f, Func<int, int> subFn = null)
+        public static void Ribbon(SurfaceMesh md, int sub, TrackGeometry g, Func<int, Vector4> offsets, float uvScale = 1f / UvMetres, Func<int, int> subFn = null)
         {
             int n = g.Count;
             for (int i = 0; i < n; i++)
@@ -221,7 +223,7 @@ namespace Apex.Tracks
                     // The pit lane replaces the run-off on its side.
                     float outer = pitSide && pitMask[i] ? inner : WallOffset(i, false, side);
                     return side < 0 ? new Vector4(-outer, -RunoffDrop, -inner, 0f) : new Vector4(inner, 0f, outer, -RunoffDrop);
-                }, 0.25f);
+                });
                 for (int i = 0; i < n; i++)
                 {
                     int j = (i + 1) % n;

@@ -1,0 +1,17 @@
+{
+  "name": "runoff",
+  "metres": 2.0999999046325684,
+  "meanSmoothness": 0.3418,
+  "meanAlbedoLinear": 0.0604,
+  "source": "https://polyhaven.com/a/clean_asphalt",
+  "author": "Dimitrios Savva",
+  "licence": "CC0 1.0",
+  "imported": "2026-10-26",
+  "size": 1024,
+  "files": {
+    "BaseColor.jpg": "41ada3a6dd99343615b57a4e81c21ec1fd2050fc30a0b5c91facaaf2ad6d1ff7",
+    "Normal.png": "971a14a142613502fb612ded62c93ee746baaa0d3840ea6b453528fe9240998a",
+    "MetallicSmoothness.png": "7833a88bdd9b6ceb6c84b4f6f2821bdc58cd39ce7b8d8201b3ad048681022eb2",
+    "Occlusion.jpg": "6ebe00cea68b4d45095bb23cbfe38132aa12e25810f4dce9da1ea8eb43e0f6bf"
+  }
+}

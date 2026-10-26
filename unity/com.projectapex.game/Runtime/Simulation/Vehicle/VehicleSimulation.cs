@@ -297,7 +297,7 @@ namespace Apex.Vehicle
             // moment against the rotation) and cut drive, both scaled with the assist strength.
             float escExcess = 0f;
             int escWheel = -1;
-            if (steeringAssist > 0f && Speed > 10f && !holdBrake && gearbox.gear > 0)
+            if (setup.escEnabled && steeringAssist > 0f && Speed > 10f && !holdBrake && gearbox.gear > 0)
             {
                 float ar = 0.5f * (wheels[2].slipAngle + wheels[3].slipAngle);
                 float af = 0.5f * (wheels[0].slipAngle + wheels[1].slipAngle);
