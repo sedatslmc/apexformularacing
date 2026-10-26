@@ -18,7 +18,6 @@ namespace Apex.Game
     /// </summary>
     public static class TrackInfrastructureBuilder
     {
-        const float ChunkLength = 400f;
         const float BaseDy = -0.12f;   // run-off level relative to the road
 
         sealed class PartSet
@@ -38,98 +37,29 @@ namespace Apex.Game
             var def = ci.Definition;
             var infra = new GameObject("Infrastructure").transform;
             infra.SetParent(root, false);
-            int n = g.Count;
-            int chunk = Mathf.Max(1, Mathf.RoundToInt(ChunkLength / g.Spacing));
-            int pitSide = def.pit != null ? def.pit.side : 0;
-            int barrierStep = Mathf.Max(1, Mathf.RoundToInt(4f / g.Spacing));
-            bool IsGate(float d)
-            {
-                foreach (float gd in plan.gates)
-                    if (ApexMath.PosMod(d - gd, g.Length) < 3.6f) return true;
-                return false;
-            }
-            for (int c0 = 0; c0 < n; c0 += chunk)
-            {
-                var set = new PartSet();
-                int c1 = Mathf.Min(n, c0 + chunk);
-                foreach (int side in new[] { -1, 1 })
-                {
-                    float[] wall = side < 0 ? ci.WallLeft : ci.WallRight;
-                    // Runs of the same barrier type inside this chunk.
-                    int runStart = c0;
-                    int RunType(int i)
-                    {
-                        if (side == pitSide && pitMask[i]) return 3;           // pit lane boundary: concrete, no fence
-                        float r = plan.RunoffAt(i, side);
-                        if (r < 1.0f) return 2;                                // median wall: concrete, no fence
-                        return r >= 4f ? 1 : 0;                                // escape road: guardrail; else concrete
-                    }
-                    for (int i = c0; i <= c1; i++)
-                    {
-                        bool end = i == c1 || RunType(i) != RunType(runStart);
-                        if (!end) continue;
-                        int type = RunType(runStart);
-                        int b = Mathf.Min(i + 1, c1 + 1);
-                        if (type == 1) TrackInfrastructureGeometry.Guardrail(set.B(TrackInfrastructureGeometry.Armco), set.B(TrackInfrastructureGeometry.Steel), g, wall, side, runStart, b, BaseDy);
-                        else TrackInfrastructureGeometry.ConcreteBarrier(set.B(TrackInfrastructureGeometry.Concrete), g, wall, side, runStart, b, barrierStep, BaseDy);
-                        if (type == 0 || type == 1)
-                            TrackInfrastructureGeometry.CatchFence(set.B, g, wall, side, runStart, b, BaseDy, IsGate);
-                        runStart = i;
-                    }
-                }
-                EnvironmentBuilder.AddMeshObject(infra, $"Barriers_{c0 / chunk:00}", set.parts, true);
-            }
-            BuildProtection(ci, infra);
-            BuildGates(ci, infra, pitMask, IsGateSide);
+            // Barriers, guardrail, catch fence with gates and banners, impact protection: the modular kit.
+            var kit = new TrackKitLayout(g, plan, ci.Surface);
+            TrackKitBuilder.Build(ci, infra, kit, EnvironmentBuilder.Quality);
+            BuildGateSigns(infra, kit);
             BuildRoadDetails(ci, infra);
             BuildPostsAndPanels(ci, infra);
             BuildSigns(ci, infra);
-
-            bool IsGateSide(int i, int side) => !(side == pitSide && pitMask[i]) && plan.RunoffAt(i, side) >= 1.0f;
         }
 
-        static void BuildProtection(CircuitInstance ci, Transform infra)
+        /// <summary>Emergency-exit sign on every third fence gate, readable from the track.</summary>
+        static void BuildGateSigns(Transform infra, TrackKitLayout kit)
         {
-            var g = ci.Geometry;
-            var set = new PartSet();
-            foreach (var p in ci.Infrastructure.protections)
-            {
-                float[] wall = p.side < 0 ? ci.WallLeft : ci.WallRight;
-                if (p.kind == TrackInfrastructurePlan.ProtectionKind.TyreStack)
-                    TrackInfrastructureGeometry.TyreStacks(set.B, g, wall, p.side, p.from, p.to, BaseDy);
-                else
-                    TrackInfrastructureGeometry.EnergyModules(set.B, g, wall, p.side, p.from, p.to, BaseDy);
-            }
-            if (set.parts.Count == 0) return;
-            var go = EnvironmentBuilder.AddMeshObject(infra, "ImpactProtection", set.parts, true);
-            // Cars hit the modules, not the wall behind them.
-            var mc = go.AddComponent<MeshCollider>();
-            mc.sharedMesh = go.GetComponent<MeshFilter>().sharedMesh;
-            go.AddComponent<TrackSurface>().surface = SurfaceType.Wall;
-        }
-
-        static void BuildGates(CircuitInstance ci, Transform infra, bool[] pitMask, System.Func<int, int, bool> allowed)
-        {
-            var g = ci.Geometry;
-            var steel = new MeshBuilder();
             var font = CircuitBuilder.BuiltinFont();
+            if (font == null) return;
             int k = 0;
-            foreach (float d in ci.Infrastructure.gates)
+            foreach (var p in kit.placements)
             {
-                int side = (k++ % 2 == 0) ? 1 : -1;
-                int i = g.IndexAt(d);
-                if (!allowed(i, side)) side = -side;
-                if (!allowed(i, side)) continue;
-                float[] wall = side < 0 ? ci.WallLeft : ci.WallRight;
-                TrackInfrastructureGeometry.Gate(steel, g, wall, side, d, BaseDy);
-                if (k % 3 == 0 && font != null)
-                {
-                    // Emergency exit sign on the gate, readable from the track.
-                    var pos = TrackInfrastructureGeometry.P(g, g.IndexAt(d + 1.75f), side * (wall[i] + 0.25f), BaseDy + TrackInfrastructureGeometry.BarrierHeight + 0.5f);
-                    Label(infra, font, pos, Quaternion.LookRotation(new Vector3(g.Rights[i].X, 0f, g.Rights[i].Z) * side), "ACİL ÇIKIŞ", new Color(0.05f, 0.45f, 0.2f), Color.white, 1.4f, 0.45f);
-                }
+                if (p.module != TrackKitLayout.Module.FenceGate || k++ % 3 != 0) continue;
+                var outward = new Vector3(p.outward.X, 0f, p.outward.Z);
+                float y0 = p.variant == 1 ? 0f : TrackKitGeometry.BarrierHeight;
+                var pos = new Vector3(p.position.X, p.position.Y, p.position.Z) - outward * 0.1f + Vector3.up * (y0 + 1.6f);
+                Label(infra, font, pos, Quaternion.LookRotation(outward), "ACİL ÇIKIŞ", new Color(0.05f, 0.45f, 0.2f), Color.white, 1.4f, 0.45f);
             }
-            EnvironmentBuilder.AddMeshObject(infra, "FenceGates", new Dictionary<string, MeshBuilder> { [TrackInfrastructureGeometry.Steel] = steel }, false);
         }
 
         static void BuildRoadDetails(CircuitInstance ci, Transform infra)
@@ -159,12 +89,8 @@ namespace Apex.Game
             var g = ci.Geometry;
             var posts = new GameObject("MarshalPosts").transform;
             posts.SetParent(infra, false);
-            var shelter = new PartSet();
-            TrackInfrastructureGeometry.MarshalShelter(shelter.B);
-            var shelterMesh = EnvironmentBuilder.Combine(shelter.parts, "MarshalShelter", out var shelterMats);
-            var housing = new MeshBuilder();
-            TrackInfrastructureGeometry.PanelHousing(housing);
-            var housingMesh = EnvironmentBuilder.Combine(new Dictionary<string, MeshBuilder> { [TrackInfrastructureGeometry.Housing] = housing }, "PanelHousing", out var housingMats);
+            var shelter = LodMeshes("MarshalPost", (B, lod) => TrackKitGeometry.MarshalPost(B, lod));
+            var housing = LodMeshes("FlagPanelHousing", (B, lod) => TrackKitGeometry.FlagPanelHousing(B, lod));
             var shirt = new MeshBuilder();
             var skin = new MeshBuilder();
             EnvironmentGeometry.SpectatorMesh(shirt, skin);
@@ -185,7 +111,7 @@ namespace Apex.Game
                 var post = new GameObject($"Post_{idx:00}");
                 post.transform.SetParent(posts, false);
                 post.transform.SetPositionAndRotation(basePos, rot);
-                Static(post.transform, "Shelter", shelterMesh, shelterMats, Vector3.zero, Quaternion.identity, Vector3.one);
+                WithLods(post.transform, "Shelter", shelter, 40f);
                 // Two marshals beside the shelter, behind the barrier.
                 Static(post.transform, "Marshal_A", marshalMesh, marshalMats, new Vector3(0.6f, 0f, 1.1f), Quaternion.Euler(0f, 160f, 0f), Vector3.one * 1.75f);
                 Static(post.transform, "Marshal_B", marshalMesh, marshalMats, new Vector3(-0.4f, 0f, 1.3f), Quaternion.Euler(0f, 200f, 0f), Vector3.one * 1.7f);
@@ -194,7 +120,7 @@ namespace Apex.Game
                 var panel = new GameObject("FlagPanel");
                 panel.transform.SetParent(post.transform, false);
                 panel.transform.SetPositionAndRotation(panelPos, Quaternion.LookRotation(-fwd, Vector3.up));
-                Static(panel.transform, "Housing", housingMesh, housingMats, Vector3.zero, Quaternion.identity, Vector3.one);
+                WithLods(panel.transform, "Housing", housing, 25f);
                 var top = Face(panel.transform, new Vector3(0f, 2.98f, 0.1f), new Vector2(1.18f, 0.4f));
                 var bottom = Face(panel.transform, new Vector3(0f, 2.53f, 0.1f), new Vector2(1.18f, 0.4f));
                 TextMesh label = null;
@@ -218,6 +144,43 @@ namespace Apex.Game
                 controller.Add(p.distance, top, bottom, label);
                 idx++;
             }
+        }
+
+        /// <summary>Three detail levels of a kit piece as meshes with their materials.</summary>
+        static (Mesh mesh, Material[] mats)[] LodMeshes(string name, System.Action<TrackKitGeometry.Parts, int> build)
+        {
+            var result = new (Mesh, Material[])[3];
+            for (int lod = 0; lod < 3; lod++)
+            {
+                var set = new PartSet();
+                build(k => set.B(k), lod);
+                result[lod] = (EnvironmentBuilder.Combine(set.parts, name + "_LOD" + lod, out var mats), mats);
+            }
+            return result;
+        }
+
+        /// <summary>Static object with a cross-fading LODGroup: LOD0 up to `lod0Distance`, LOD1 to 3x, LOD2 to 10x, then culled.</summary>
+        static void WithLods(Transform parent, string name, (Mesh mesh, Material[] mats)[] lods, float lod0Distance)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.isStatic = true;
+            var levels = new LOD[lods.Length];
+            for (int k = 0; k < lods.Length; k++)
+            {
+                var child = new GameObject("LOD" + k);
+                child.transform.SetParent(go.transform, false);
+                child.AddComponent<MeshFilter>().sharedMesh = lods[k].mesh;
+                var mr = child.AddComponent<MeshRenderer>();
+                mr.sharedMaterials = lods[k].mats;
+                mr.shadowCastingMode = k < 2 ? ShadowCastingMode.On : ShadowCastingMode.Off;
+                levels[k] = new LOD(TrackKitBuilder.LodHeight(lod0Distance * (k == 0 ? 1f : k == 1 ? 3f : 10f)), new Renderer[] { mr });
+            }
+            var group = go.AddComponent<LODGroup>();
+            group.fadeMode = LODFadeMode.CrossFade;
+            group.animateCrossFading = true;
+            group.SetLODs(levels);
+            group.size = 10f;
         }
 
         static void Static(Transform parent, string name, Mesh mesh, Material[] mats, Vector3 pos, Quaternion rot, Vector3 scale)
@@ -394,6 +357,28 @@ namespace Apex.Game
             ApexMaterials.Register("MarshalOrange", Lit("MarshalOrange", new Color(0.95f, 0.42f, 0.05f), 0.3f));
             ApexMaterials.Register(TrackInfrastructureGeometry.Rubber, Transparent(Lit("Rubber", new Color(0.03f, 0.03f, 0.03f, 1f), 0.3f, RubberTexture())));
             ApexMaterials.Register(TrackInfrastructureGeometry.Fence, FenceMaterial());
+            // Circuit kit details and the event banners (procedural art, EventArt).
+            ApexMaterials.Register(TrackKitGeometry.Dark, Lit("KitDark", new Color(0.14f, 0.14f, 0.15f), 0.1f));
+            ApexMaterials.Register(TrackKitGeometry.Strap, Lit("KitStrap", new Color(0.05f, 0.05f, 0.055f), 0.35f));
+            var reflector = Lit("KitReflector", new Color(0.95f, 0.95f, 0.95f), 0.85f);
+            reflector.EnableKeyword("_EMISSION");
+            if (reflector.HasProperty("_EmissionColor")) reflector.SetColor("_EmissionColor", new Color(0.12f, 0.12f, 0.12f));
+            ApexMaterials.Register(TrackKitGeometry.Reflector, reflector);
+            for (int v = 0; v < TrackKitGeometry.BannerVariants; v++)
+                ApexMaterials.Register(TrackKitGeometry.Banner(v), Lit("KitBanner" + v, Color.white, 0.3f, BannerTexture(v)));
+            ApexMaterials.Register(TrackKitGeometry.BannerBack, Lit("KitBannerBack", new Color(0.9f, 0.88f, 0.84f), 0.25f));
+        }
+
+        static Texture2D BannerTexture(int variant)
+        {
+            const int w = 768, h = 256;
+            var rgba = Apex.Environment.EventArt.Banner(variant, w, h);
+            var tex = new Texture2D(w, h, TextureFormat.RGBA32, true) { name = "KitBanner" + variant, wrapMode = TextureWrapMode.Clamp, anisoLevel = 4 };
+            var px = new Color[w * h];
+            for (int i = 0; i < px.Length; i++) px[i] = new Color(rgba[i * 4], rgba[i * 4 + 1], rgba[i * 4 + 2], 1f);
+            tex.SetPixels(px);
+            tex.Apply(true);
+            return tex;
         }
 
         /// <summary>Tileable asphalt: grey with multi-scale noise and light aggregate, plus a matching normal map.</summary>
