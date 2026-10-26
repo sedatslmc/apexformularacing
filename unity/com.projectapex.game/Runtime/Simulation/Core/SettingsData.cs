@@ -63,6 +63,9 @@ namespace Apex.Core
         public int environmentDetail = 1;
         /// <summary>URP post-processing (tonemapping, colour grade, bloom, FXAA); only offered with URP.</summary>
         public bool postProcessing = true;
+        /// <summary>A/B comparison: the player's car uses the setup and input from before the October 2026
+        /// handling overhaul (AI cars always use the current one). Applies from the next session.</summary>
+        public bool legacyHandling;
         public string bestLapsJson = "";
 
         /// <summary>Upgrades older versions and clamps out-of-range values. Returns true if changed.</summary>

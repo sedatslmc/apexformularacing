@@ -340,7 +340,9 @@ namespace Apex.Game
             var raceGo = new GameObject("Race");
             raceGo.transform.SetParent(world.transform, false);
             Race = raceGo.AddComponent<RaceController>();
+            Race.legacyPlayerHandling = Settings.legacyHandling;
             Race.Setup(circuit, cfg, type, grid, PlayerPaint(), Career.carNumber, "Du");
+            input.legacyHandling = Race.Player.car.setup.legacy;
             if (kind == SessionKind.Practice || kind == SessionKind.TimeTrial) Race.Director.rules.sessionSeconds = 0f;
             Race.Input = input;
             Race.Message += (t, c, p) => ShowMessage(t, c, p >= 2 ? 3f : 2.2f, p >= 1);

@@ -599,6 +599,20 @@ else if (mode == "profile-csv")
     }
     Console.WriteLine("wrote " + args[2]);
 }
+else if (mode == "errors")
+{
+    // Driver-error matrix per profile and setup: does a mistake cost control where it should?
+    foreach (var (name, legacy) in new[] { ("new", false), ("legacy", true) })
+        foreach (var (pname, prof, tcOff) in new[] { ("Einsteiger", 0, 0), ("Ausgewogen", 1, 0), ("Profi", 2, 0), ("Profi TC aus", 2, 1), ("Profi frei", 2, 2) })
+        {
+            var hb = new HandlingBenchmark(legacy ? VehicleSetup.Legacy() : null, prof);
+            // 1: TC off; 2: TC off and no speed-sensitive lock limit ("Individuell", wheel/gamepad).
+            if (tcOff >= 1) hb.configure = sm => { sm.tractionLevel = 0; sm.speedSensitiveSteering = tcOff < 2; };
+            string LimitRow(HandlingBenchmark.Limit l) => $"full lock 250: {(l.spun ? "DREHER" : "stabil")} ({l.maxBetaDeg:0.0}°)";
+            string Row(HandlingBenchmark.Transient t) => $"{t.manoeuvre} {t.kmh:0}: {(t.spun ? "DREHER" : "stabil")} ({t.maxBetaDeg:0.0}°)";
+            Console.WriteLine($"{name,-6} {pname,-12} | {Row(hb.PowerExit(50f, 1f))} | {Row(hb.PowerExit(90f, 1f))} | {Row(hb.LiftOff(120f))} | {Row(hb.LiftOff(200f))} | {Row(hb.BrakeTurnIn(200f))} | {LimitRow(hb.LimitStep(250f))}");
+        }
+}
 else if (mode == "handling")
 {
     // Handling benchmark on the 6-DOF rig (flat pad): cornering capacity and balance, steering response, braking, traction.

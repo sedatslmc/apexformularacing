@@ -496,6 +496,8 @@ namespace Apex.Game
                     change = d => { s.speedSensitiveSteering = !s.speedSensitiveSteering; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Automatikgetriebe", value = () => OnOff(s.autoGearbox), change = d => { s.autoGearbox = !s.autoGearbox; s.drivingProfile = DrivingProfile.Custom; } },
                 new Row { label = "Bremsbalance vorne", value = () => $"{s.brakeBiasFront * 100f:0} %", change = d => s.brakeBiasFront += (d == 0 ? 1 : d) * 0.01f },
+                new Row { label = "Fahrverhalten (Vergleich, ab nächster Session)", value = () => s.legacyHandling ? "Alt (vor Okt. 2026)" : "Neu (Okt. 2026)",
+                    change = d => s.legacyHandling = !s.legacyHandling },
                 new Row { label = "Boxen-Assistent", value = () => OnOff(s.pitAssist), change = d => s.pitAssist = !s.pitAssist },
                 new Row { label = "Neigung: max. Winkel", value = () => $"{s.tiltMaxAngleDeg:0}°", change = d => s.tiltMaxAngleDeg += d == 0 ? 5 : d * 5 },
                 new Row { label = "Neigung: Empfindlichkeit", value = () => $"{s.tiltSensitivity:0.0}", change = d => s.tiltSensitivity += (d == 0 ? 1 : d) * 0.1f },
