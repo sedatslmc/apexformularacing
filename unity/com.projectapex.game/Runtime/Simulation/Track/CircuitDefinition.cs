@@ -67,6 +67,17 @@ namespace Apex.Tracks
         /// <summary>Bearing of true north in the game frame (deg, 0 = +z); NaN without geo data.</summary>
         public float trueNorthBearing = float.NaN;
 
+        /// <summary>Distant land outline (game metres) with a hill profile for the skyline layer.</summary>
+        public sealed class LandMass
+        {
+            public string id = "";
+            /// <summary>Maximum hill height above the shore (m) and the distance scale of the rise (m).</summary>
+            public float rise, scale;
+            public readonly List<(float east, float north)> polygon = new List<(float, float)>();
+        }
+
+        public readonly List<LandMass> landMasses = new List<LandMass>();
+
         public Landmark FindLandmark(string landmarkId) => landmarks.Find(l => l.id == landmarkId);
 
         public static CircuitDefinition FromJson(string json)
@@ -138,6 +149,17 @@ namespace Apex.Tracks
                     foreach (var row in sal)
                         if (row is List<object> r && r.Count >= 2)
                             def.farShoreline.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
+                if (gd.TryGetValue("land", out var la) && la is List<object> lal)
+                    foreach (var o in lal)
+                    {
+                        if (!(o is Dictionary<string, object> ld)) continue;
+                        var mass = new LandMass { id = Str(ld, "id"), rise = Num(ld, "rise", 40f), scale = Num(ld, "scale", 500f) };
+                        if (ld.TryGetValue("polygon", out var pg) && pg is List<object> pgl)
+                            foreach (var row in pgl)
+                                if (row is List<object> r && r.Count >= 2)
+                                    mass.polygon.Add((Convert.ToSingle(r[0]), Convert.ToSingle(r[1])));
+                        if (mass.polygon.Count >= 3) def.landMasses.Add(mass);
+                    }
             }
             return def;
         }

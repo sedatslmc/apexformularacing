@@ -18,6 +18,7 @@ namespace Apex.Weather
         Day,
         GoldenHour,
         Dusk,
+        Night,
     }
 
     /// <summary>

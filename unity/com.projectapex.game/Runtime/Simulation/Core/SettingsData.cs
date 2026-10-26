@@ -59,6 +59,8 @@ namespace Apex.Core
         public bool leftHanded;
         public bool speedInMph;
         public float hudScale = 1f;
+        /// <summary>Environment density: 0 = low (mobile), 1 = medium, 2 = high.</summary>
+        public int environmentDetail = 1;
         public string bestLapsJson = "";
 
         /// <summary>Upgrades older versions and clamps out-of-range values. Returns true if changed.</summary>
@@ -97,6 +99,7 @@ namespace Apex.Core
             changed |= ClampField(ref brakeBiasFront, 0.5f, 0.65f);
             changed |= ClampInt(ref tractionLevel, 0, 3);
             changed |= ClampInt(ref steeringAssistLevel, 0, 2);
+            changed |= ClampInt(ref environmentDetail, 0, 2);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
             {
                 ApplyProfile(DrivingProfile.Balanced);

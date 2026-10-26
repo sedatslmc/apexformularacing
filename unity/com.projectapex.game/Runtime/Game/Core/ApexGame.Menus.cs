@@ -211,7 +211,7 @@ namespace Apex.Game
                 rows.Add(new Row { label = "Reifenverschleiß", value = () => c.tireWear <= 0f ? "Aus" : $"{c.tireWear:0}×", change = d => c.tireWear = Mathf.Clamp(c.tireWear + (d < 0 ? -1 : 1), 0f, 10f) });
                 rows.Add(new Row { label = "Startreifen", value = () => CompoundSpec.For(c.startCompound).name, change = d => c.startCompound = (TireCompound)Wrap((int)c.startCompound + (d < 0 ? -1 : 1), 3) });
             }
-            rows.Add(new Row { label = "Tageszeit", value = () => TimeName(c.timeOfDay), change = d => c.timeOfDay = (TimeOfDay)Wrap((int)c.timeOfDay + (d < 0 ? -1 : 1), 4) });
+            rows.Add(new Row { label = "Tageszeit", value = () => TimeName(c.timeOfDay), change = d => c.timeOfDay = (TimeOfDay)Wrap((int)c.timeOfDay + (d < 0 ? -1 : 1), 5) });
             if (setupMode == SetupMode.GrandPrix)
             {
                 rows.Add(new Row { label = "Frühstart-Strafe", value = () => OnOff(c.falseStarts), change = d => c.falseStarts = !c.falseStarts });
@@ -232,7 +232,8 @@ namespace Apex.Game
             {
                 case TimeOfDay.Morning: return "Morgen";
                 case TimeOfDay.Day: return "Mittag";
-                case TimeOfDay.Dusk: return "Abenddämmerung";
+                case TimeOfDay.Dusk: return "Sonnenuntergang";
+                case TimeOfDay.Night: return "Nacht";
                 default: return "Goldene Stunde";
             }
         }
@@ -477,6 +478,8 @@ namespace Apex.Game
                 new Row { label = "HUD-Größe", value = () => $"{s.hudScale * 100f:0} %", change = d => s.hudScale += (d == 0 ? 1 : d) * 0.05f },
                 new Row { label = "Geschwindigkeit", value = () => s.speedInMph ? "mph" : "km/h", change = d => s.speedInMph = !s.speedInMph },
                 new Row { label = "Reduzierte Bewegung", value = () => OnOff(s.reducedMotion), change = d => s.reducedMotion = !s.reducedMotion },
+                new Row { label = "Umgebungsdetails", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
+                    change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
         }

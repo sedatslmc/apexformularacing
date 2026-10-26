@@ -105,6 +105,10 @@ namespace UnityEngine
         public static float Pow(float a, float b) => MathF.Pow(a, b);
         public static float Min(float a, float b) => MathF.Min(a, b);
         public static int Max(int a, int b) => Math.Max(a, b);
+        public static float Ceil(float a) => MathF.Ceiling(a);
+        public static int CeilToInt(float a) => (int)MathF.Ceiling(a);
+        public static int FloorToInt(float a) => (int)MathF.Floor(a);
+        public static float Round(float a) => MathF.Round(a);
     }
 
     public class Mesh

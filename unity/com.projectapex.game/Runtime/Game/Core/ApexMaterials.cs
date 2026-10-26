@@ -49,6 +49,37 @@ namespace Apex.Game
             ["RainLight"] = new Color(0.25f, 0.02f, 0.02f),
             ["BrakeDisc"] = new Color(0.16f, 0.16f, 0.17f),
             ["Compound"] = new Color(0.95f, 0.95f, 0.95f),
+            // Bosphorus environment (procedural placeholder art).
+            ["Stone"] = new Color(0.86f, 0.83f, 0.76f),
+            ["Marble"] = new Color(0.93f, 0.92f, 0.89f),
+            ["Lead"] = new Color(0.45f, 0.48f, 0.5f),
+            ["BridgeSteel"] = new Color(0.62f, 0.64f, 0.66f),
+            ["BridgeCable"] = new Color(0.32f, 0.34f, 0.37f),
+            ["Glass"] = new Color(0.18f, 0.24f, 0.29f),
+            ["HagiaPlaster"] = new Color(0.8f, 0.52f, 0.42f),
+            ["FerryHull"] = new Color(0.16f, 0.2f, 0.27f),
+            ["FerryFunnel"] = new Color(0.9f, 0.86f, 0.74f),
+            ["Rock"] = new Color(0.42f, 0.4f, 0.37f),
+            ["RoofTile"] = new Color(0.62f, 0.3f, 0.2f),
+            ["RoofFlat"] = new Color(0.56f, 0.54f, 0.51f),
+            ["Tank"] = new Color(0.82f, 0.82f, 0.84f),
+            ["TowerGlass"] = new Color(0.27f, 0.35f, 0.42f),
+            ["FarGround"] = new Color(0.47f, 0.45f, 0.4f),
+            ["Quay"] = new Color(0.62f, 0.6f, 0.55f),
+            ["Pavement"] = new Color(0.56f, 0.55f, 0.53f),
+            ["Concrete"] = new Color(0.64f, 0.64f, 0.62f),
+            ["Seat"] = new Color(0.06f, 0.42f, 0.62f),
+            ["SeatAccent"] = new Color(0.78f, 0.08f, 0.1f),
+            ["Canopy"] = new Color(0.92f, 0.92f, 0.94f),
+            ["LampHead"] = new Color(0.85f, 0.85f, 0.8f),
+            ["Bark"] = new Color(0.3f, 0.25f, 0.19f),
+            ["Foliage"] = new Color(0.27f, 0.39f, 0.18f),
+            ["Pine"] = new Color(0.2f, 0.32f, 0.17f),
+            ["Cypress"] = new Color(0.12f, 0.23f, 0.13f),
+            ["Skin"] = new Color(0.74f, 0.57f, 0.45f),
+            ["Gull"] = new Color(0.93f, 0.93f, 0.92f),
+            ["FlagPole"] = new Color(0.8f, 0.81f, 0.83f),
+            ["BridgeLight"] = new Color(0.9f, 0.9f, 0.95f),
         };
 
         static readonly Dictionary<string, (float smoothness, float metallic)> Surface = new Dictionary<string, (float, float)>
@@ -69,11 +100,23 @@ namespace Apex.Game
             ["Tire"] = (0.15f, 0f),
             ["BrakeDisc"] = (0.35f, 0.4f),
             ["Interior"] = (0.15f, 0f),
+            ["Glass"] = (0.92f, 0.2f),
+            ["TowerGlass"] = (0.88f, 0.35f),
+            ["BridgeSteel"] = (0.5f, 0.4f),
+            ["FlagPole"] = (0.7f, 0.8f),
+            ["Marble"] = (0.45f, 0f),
+            ["Lead"] = (0.35f, 0.6f),
+            ["FerryHull"] = (0.6f, 0.1f),
         };
 
         /// <summary>Materials whose emission is driven at runtime (rain light, brake glow,
         /// steering-wheel display); created with emission enabled and black.</summary>
-        public static readonly HashSet<string> Emissive = new HashSet<string> { "RainLight", "BrakeDisc", "Display" };
+        public static readonly HashSet<string> Emissive = new HashSet<string>
+        {
+            "RainLight", "BrakeDisc", "Display",
+            // Night: street lamps, bridge lighting, floodlit monuments, lit office towers.
+            "LampHead", "BridgeLight", "Stone", "Marble", "HagiaPlaster", "TowerGlass",
+        };
 
         static readonly Dictionary<string, Material> Cache = new Dictionary<string, Material>();
 
@@ -87,6 +130,9 @@ namespace Apex.Game
             Cache[key] = m;
             return m;
         }
+
+        /// <summary>Registers a material built elsewhere (procedural textures) under a key.</summary>
+        public static void Register(string key, Material m) => Cache[key] = m;
 
         /// <summary>Paint uses URP Complex Lit (clear coat) where available.</summary>
         static readonly HashSet<string> ClearCoat = new HashSet<string> { "CarPaint", "CarAccent", "Helmet" };

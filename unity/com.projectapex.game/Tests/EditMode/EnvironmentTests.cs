@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using Apex.Environment;
+using Apex.Tracks;
+using Apex.Weather;
 using NUnit.Framework;
 
 namespace Apex.Tests
@@ -26,6 +30,152 @@ namespace Apex.Tests
             int red = 0;
             for (int i = 0; i < px.Length; i += 4) if (px[i + 1] < 128) red++;
             Assert.That(red / (float)(96 * 64), Is.InRange(0.93f, 0.95f));
+        }
+    
+        static (CircuitDefinition def, TrackGeometry g, TerrainField field) Bosphorus()
+        {
+            var def = TestData.Circuit("bosphorus_gp");
+            var g = TrackGeometry.FromDefinition(def);
+            return (def, g, new TerrainField(g, def));
+        }
+
+        [Test]
+        public void LandMassesMatchTheGeography()
+        {
+            var (def, g, field) = Bosphorus();
+            var land = field.land;
+            Assert.That(land.HasLand, Is.True);
+            // Track and European landmarks on land, Asian landmarks on the Asian mass,
+            // the Maiden's Tower islet and the middle of the bridge over water.
+            for (int i = 0; i < g.Count; i += 10)
+                Assert.That(land.MassAt(g.Positions[i].X, g.Positions[i].Z), Is.EqualTo("europe"), $"track sample {i}");
+            CircuitDefinition.Landmark L(string id) => def.FindLandmark(id);
+            Assert.That(land.MassAt(L("galata").east, L("galata").north), Is.EqualTo("europe"));
+            Assert.That(land.MassAt(L("sultan_ahmed").east, L("sultan_ahmed").north), Is.EqualTo("peninsula"));
+            Assert.That(land.MassAt(L("beylerbeyi").east + 150f, L("beylerbeyi").north), Is.EqualTo("asia"));
+            Assert.That(land.IsLand(L("maidens_tower").east, L("maidens_tower").north), Is.False);
+            var eu = L("bridge_eu"); var asia = L("bridge_as");
+            Assert.That(land.IsLand((eu.east + asia.east) / 2f, (eu.north + asia.north) / 2f), Is.False);
+            // Golden Horn separates Galata from the historic peninsula.
+            Assert.That(land.IsLand((L("karakoy_pier").east + L("eminonu_pier").east) / 2f, (L("karakoy_pier").north + L("eminonu_pier").north) / 2f), Is.False);
+            // Hills: the Asian ridge is higher than its shore, the seabed below the water.
+            Assert.That(land.Height(2900f, 500f), Is.GreaterThan(land.Height(1840f, 500f) + 40f));
+            Assert.That(field.Height(900f, 500f), Is.LessThan(-3f));
+        }
+
+        [Test]
+        public void TerrainStaysBelowTheRoadAndMatchesTheFarGrid()
+        {
+            var (def, g, field) = Bosphorus();
+            for (int i = 0; i < g.Count; i += 7)
+            {
+                var p = g.Positions[i];
+                Assert.That(field.Height(p.X, p.Z), Is.LessThan(p.Y - 0.5f), $"terrain through the road at {i}");
+            }
+            // On the border of the near area the near terrain equals the far landscape.
+            for (float x = field.MinX; x <= field.MaxX; x += 96f)
+                Assert.That(field.Height(x, field.MinZ), Is.EqualTo(field.land.Height(x, field.MinZ)).Within(0.05f));
+            Assert.That((field.MaxX - field.MinX) % TerrainField.FarCell, Is.EqualTo(0f).Within(1e-3f));
+        }
+
+        [Test]
+        public void CityKeepsClearOfTrackWaterAndLandmarks()
+        {
+            var (def, g, field) = Bosphorus();
+            var opts = new CityLayout.Options { quality = 0 };
+            opts.reserved.Add(new CityLayout.Reserved(-60f, 250f, 80f));
+            var city = new CityLayout(field, def, opts);
+            var again = new CityLayout(field, def, new CityLayout.Options { quality = 0, reserved = { new CityLayout.Reserved(-60f, 250f, 80f) } });
+            Assert.That(city.lots.Count, Is.EqualTo(again.lots.Count), "deterministic");
+            Assert.That(city.lots.Count, Is.InRange(1500, 12000));
+            int near = 0, onAsia = 0, onPeninsula = 0;
+            foreach (var lot in city.lots)
+            {
+                Assert.That(field.IsWater(lot.x, lot.z), Is.False);
+                if (lot.band == 0)
+                {
+                    near++;
+                    float td = field.TrackDistance(lot.x, lot.z, 80f, out _);
+                    Assert.That(td, Is.GreaterThan(7.5f + opts.trackClearance), "building in the track corridor");
+                }
+                string m = field.land.MassAt(lot.x, lot.z);
+                if (m == "asia") onAsia++;
+                if (m == "peninsula") onPeninsula++;
+                float dx = lot.x + 60f, dz = lot.z - 250f;
+                Assert.That(dx * dx + dz * dz, Is.GreaterThan(80f * 80f), "reserved area");
+                var ortakoy = def.FindLandmark("ortakoy_mosque");
+                float mx = lot.x - ortakoy.east, mz = lot.z - ortakoy.north;
+                Assert.That(mx * mx + mz * mz, Is.GreaterThan(55f * 55f), "mosque forecourt");
+                Assert.That(lot.height, Is.InRange(5f, 220f));
+            }
+            Assert.That(near, Is.GreaterThan(800));
+            Assert.That(onAsia, Is.GreaterThan(200), "Asian shore skyline");
+            Assert.That(onPeninsula, Is.GreaterThan(30), "historic peninsula");
+            Assert.That(city.trees.Count, Is.GreaterThan(100));
+        }
+
+        [Test]
+        public void FlagsDroopInCalmAndStreamInWind()
+        {
+            float L = 3f, H = 2f;
+            var calm = FlagCloth.Evaluate(1f, 0.5f, L, H, 0f, 1.3f, 0f);
+            var windy = FlagCloth.Evaluate(1f, 0.5f, L, H, 11f, 1.3f, 0f);
+            Assert.That(calm.Y, Is.LessThan(-1f - 0.8f * L), "hangs down");
+            Assert.That(calm.X, Is.LessThan(0.3f * L));
+            Assert.That(windy.X, Is.GreaterThan(0.85f * L), "streams downwind");
+            Assert.That(Math.Abs(windy.Y + 1f), Is.LessThan(0.4f * L));
+            // The hoist edge stays on the pole at any wind.
+            for (float t = 0f; t < 3f; t += 0.37f)
+            {
+                var hoist = FlagCloth.Evaluate(0f, 0.3f, L, H, 8f, t, 1f);
+                Assert.That(Math.Abs(hoist.X) + Math.Abs(hoist.Z), Is.LessThan(1e-4f));
+                Assert.That(hoist.Y, Is.EqualTo(-0.6f).Within(1e-4f));
+            }
+            // Same wind direction for everyone, rotated with true north (poyraz from NNE).
+            var wind = WindField.ForCircuit(308f);
+            Assert.That(wind.towardsDeg, Is.EqualTo((25f + 180f + 308f) % 360f).Within(1e-3f));
+            for (double t = 0; t < 600; t += 13) Assert.That(wind.Speed(t), Is.InRange(2f, 14f));
+        }
+
+        [Test]
+        public void FerriesAndShipsStayOnTheWater()
+        {
+            var (def, g, field) = Bosphorus();
+            var routes = MarineRoute.ForCircuit(def, field.land);
+            Assert.That(routes.Count, Is.GreaterThanOrEqualTo(4));
+            Assert.That(routes.Exists(r => r.name.StartsWith("Beşiktaş")), Is.True);
+            foreach (var r in routes)
+            {
+                for (double t = 0; t < r.CycleTime; t += 2.0)
+                {
+                    r.Sample(t, 0f, out var p, out _, out _);
+                    Assert.That(field.land.IsLand(p.X, p.Y), Is.False, $"{r.name} on land at t={t}");
+                }
+                if (r.shuttle)
+                {
+                    // Docked at both ends for the dwell time.
+                    r.Sample(r.Length / r.speed + r.dwell * 0.5f, 0f, out _, out _, out float v);
+                    Assert.That(v, Is.EqualTo(0f));
+                }
+            }
+        }
+
+        [Test]
+        public void GoldenHourSunIsInTheWest()
+        {
+            var golden = SunModel.Get(TimeOfDay.GoldenHour);
+            Assert.That(golden.azimuthTrue, Is.InRange(235f, 275f));
+            Assert.That(golden.elevation, Is.InRange(5f, 15f));
+            Assert.That(SunModel.Get(TimeOfDay.Night).artificial, Is.EqualTo(1f));
+            Assert.That(SunModel.Get(TimeOfDay.Day).artificial, Is.EqualTo(0f));
+            // Game frame: true north at 308° => the western sun sits at 200° (towards -z/-x).
+            Assert.That(SunModel.GameAzimuth(golden, 308f), Is.EqualTo((252f + 308f) % 360f).Within(1e-3f));
+            var street = AmbienceMixer.Evaluate(400f, 600f, 0.9f, 20f);
+            var quay = AmbienceMixer.Evaluate(20f, 60f, 0.1f, 2f);
+            Assert.That(street.reverb, Is.GreaterThan(0.8f));
+            Assert.That(quay.reverb, Is.EqualTo(0f));
+            Assert.That(quay.water, Is.GreaterThan(street.water));
+            Assert.That(quay.crowd, Is.GreaterThan(0.5f));
         }
     }
 }

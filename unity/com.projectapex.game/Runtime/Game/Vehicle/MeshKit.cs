@@ -291,6 +291,21 @@ namespace Apex.Game
             }
         }
 
+        /// <summary>Quad with explicit UVs whose front face points along outward (environment meshes).</summary>
+        public void QuadFacing(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector2 ua, Vector2 ub, Vector2 uc, Vector2 ud, Vector3 outward)
+        {
+            int ia = V(a, ua), ib = V(b, ub), ic = V(c, uc), id = V(d, ud);
+            TriFacing(ia, ib, ic, outward);
+            TriFacing(ia, ic, id, outward);
+        }
+
+        /// <summary>Triangle with explicit UVs whose front face points along outward.</summary>
+        public void TriangleFacing(Vector3 a, Vector3 b, Vector3 c, Vector2 ua, Vector2 ub, Vector2 uc, Vector3 outward)
+        {
+            int ia = V(a, ua), ib = V(b, ub), ic = V(c, uc);
+            TriFacing(ia, ib, ic, outward);
+        }
+
         /// <summary>Adds a triangle whose front face (Unity convention) points along outward.</summary>
         void TriFacing(int a, int b, int c, Vector3 outward)
         {
