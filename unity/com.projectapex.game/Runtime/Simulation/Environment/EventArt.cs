@@ -88,6 +88,48 @@ namespace Apex.Environment
         /// Tileable İznik-inspired tile: a central four-petal tulip rosette, quarter rosettes in the
         /// corners (they join across tile edges), turquoise leaves and a thin grout line.
         /// </summary>
+        /// <summary>
+        /// Fence banner (w x h, 3:1 recommended) of the event identity, without text: variant 0 navy with
+        /// red crescent rings and a gold band, 1 red with ivory rings and a navy band, 2 turquoise with
+        /// ivory rings and a gold band; the emblem sits at the left end.
+        /// </summary>
+        public static float[] Banner(int variant, int w, int h)
+        {
+            float[][] bg = { Navy, Red, Turquoise };
+            float[][] fg = { Red, Ivory, Ivory };
+            float[][] band = { Gold, Navy, Gold };
+            int v = ((variant % 3) + 3) % 3;
+            var px = new float[w * h * 4];
+            int en = h;
+            var emblem = Emblem(en);
+            float aa = 1.5f / h;
+            for (int j = 0; j < h; j++)
+                for (int i = 0; i < w; i++)
+                {
+                    int k = (j * w + i) * 4;
+                    float x = (i + 0.5f) / h, y = (j + 0.5f) / h;   // units of banner height
+                    Over(px, k, bg[v], 1f);
+                    // Accent band near the bottom.
+                    Over(px, k, band[v], Smooth(0f, MathF.Abs(y - 0.14f) - 0.045f, aa));
+                    // Interlocking crescent rings along the banner (offset discs), right of the emblem.
+                    if (x > 1.15f)
+                    {
+                        float cx = 1.55f + MathF.Round((x - 1.55f) / 0.62f) * 0.62f;
+                        float dOuter = MathF.Sqrt((x - cx) * (x - cx) + (y - 0.56f) * (y - 0.56f)) - 0.24f;
+                        float dInner = MathF.Sqrt((x - cx - 0.06f) * (x - cx - 0.06f) + (y - 0.56f) * (y - 0.56f)) - 0.19f;
+                        Over(px, k, fg[v], Smooth(0f, MathF.Max(dOuter, -dInner), aa));
+                    }
+                    // Emblem at the left end.
+                    if (i < en)
+                    {
+                        int e = (j * en + i) * 4;
+                        Over(px, k, new[] { emblem[e], emblem[e + 1], emblem[e + 2] }, emblem[e + 3]);
+                    }
+                    px[k + 3] = 1f;
+                }
+            return px;
+        }
+
         public static float[] IznikTile(int n)
         {
             var px = new float[n * n * 4];

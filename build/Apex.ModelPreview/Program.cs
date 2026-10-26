@@ -82,6 +82,111 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     Export("freighter", l => l.Freighter());
     return;
 }
+if (Array.IndexOf(args, "--kit") >= 0)
+{
+    // Circuit kit previews: kit_catalog_lod{0,1,2}.obj (every module side by side) and
+    // kit_t1_lod{0,1,2}.obj (the real placements and road surface around T1 Ortaköy, recentred).
+    var ic = CultureInfo.InvariantCulture;
+    void Write(string file, Dictionary<string, MeshBuilder> parts)
+    {
+        var sb = new StringBuilder();
+        int vb = 1, total = 0;
+        foreach (var kv in parts)
+        {
+            if (kv.Value.TriangleCount == 0) continue;
+            sb.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+            foreach (var v in kv.Value.Vertices) sb.AppendLine(string.Format(ic, "v {0:F4} {1:F4} {2:F4}", v.x, v.y, v.z));
+            foreach (var uv in kv.Value.UVs) sb.AppendLine(string.Format(ic, "vt {0:F4} {1:F4}", uv.x, uv.y));
+            var ts = kv.Value.Triangles;
+            for (int i = 0; i < ts.Count; i += 3) sb.AppendLine($"f {ts[i] + vb}/{ts[i] + vb} {ts[i + 1] + vb}/{ts[i + 1] + vb} {ts[i + 2] + vb}/{ts[i + 2] + vb}");
+            vb += kv.Value.VertexCount;
+            total += kv.Value.TriangleCount;
+        }
+        Directory.CreateDirectory(outDir);
+        File.WriteAllText(Path.Combine(outDir, file), sb.ToString());
+        Console.WriteLine($"{file}: {total} triangles");
+    }
+    MeshBuilder Get(Dictionary<string, MeshBuilder> parts, string k) { if (!parts.TryGetValue(k, out var m)) parts[k] = m = new MeshBuilder(); return m; }
+    var modules = (Apex.Tracks.TrackKitLayout.Module[])Enum.GetValues(typeof(Apex.Tracks.TrackKitLayout.Module));
+    for (int lod = 0; lod < 3; lod++)
+    {
+        var parts = new Dictionary<string, MeshBuilder>();
+        float x = 0f;
+        foreach (var m in modules)
+        {
+            var one = new Dictionary<string, MeshBuilder>();
+            TrackKitGeometry.Module(m, k => Get(one, k), lod, 0);
+            int tris = 0;
+            foreach (var kv in one) { float ox = x; Get(parts, kv.Key).Append(kv.Value, v => new Vector3(v.x + ox, v.y, v.z)); tris += kv.Value.TriangleCount; }
+            Console.WriteLine($"  LOD{lod} {m,-14} {tris,6} tris");
+            x += m == Apex.Tracks.TrackKitLayout.Module.TyreStack ? 2.2f : 1.8f;
+        }
+        foreach (var (name, build) in new (string, Action<TrackKitGeometry.Parts>)[] { ("MarshalPost", B => TrackKitGeometry.MarshalPost(B, lod)), ("FlagPanel", B => TrackKitGeometry.FlagPanelHousing(B, lod)) })
+        {
+            var one = new Dictionary<string, MeshBuilder>();
+            build(k => Get(one, k));
+            int tris = 0;
+            foreach (var kv in one) { float ox = x + 1.5f; Get(parts, kv.Key).Append(kv.Value, v => new Vector3(v.x + ox, v.y, v.z)); tris += kv.Value.TriangleCount; }
+            Console.WriteLine($"  LOD{lod} {name,-14} {tris,6} tris");
+            x += 3.6f;
+        }
+        Write($"kit_catalog_lod{lod}.obj", parts);
+    }
+    // T1 Ortaköy: lap metres 1700-2250 (the premium vertical slice).
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_a.json"));
+    var def = Apex.Tracks.CircuitDefinition.FromJson(json);
+    var g = Apex.Tracks.TrackGeometry.FromDefinition(def);
+    var su = new Apex.Vehicle.VehicleSetup();
+    var line = new Apex.AI.RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
+    var plan = new Apex.Tracks.TrackInfrastructurePlan(g, g.CornersFor(def), line.offsets, line.speed);
+    var surface = new Apex.Tracks.RoadSurface(g, def, plan.kerbs.left, plan.kerbs.right, plan.kerbs.height);
+    var kit = new Apex.Tracks.TrackKitLayout(g, plan, surface);
+    float from = g.Wrap(1700f + def.startLineDistance), to = g.Wrap(2250f + def.startLineDistance);
+    bool InWindow(float d) => Apex.Core.ApexMath.PosMod(d - from, g.Length) < Apex.Core.ApexMath.PosMod(to - from, g.Length);
+    var c0 = g.PositionAt(g.Wrap(2150f + def.startLineDistance));
+    Vector3 Local(System.Numerics.Vector3 v) => new Vector3(v.X - c0.X, v.Y - c0.Y, v.Z - c0.Z);
+    var cache = new Dictionary<(Apex.Tracks.TrackKitLayout.Module, int, int), Dictionary<string, MeshBuilder>>();
+    for (int lod = 0; lod < 3; lod++)
+    {
+        var parts = new Dictionary<string, MeshBuilder>();
+        int placed = 0;
+        foreach (var p in kit.placements)
+        {
+            if (!InWindow(p.distance)) continue;
+            var key = (p.module, lod, p.variant);
+            if (!cache.TryGetValue(key, out var mod)) { mod = new Dictionary<string, MeshBuilder>(); TrackKitGeometry.Module(p.module, k => Get(mod, k), lod, p.variant); cache[key] = mod; }
+            var f = TrackKitGeometry.Transform(p);
+            foreach (var kv in mod) Get(parts, kv.Key).Append(kv.Value, v => { var w = f(v); return new Vector3(w.x - c0.X, w.y - c0.Y, w.z - c0.Z); });
+            placed++;
+        }
+        // Road, kerbs and run-off of the same stretch (the RoadSurface triangles).
+        foreach (var (sm, mats) in new[] { (surface.road, new[] { "Asphalt", "Line" }), (surface.kerbs, new[] { "KerbRed", "KerbWhite" }), (surface.runoff, new[] { "RunoffAsphalt" }) })
+            for (int s = 0; s < sm.triangles.Length; s++)
+            {
+                var mb = Get(parts, mats[Math.Min(s, mats.Length - 1)]);
+                var tri = sm.triangles[s];
+                for (int i = 0; i < tri.Count; i += 3)
+                {
+                    var a = sm.vertices[tri[i]]; var b = sm.vertices[tri[i + 1]]; var c = sm.vertices[tri[i + 2]];
+                    var pr = g.Project((a + b + c) / 3f);
+                    if (!InWindow(pr.distance) || MathF.Abs(pr.lateral) > 40f) continue;
+                    mb.TriangleFacing(Local(a), Local(b), Local(c), new Vector2(sm.uvs[tri[i]].X, sm.uvs[tri[i]].Y), new Vector2(sm.uvs[tri[i + 1]].X, sm.uvs[tri[i + 1]].Y), new Vector2(sm.uvs[tri[i + 2]].X, sm.uvs[tri[i + 2]].Y), Vector3.up);
+                }
+            }
+        if (lod == 0)
+        {
+            Console.WriteLine($"T1 window: {placed} module placements");
+            foreach (float lap in new[] { 1900f, 2000f, 2080f, 2150f, 2200f })
+            {
+                float d = g.Wrap(lap + def.startLineDistance);
+                var p0 = Local(g.PositionAt(d)); var t = g.TangentAt(d); var r = g.RightAt(d);
+                Console.WriteLine(string.Format(ic, "view lap {0}: pos {1:F1},{2:F1},{3:F1} fwd {4:F2},{5:F2} right {6:F2},{7:F2} width {8:F1}", lap, p0.x, p0.y, p0.z, t.X, t.Z, r.X, r.Z, g.WidthAt(d)));
+            }
+        }
+        Write($"kit_t1_lod{lod}.obj", parts);
+    }
+    return;
+}
 if (Array.IndexOf(args, "--environment") >= 0)
 {
     // Bosphorus environment as one OBJ (terrain, road, city, trees, landmarks) plus budget stats.
@@ -160,28 +265,23 @@ if (Array.IndexOf(args, "--environment") >= 0)
                 }
             }
         }
-        int step = Math.Max(1, (int)MathF.Round(4f / g.Spacing));
-        bool IsGate(float d) { foreach (float gd in plan.gates) if (Apex.Core.ApexMath.PosMod(d - gd, g.Length) < 3.6f) return true; return false; }
-        foreach (int side in new[] { -1, 1 })
+        // Barriers, fence, banners and impact protection: the circuit kit at its mid detail level (as seen from afar).
         {
-            float[] w = side < 0 ? wl : wr;
-            int runStart = 0;
-            int Type(int i) { if (def.pit != null && side == def.pit.side && InPit(i)) return 3; float r = plan.RunoffAt(i, side); return r < 1f ? 2 : r >= 4f ? 1 : 0; }
-            for (int i = 0; i <= nS; i++)
+            var surf = new Apex.Tracks.RoadSurface(g, def, plan.kerbs.left, plan.kerbs.right, plan.kerbs.height);
+            var kitLayout = new Apex.Tracks.TrackKitLayout(g, plan, surf);
+            var kitCache = new Dictionary<(Apex.Tracks.TrackKitLayout.Module, int), Dictionary<string, MeshBuilder>>();
+            foreach (var kp in kitLayout.placements)
             {
-                if (i < nS && Type(i) == Type(runStart)) continue;
-                int t = Type(runStart);
-                if (t == 1) TrackInfrastructureGeometry.Guardrail(B(TrackInfrastructureGeometry.Armco), B(TrackInfrastructureGeometry.Steel), g, w, side, runStart, i + 1, -0.12f);
-                else TrackInfrastructureGeometry.ConcreteBarrier(B(TrackInfrastructureGeometry.Concrete), g, w, side, runStart, i + 1, step, -0.12f);
-                if (t <= 1) TrackInfrastructureGeometry.CatchFence(B, g, w, side, runStart, i + 1, -0.12f, IsGate);
-                runStart = i;
+                if (!kitCache.TryGetValue((kp.module, kp.variant), out var mod))
+                {
+                    mod = new Dictionary<string, MeshBuilder>();
+                    var local = mod;
+                    TrackKitGeometry.Module(kp.module, k2 => { if (!local.TryGetValue(k2, out var m2)) local[k2] = m2 = new MeshBuilder(); return m2; }, 1, kp.variant);
+                    kitCache[(kp.module, kp.variant)] = mod;
+                }
+                var f = TrackKitGeometry.Transform(kp);
+                foreach (var kv in mod) B(kv.Key).Append(kv.Value, f);
             }
-        }
-        foreach (var pr in plan.protections)
-        {
-            float[] w = pr.side < 0 ? wl : wr;
-            if (pr.kind == Apex.Tracks.TrackInfrastructurePlan.ProtectionKind.TyreStack) TrackInfrastructureGeometry.TyreStacks(B, g, w, pr.side, pr.from, pr.to, -0.12f);
-            else TrackInfrastructureGeometry.EnergyModules(B, g, w, pr.side, pr.from, pr.to, -0.12f);
         }
         foreach (var pa in plan.patches) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Patch), g, g.Wrap(pa.distance), g.Wrap(pa.distance + pa.length), pa.lateral - pa.width * 0.5f, pa.lateral + pa.width * 0.5f, 0.07f, 0f);
         foreach (var (f, t2, lat) in plan.laneDashes) TrackInfrastructureGeometry.RoadDecal(B(TrackInfrastructureGeometry.Dash), g, g.Wrap(f), g.Wrap(t2), lat - 0.07f, lat + 0.07f, 0.072f, 0f);
@@ -193,7 +293,7 @@ if (Array.IndexOf(args, "--environment") >= 0)
             float[] w = po.side < 0 ? wl : wr;
             var fwd = new Vector3(g.Tangents[i].X, 0f, g.Tangents[i].Z).normalized;
             var rot = Quaternion.LookRotation(-fwd);
-            void Place(Action<TrackInfrastructureGeometry.Parts> build, Vector3 at)
+            void Place(Action<TrackKitGeometry.Parts> build, Vector3 at)
             {
                 var tmp = new Dictionary<string, MeshBuilder>();
                 MeshBuilder T(string key) { if (!tmp.TryGetValue(key, out var mb2)) tmp[key] = mb2 = new MeshBuilder(); return mb2; }
@@ -208,8 +308,8 @@ if (Array.IndexOf(args, "--environment") >= 0)
                     }
                 }
             }
-            Place(TrackInfrastructureGeometry.MarshalShelter, Q(i, po.side * (w[i] + 2.3f), -0.12f));
-            Place(T2 => TrackInfrastructureGeometry.PanelHousing(T2(TrackInfrastructureGeometry.Housing)), Q(i, po.side * (w[i] + 0.75f), -0.12f));
+            Place(T2 => TrackKitGeometry.MarshalPost(T2, 1), Q(i, po.side * (w[i] + 2.3f), -0.12f));
+            Place(T2 => TrackKitGeometry.FlagPanelHousing(T2, 1), Q(i, po.side * (w[i] + 0.75f), -0.12f));
         }
         // Event identity: gantry, pit building with podium and trophy, timing tower, race control (EventLayout as in the game).
         if (def.identity == Apex.Race.EventIdentity.Bosphorus)
