@@ -108,6 +108,7 @@ namespace Apex.Game
             AddSurface(root.transform, surface.runoff, g.RunoffLeft != null ? "RunoffAsphalt" : "Grass");
             // Collision walls; the visible barriers come from TrackInfrastructureBuilder.
             AddSurface(root.transform, surface.barriers, "Wall", "WallStripe").GetComponent<MeshRenderer>().enabled = false;
+            TerrainSurface.Register();
             AddSurface(root.transform, surface.skirt, "Ground");
             ci.WallLeft = surface.wallLeft;
             ci.WallRight = surface.wallRight;

@@ -496,28 +496,48 @@ namespace Apex.Game
             return tex;
         }
 
-        /// <summary>Diamond-mesh catch fence (alpha-tested, no blending overdraw).</summary>
-        static Material FenceMaterial()
+        static Texture2D catchFenceTexture;
+
+        /// <summary>
+        /// Chain-link mesh at its real scale: 256 px per 2 m UV unit (the fence panels map 0.5 UV per metre),
+        /// 20 diamonds = 100 mm mesh, galvanised wire about 4 % of a cell wide, antialiased. Mipmaps average the
+        /// wire coverage (~25 %), so a distant fence reads as a light grey veil instead of a dark wall.
+        /// </summary>
+        public static Texture2D CatchFenceTexture()
         {
-            const int n = 64;
-            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "CatchFenceMesh", wrapMode = TextureWrapMode.Repeat };
+            if (catchFenceTexture != null) return catchFenceTexture;
+            const int n = 256;
+            const float cells = 20f, wire = 0.6f;   // half width in pixels
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "CatchFenceMesh", wrapMode = TextureWrapMode.Repeat, anisoLevel = 8 };
             var px = new Color[n * n];
+            float c = n / cells, spacing = c / Mathf.Sqrt(2f);
             for (int y = 0; y < n; y++)
                 for (int x = 0; x < n; x++)
                 {
-                    int d1 = (x + y) % 16, d2 = (x - y + 64) % 16;
-                    bool wire = d1 < 2 || d2 < 2 || y < 2;
-                    px[y * n + x] = wire ? new Color(0.62f, 0.64f, 0.66f, 1f) : new Color(0f, 0f, 0f, 0f);
+                    // Distance (px) to the nearest wire of each diagonal family.
+                    float a = (x + y + 1f) / c, b = (x - y + n) / c;
+                    float da = Mathf.Abs(a - Mathf.Round(a)) * spacing, db = Mathf.Abs(b - Mathf.Round(b)) * spacing;
+                    float cover = Mathf.Max(Mathf.Clamp01(wire + 0.5f - da), Mathf.Clamp01(wire + 0.5f - db));
+                    px[y * n + x] = new Color(0.62f, 0.64f, 0.66f, cover);
                 }
             tex.SetPixels(px);
             tex.Apply(true);
-            var m = Lit("CatchFence", Color.white, 0.4f, tex);
-            if (m.HasProperty("_AlphaClip")) m.SetFloat("_AlphaClip", 1f);
-            if (m.HasProperty("_Cutoff")) m.SetFloat("_Cutoff", 0.5f);
-            m.EnableKeyword("_ALPHATEST_ON");
-            m.renderQueue = (int)RenderQueue.AlphaTest;
+            return catchFenceTexture = tex;
+        }
+
+        /// <summary>
+        /// Catch-fence mesh, alpha-blended (not alpha-tested): thin wires stay continuous at every distance and
+        /// fade to a veil; it casts no shadow (URP transparents do not), which the thin mesh hardly does anyway.
+        /// </summary>
+        public static Material CatchFenceMaterial(string name)
+        {
+            var m = Transparent(Lit(name, Color.white, 0.45f, CatchFenceTexture()));
+            if (m.HasProperty("_Cull")) m.SetFloat("_Cull", 0f);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", 0.6f);
             return m;
         }
+
+        static Material FenceMaterial() => CatchFenceMaterial("CatchFence");
 
         /// <summary>
         /// Rubber atlas: <see cref="TrackInfrastructureGeometry.RubberLevels"/> bands across u, one per opacity

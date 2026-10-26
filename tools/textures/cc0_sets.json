@@ -26,6 +26,21 @@
       "name": "pavement",
       "polyhaven": "patterned_concrete_pavers",
       "paint_base": false
+    },
+    {
+      "name": "terrain_grass",
+      "polyhaven": "leafy_grass",
+      "paint_base": false
+    },
+    {
+      "name": "terrain_soil",
+      "polyhaven": "forest_ground_04",
+      "paint_base": false
+    },
+    {
+      "name": "terrain_wall",
+      "polyhaven": "old_stone_wall",
+      "paint_base": false
     }
   ]
 }

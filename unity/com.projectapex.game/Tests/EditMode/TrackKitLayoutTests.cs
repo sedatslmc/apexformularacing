@@ -108,7 +108,39 @@ namespace Apex.Tests
                 Assert.That(p.side == pitSide && surface.pitMask[i] && surface.pitMask[h], Is.False, $"fence on the pit wall at {p.distance:F0} m");
             }
             TestContext.WriteLine($"{panels} fence posts/panels, {gates} gates of {plan.gates.Count} planned");
-            Assert.That(gates, Is.GreaterThan(plan.gates.Count / 2));
+            // Gates are planned every 160 m along the lap; only the fenced stretches (~40 %) get them.
+            Assert.That(gates, Is.GreaterThan(plan.gates.Count / 4));
+        }
+
+        [Test]
+        public void CatchFenceStandsWhereCarsArriveFastNotAlongTheWholeLap()
+        {
+            var (g, plan, surface, kit) = Kit();
+            var def = surface.definition;
+            float fenced = 0f, barrier = 0f;
+            foreach (var p in kit.placements)
+            {
+                if (p.module == TrackKitLayout.Module.FencePanel || p.module == TrackKitLayout.Module.FenceGate) fenced += TrackKitLayout.FencePostSpacing;
+                if (p.module == TrackKitLayout.Module.BarrierBlock) barrier += TrackKitLayout.BlockLength;
+                if (p.module == TrackKitLayout.Module.GuardrailSpan) barrier += TrackKitLayout.GuardrailSpanLength;
+            }
+            float share = fenced / barrier;
+            TestContext.WriteLine($"fence on {share:P0} of the barrier length ({fenced:F0} m of {barrier:F0} m)");
+            Assert.That(share, Is.InRange(0.3f, 0.8f), "a fence where needed, open views elsewhere");
+            // The outside of every corner is fenced at the apex; the start/finish straight on both sides.
+            foreach (var c in g.CornersFor(def))
+            {
+                var outside = c.right ? plan.fenceLeft : plan.fenceRight;
+                Assert.That(outside[c.index], Is.True, $"outside of the corner at {g.Distances[c.index]:F0} m");
+            }
+            bool PanelNear(float d, int side) => kit.placements.Exists(p => p.module == TrackKitLayout.Module.FencePanel && p.side == side
+                && Math.Abs(ApexMath.PosMod(p.distance - d + g.Length * 0.5f, g.Length) - g.Length * 0.5f) < 12f);
+            int k = g.IndexAt(def.startLineDistance + 100f);
+            foreach (int side in new[] { -1, 1 })
+            {
+                bool pitWall = def.pit != null && side == def.pit.side && surface.pitMask[k];
+                Assert.That(PanelNear(g.Wrap(def.startLineDistance + 100f), side) || pitWall || plan.RunoffAt(k, side) < 1f, "main grandstand straight fenced");
+            }
         }
 
         [Test]

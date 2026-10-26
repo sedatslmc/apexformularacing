@@ -172,6 +172,7 @@ namespace Apex.Game
             {
                 environment.SetWetness(wet);
                 environment.RainIntensity = rainI;
+                TerrainSurface.SetWetness(wet);
                 // Heavy overcast and rain switch some lights on early.
                 environment.SetArtificialLight(artificial);
             }

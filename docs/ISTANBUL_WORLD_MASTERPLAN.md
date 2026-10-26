@@ -69,6 +69,8 @@
 ### Phase 1 – Fundament
 | Aufgabe | Art | Status |
 |---|---|---|
+| Graue Geländewände ersetzen: Hangform (Plateau + max. ~18°), Gelände-Shader Gras/Erde/Bruchstein (`TERRAIN.md`) | Code + Shader + Assets (frei) | **implementiert, getestet (63 % → 6 % Wandprofile)**; Shader nicht kompiliert, Editor-Prüfung offen |
+| Fangzaun nur wo nötig (Kurvenaußen, > 234 km/h, Start/Ziel), echtes 100-mm-Gewebe, transparent | Code | **implementiert, getestet (93 % → 71 % der Barrierenlänge)**; Editor-Prüfung offen |
 | Laternen, Gehwege, Schilder, Flaggen gegen die Sperrzone prüfen | Code | **getestet** |
 | Validierung auf alle weiteren Objekte ausdehnen (Ampeln, Poller, Bänke, Bäume an Straßen, Werbetafeln), sobald es sie gibt; ein gemeinsamer Test pro Objektart | Code | geplant |
 | Bodenhaftung: jedes Objekt am Gelände bzw. der Straße ausrichten (kein Schweben), automatischer Test über alle Platzierungen | Code | geplant |

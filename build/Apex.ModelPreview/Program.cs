@@ -229,6 +229,20 @@ if (Array.IndexOf(args, "--kit") >= 0)
                     mb.TriangleFacing(Local(a), Local(b), Local(c), new Vector2(sm.uvs[tri[i]].X, sm.uvs[tri[i]].Y), new Vector2(sm.uvs[tri[i + 1]].X, sm.uvs[tri[i + 1]].Y), new Vector2(sm.uvs[tri[i + 2]].X, sm.uvs[tri[i + 2]].Y), Vector3.up);
                 }
             }
+        // Terrain around the window (the RoadSurface terrain triangles within 320 m of the T1 centre).
+        if (lod == 0)
+        {
+            var terrainMesh = surface.BuildTerrain(new Apex.Environment.TerrainField(g, def));
+            var tmb = Get(parts, "FarGround");
+            var tri0 = terrainMesh.triangles[0];
+            for (int i = 0; i < tri0.Count; i += 3)
+            {
+                var a = terrainMesh.vertices[tri0[i]]; var b = terrainMesh.vertices[tri0[i + 1]]; var c = terrainMesh.vertices[tri0[i + 2]];
+                var m = (a + b + c) / 3f;
+                if ((m.X - c0.X) * (m.X - c0.X) + (m.Z - c0.Z) * (m.Z - c0.Z) > 320f * 320f) continue;
+                tmb.TriangleFacing(Local(a), Local(b), Local(c), new Vector2(a.X / 40f, a.Z / 40f), new Vector2(b.X / 40f, b.Z / 40f), new Vector2(c.X / 40f, c.Z / 40f), Vector3.up);
+            }
+        }
         // Rubber strips (racing-line tracks, groove and lock-up streaks) inside the window.
         {
             var rub = new MeshBuilder();

@@ -811,7 +811,7 @@ namespace Apex.Game
         };
 
         static readonly Dictionary<Color, Material> solids = new Dictionary<Color, Material>();
-        static Texture2D facadeAlbedo, facadeEmission, waterNormal, fenceTex, flagTex;
+        static Texture2D facadeAlbedo, facadeEmission, waterNormal, flagTex;
         public static Material Flag { get; private set; }
 
         public static Material Solid(Color c)
@@ -945,23 +945,6 @@ namespace Apex.Game
             return water;
         }
 
-        static void BuildFenceTexture()
-        {
-            const int n = 64;
-            fenceTex = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "CatchFence", wrapMode = TextureWrapMode.Repeat };
-            var px = new Color[n * n];
-            for (int y = 0; y < n; y++)
-                for (int x = 0; x < n; x++)
-                {
-                    // Diamond mesh: wires along both diagonals, plus a horizontal cable.
-                    int d1 = (x + y) % 16, d2 = (x - y + 64) % 16;
-                    bool wire = d1 < 2 || d2 < 2 || y < 2;
-                    px[y * n + x] = wire ? new Color(0.62f, 0.64f, 0.66f, 1f) : new Color(0f, 0f, 0f, 0f);
-                }
-            fenceTex.SetPixels(px);
-            fenceTex.Apply(true);
-        }
-
         static void BuildFlag()
         {
             const int h = 128;
@@ -984,7 +967,6 @@ namespace Apex.Game
         {
             if (facadeAlbedo == null) BuildFacadeTextures();
             if (waterNormal == null) BuildWaterNormal();
-            if (fenceTex == null) BuildFenceTexture();
             if (flagTex == null) BuildFlag();
             for (int i = 0; i < CityLayout.Styles; i++)
             {
@@ -999,13 +981,7 @@ namespace Apex.Game
                 env.AddWettable(m);
             }
             ApexMaterials.Register("EnvWater", WaterMaterial());
-            var fence = new Material(ApexMaterials.LitShader()) { name = "Env_CatchFence", enableInstancing = true };
-            SetTexture(fence, "_BaseMap", "_MainTex", fenceTex);
-            SetColour(fence, Color.white);
-            if (fence.HasProperty("_AlphaClip")) fence.SetFloat("_AlphaClip", 1f);
-            if (fence.HasProperty("_Cutoff")) fence.SetFloat("_Cutoff", 0.5f);
-            fence.EnableKeyword("_ALPHATEST_ON");
-            fence.renderQueue = (int)RenderQueue.AlphaTest;
+            var fence = TrackInfrastructureBuilder.CatchFenceMaterial("Env_CatchFence");
             ApexMaterials.Register(EnvironmentGeometry.CatchFence, fence);
             // Night lights (moderate intensities: no neon, no blown-out bloom).
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.LampHead), new Color(1f, 0.82f, 0.58f) * 2.2f);
