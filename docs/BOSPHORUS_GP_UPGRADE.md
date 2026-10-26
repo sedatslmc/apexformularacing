@@ -2,6 +2,9 @@
 
 Auftrag: „Ultimate Bosphorus Grand Prix Upgrade“ (2026-10-26). Statusstufen: **geplant / implementiert / getestet / poliert**.
 
+> **Pausiert für P0:** Die grafischen Phasen ruhen, bis die Reparatur von Fahrbahn und Kollision in Unity bestätigt ist
+> (`docs/BOSPHORUS_ROAD_FIX.md`).
+
 > **Wichtige Einschränkung:** In der Cloud-Umgebung, in der ich arbeite, gibt es **keinen Unity-Editor**.
 > - Geprüft wird per Kompilierung gegen Unity-2021.3-Referenzen, NUnit-Tests (`tools/verify.sh`), den Simulationsprüfstand (`build/Apex.Tuning`) und Offline-Vorschauen (three.js, `tools/carrender`).
 > - **Echte Unity-Screenshots und Messungen auf Mobilgeräten muss jemand mit Unity 6 bzw. einem Gerät machen.** Offline-Vorschauen sind kein Beweis für das Aussehen in Unity und werden nirgends als solcher bezeichnet.
