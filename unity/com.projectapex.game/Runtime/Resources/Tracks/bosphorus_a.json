@@ -3,6 +3,7 @@
  "name": "Bosphorus Grand Prix",
  "description": "Temporär gesperrter Stadtkurs in Istanbul entlang realer Straßen (Variante A): Dolmabahçe, Beşiktaş, Çırağan, Ortaköy, Palanga, Yıldız, Barbaros, Akaretler, Bayıldım, Kabataş. Straßenachsen © OpenStreetMap-Mitwirkende (ODbL), Gelände Copernicus DEM. Breiten und Kreuzungen für das Rennen angepasst.",
  "direction": "counter_clockwise",
+ "identity": "bosphorus",
  "default_width": 11.0,
  "sector_fractions": [
   0.0393,

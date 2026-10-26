@@ -118,6 +118,50 @@ Die Vorschau zeigt keine Texturen (Asphalt, Beton) und keine LED-Tafeln, nur Geo
 - **KI kennt die Wände nicht:** Phase F.
 - **Kerbs:** Bei 5 cm Höhe an langsamen Kurven muss das Rumpeln in Unity geprüft werden. Auf dem Prüfstand-Rig gibt es keine Kerbs.
 
+## Phase C: Bosphorus-GP-Identität (implementiert, Logik getestet, in Unity noch nicht gesehen)
+
+Gilt für Strecken mit `"identity": "bosphorus"` in der JSON (nur `bosphorus_a`). Andere Strecken behalten ihre neutrale Ausstattung, bekommen aber ebenfalls funktionierende Startlichter.
+Aufbau wie in Phase B: reine Logik und Platzierung in `Apex.Simulation` (`EventIdentity`, `EventArt`, `EventLayout`, getestet), Meshes in `EventGeometry`, Unity-Objekte in `EventBrandingBuilder` und `EventComponents`.
+
+| Baustein | Umsetzung | Status |
+|---|---|---|
+| Palette | #C8102E Rot, #087F8C Türkis, #C9A66B Gold, #1D2835 Navy, #F0E9D9 Elfenbein als Material-Schlüssel `Event*`; Tribünen jetzt türkis mit roten Akzentreihen und elfenbeinfarbenen Dächern | implementiert |
+| Emblem | eigenes, prozedurales Logo (`EventArt.Emblem`): Navy-Scheibe mit Goldrand, Bosporus als türkise S-Kurve, Hängebrücke in Gold, roter Apex-Bogen. Keine Schrift im Bild; Schriftzüge als Text daneben. `docs/img/bosphorus_gp_emblem.png` | implementiert, getestet (Form, Palette) |
+| Startportal | Pylonen im Stil der Brückentürme (Navy, Gold-Querträger), Tragseil-Bogen mit Hängern, Träger mit Emblem und „BOSPHORUS / GRAND PRIX“ auf beiden Seiten, fünf Lichtkästen mit je zwei Lampen | implementiert |
+| Startlichter | gekoppelt an die vorhandene Startlogik (`RaceDirector.LightsOn`): ein Lampenpaar pro Sekunde, alle aus beim Start; außerhalb der Startphase dunkel. Auch das neutrale Portal der anderen Strecken leuchtet jetzt (vorher statische rote Kugeln) | implementiert, Logik getestet |
+| Boxengebäude | 201 m, 20 Garagen genau an den 20 Boxenplätzen, Navy-Sturz mit Elfenbein-Band, verglastes Obergeschoss mit Emblemen, „BOSPHORUS GRAND PRIX · ISTANBUL“ und Slogan, türkises Vordach, Dachterrasse mit Geländer, Stirnwände mit İznik-inspirierten Fliesen. Ersetzt den bisherigen Quader, Kollision bleibt | implementiert |
+| Podium und Pokal | Podium auf der Dachterrasse an der Startlinie, zur Strecke gerichtet, mit Fliesenpaneelen und Emblem; darauf der eigene Pokal (Sockel, zwei Pylonen mit Tragseil, gedrehtes türkises Band als Meerenge, goldener Apex-Winkel). Eine Siegerehrung gibt es im Spiel nicht, das Podium ist Kulisse | implementiert |
+| Zeitturm | 15-m-Pylon vor dem Boxengebäude (Richtung Boxeneinfahrt), zu den ankommenden Autos gedreht; zeigt live die Top 10 (Position und Kürzel) aus `RaceDirector.Standings`, außerhalb von Rennen leer | implementiert, Logik getestet |
+| Rennleitung | zweigeschossiges Gebäude nach dem Boxengebäude, Schild „YARIŞ KONTROL“ | implementiert |
+| LED-Wände | die Wände hinter den Haupttribünen zeigen jetzt echte Inhalte: „YARIŞ BAŞLIYOR“ während der Startampel, „GÜVENLİK ARACI“/„SANAL GÜVENLİK ARACI“ bei SC/VSC, „DAMALI BAYRAK“ im Ziel, sonst im Wechsel Event-Botschaften und „LİDER XYZ · TUR n/m“ | implementiert, Logik getestet |
+| Banner | jede dritte Bandenwerbung an Start und Uferstraße trägt eine türkische Botschaft in Event-Farben: „İSTANBUL'A HOŞ GELDİNİZ“, „BOĞAZ GRAND PRIX“, „HIZIN BULUŞMA NOKTASI“, „YARIŞ BAŞLIYOR“; dazwischen weiter die erfundenen Sponsoren | implementiert |
+| İznik-Muster | kachelbare Fliese (`EventArt.IznikTile`): Tulpen-Rosette in Rot, Eck-Rosetten und Blätter in Türkis, Navy-Konturen, Fugen. Sparsam eingesetzt: Stirnwände des Boxengebäudes, Sockel des Zeitturms, Rennleitung, Podium. `docs/img/bosphorus_gp_iznik_tile.png` | implementiert, getestet (nahtlos) |
+| Fahnen | türkische Fahnen auf beiden Enden des Boxendachs, je drei Fahnen am Beşiktaş-Platz (beim Anleger) und an der Strecke nahe Ortaköy (≈ 190 m von der Moschee, nächster Streckenpunkt). Die bisherigen Fahnen am alten Startportal entfallen | implementiert |
+| Handfahnen | etwa 22 % der Zuschauer schwenken eine kleine türkische Fahne (instanziert, schneller bei Aufregung) | implementiert, in Unity ungeprüft |
+| Kurvennamen | Streckenmenü: nummerierte Kurven auf der Karte und Namensliste in Rundenreihenfolge, Slogan „WHERE CONTINENTS MEET SPEED“ unter dem Titel | implementiert |
+
+Platzierung (`EventLayout`): Jeder Grundriss wird gegen Wasser, Kaikante und andere Streckenteile (≥ 22 m) geprüft. Was nicht passt, wird weggelassen statt irgendwo hingestellt. Für `bosphorus_a` passen alle Bauten (Test `BosphorusEventStructuresFitBesideTheTrack`). Die Bauten werden für Tribünen und Stadtblöcke freigehalten.
+
+Kurvennamen aus dem Brief und ihre Namen im Spiel (türkisch, wie die Beschilderung):
+Ortaköy Hairpin = T1 Ortaköy Virajı · Palanga Climb = T2/T3 Palanga 1/2 · Yıldız Crest = T4 Yıldız Sırtı · Barbaros Descent = T6 Barbaros İnişi · Akaretler Esses = T7/T8 Akaretler 1/2 · Bayıldım Hairpin = T10 Bayıldım Virajı · Kabataş Return = T11 Kabataş Dönüşü.
+
+### Vorschau (Offline-Renderer, NICHT Unity)
+`docs/img/bosphorus_phaseC_preview_sheet.png`, Tageslicht:
+- Startaufstellung mit Portal
+- Portal nah
+- Boxengebäude von der Gegenseite
+- Podium auf dem Dach
+- Zeitturm
+- Rennleitung
+
+Die Vorschau zeigt nur Geometrie und Grundfarben. Emblem, Schriften, Fliesentextur, Lampen und LED-Inhalte sind Unity-Objekte und fehlen dort.
+
+### Nicht umgesetzt / bekannte Punkte
+- **VIP-Bereich, eigene Hospitality im Event-Stil:** Die vorhandenen Hospitality-Blöcke bleiben; die Umgestaltung folgt mit Phase D.
+- **Siegerehrung:** Es gibt keine Zeremonie im Spiel; Podium und Pokal sind Kulisse. Eine Zeremonie wäre ein eigenes Feature.
+- **Schrift:** Die Texte nutzen die eingebaute Unity-Schrift (Legacy-TextMesh). Eine eigene Event-Schrift wäre ein lizenzpflichtiges Asset und braucht deine Freigabe.
+- **In Unity ungeprüft:** Lesbarkeit von Zeitturm und LED-Wänden aus dem Auto, Größe der Handfahnen, Emblem-Schärfe.
+
 ## Umsetzungsplan Phasen B–F
 
 Grundsatz: Alles datengetrieben aus Mittellinie, Breiten, Barrierenabständen, Krümmung, Fahrtrichtung, Gelände und Geodaten. Vorhandene Builder werden erweitert, keine handplatzierten Objekte. Jede Phase endet mit grünem `tools/verify.sh` und einem Prüfstand-Lauf.

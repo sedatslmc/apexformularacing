@@ -29,6 +29,12 @@ namespace Apex.Game
         public float[] WallRight { get; internal set; }
         /// <summary>Environment dressing (city, landmarks, water), if the circuit has geo data.</summary>
         public EnvironmentInstance Environment { get; internal set; }
+        /// <summary>Event flags placed by the circuit builder (base position, flag length, pole height, detail).</summary>
+        public readonly List<(Vector3 pos, float length, float pole, int detail)> EventFlags = new List<(Vector3, float, float, int)>();
+        /// <summary>Placement of the event structures (event circuits only).</summary>
+        public EventLayout EventLayout { get; internal set; }
+        /// <summary>Ground kept free of city buildings for event structures (centre x/z, radius).</summary>
+        public readonly List<(float x, float z, float radius)> EventFootprints = new List<(float, float, float)>();
 
         /// <summary>Lateral offset (+right) of the pit lane centre at a raw distance.</summary>
         public float PitLaneLateral(float rawDistance)
@@ -70,7 +76,7 @@ namespace Apex.Game
         const float WallHeight = 1.1f;
         const float SkirtDepth = 8f;
         /// <summary>Pit area width from the track edge to the outer pit wall.</summary>
-        const float PitOuter = 13.5f;
+        internal const float PitOuter = 13.5f;
 
         public static CircuitInstance Build(CircuitDefinition def, Transform parent = null)
         {
@@ -115,6 +121,7 @@ namespace Apex.Game
             ci.Terrain = new TerrainField(g, def);
             BuildTerrain(root.transform, ci.Terrain, def);
             BuildStartLine(root.transform, ci);
+            if (EventBrandingBuilder.IsEvent(def)) EventBrandingBuilder.Build(ci, root.transform);
             BuildGrid(root.transform, ci);
             BuildCornerBoards(root.transform, ci);
             TrackInfrastructureBuilder.Build(ci, root.transform, pitMask);
@@ -363,7 +370,8 @@ namespace Apex.Game
                 Frame(marks, g, d, lat, 6f, 3.6f, 0.15f);
             }
             AddMesh(parent, "PitBoxes", marks.ToMesh("PitBoxes"), new[] { "Marker" }, null);
-            // Garage block behind the outer pit wall.
+            // Garage block behind the outer pit wall (event circuits get the full pit building instead).
+            if (EventBrandingBuilder.IsEvent(ci.Definition)) return;
             float start = pit.BoxDistance(0) - 15f, end = pit.BoxDistance(19) + 15f;
             float mid = g.Wrap((start + end) * 0.5f);
             var pose = ci.PoseAt(mid, side * (g.WidthAt(mid) * 0.5f + PitOuter + 6f), 3.5f);
@@ -586,15 +594,26 @@ namespace Apex.Game
             var mr = line.AddComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
             mr.shadowCastingMode = ShadowCastingMode.Off;
-            // Gantry over the line.
+            // Gantry over the line with working start lights.
+            if (EventBrandingBuilder.IsEvent(ci.Definition))
+            {
+                EventBrandingBuilder.BuildGantry(parent, ci);
+                return;
+            }
             var gantry = new GameObject("Gantry").transform;
             gantry.SetParent(parent, false);
             gantry.SetPositionAndRotation(pose.position, pose.rotation);
             foreach (float side in new[] { -1f, 1f })
                 Prop(gantry, PrimitiveType.Cube, "Steel", new Vector3(side * (w * 0.5f + 2.5f), 3.5f, 0f), new Vector3(0.5f, 7f, 0.5f));
             Prop(gantry, PrimitiveType.Cube, "Carbon", new Vector3(0f, 7f, 0f), new Vector3(w + 5.5f, 1.2f, 0.6f));
+            var lights = gantry.gameObject.AddComponent<StartLightsComponent>();
             for (int k = 0; k < 5; k++)
-                Prop(gantry, PrimitiveType.Sphere, "KerbRed", new Vector3((k - 2) * 0.9f, 7f, -0.32f), Vector3.one * 0.44f);
+            {
+                var lamp = Prop(gantry, PrimitiveType.Sphere, "KerbRed", new Vector3((k - 2) * 0.9f, 7f, -0.32f), Vector3.one * 0.44f);
+                var lampMat = StartLightsComponent.LampMaterial();
+                lamp.GetComponent<MeshRenderer>().sharedMaterial = lampMat;
+                lights.Add(lampMat);
+            }
         }
 
         static Transform Prop(Transform parent, PrimitiveType type, string mat, Vector3 pos, Vector3 scale)

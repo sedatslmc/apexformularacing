@@ -12,6 +12,7 @@
     <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Vehicle/MeshKit.cs" Link="MeshKit.cs" />
     <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Vehicle/CarGeometry.cs" Link="CarGeometry.cs" />
     <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Tracks/TrackInfrastructureGeometry.cs" Link="TrackInfrastructureGeometry.cs" />
+    <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Tracks/EventGeometry.cs" Link="EventGeometry.cs" />
     <Compile Include="../../unity/com.projectapex.game/Runtime/Game/Environment/*.cs" Exclude="../../unity/com.projectapex.game/Runtime/Game/Environment/*Builder.cs;../../unity/com.projectapex.game/Runtime/Game/Environment/*Component*.cs" />
   </ItemGroup>
 </Project>

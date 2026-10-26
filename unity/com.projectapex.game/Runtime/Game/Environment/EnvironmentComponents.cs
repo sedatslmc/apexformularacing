@@ -229,14 +229,18 @@ namespace Apex.Game
             public int colour;
             public Vector3 centre;
             public readonly List<(Vector3 pos, Quaternion rot, float scale, float phase)> people = new List<(Vector3, Quaternion, float, float)>();
-            public Matrix4x4[] matrices;
+            public Matrix4x4[] matrices, flagMatrices;
         }
+
+        bool HasFlag(float phase) => Mathf.Repeat(phase * 7.31f, 1f) < handFlagShare;
 
         readonly List<Batch> batches = new List<Batch>();
         readonly Dictionary<(int, int, int), Batch> open = new Dictionary<(int, int, int), Batch>();
-        Mesh mesh;
+        Mesh mesh, handFlag;
         Material[] shirts;
-        Material skin;
+        Material skin, pole, cloth;
+        /// <summary>Share of spectators waving a small Turkish hand flag.</summary>
+        public float handFlagShare = 0.22f;
 
         public void Add(Vector3 pos, float yawDeg, float rnd)
         {
@@ -263,8 +267,24 @@ namespace Apex.Game
             skin.enableInstancing = true;
             shirts = new Material[ShirtColours.Length];
             for (int i = 0; i < shirts.Length; i++) shirts[i] = EnvironmentMaterials.Solid(ShirtColours[i]);
+            // Hand flag in the spectator's local frame (unit height): stick from the raised right hand,
+            // cloth at the top, flying to the side. Instanced like the spectators.
+            var stick = new MeshBuilder();
+            var flag = new MeshBuilder();
+            stick.Tube(new Vector3(0.17f, 0.78f, 0.04f), new Vector3(0.19f, 1.22f, 0.04f), 0.006f, 4, true);
+            float fh = 0.13f, fl = fh * TurkishFlagDesign.AspectRatio;
+            flag.QuadFacing(new Vector3(0.19f, 1.22f - fh, 0.04f), new Vector3(0.19f + fl, 1.22f - fh, 0.04f), new Vector3(0.19f + fl, 1.22f, 0.04f), new Vector3(0.19f, 1.22f, 0.04f),
+                Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.back);
+            handFlag = EnvironmentBuilder.Combine(new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.FlagPole] = stick, [EnvironmentGeometry.Gull] = flag }, "HandFlag", out var flagMats);
+            pole = flagMats[0];
+            pole.enableInstancing = true;
+            // The flag material is double-sided; an instancing copy keeps the shared one untouched.
+            cloth = new Material(EnvironmentMaterials.Flag) { name = "HandFlag", enableInstancing = true };
             foreach (var b in batches)
             {
+                int flags = 0;
+                foreach (var p in b.people) if (HasFlag(p.phase)) flags++;
+                b.flagMatrices = new Matrix4x4[flags];
                 b.matrices = new Matrix4x4[b.people.Count];
                 var c = Vector3.zero;
                 foreach (var p in b.people) c += p.pos;
@@ -282,15 +302,29 @@ namespace Apex.Game
             {
                 if ((b.centre - cam.transform.position).sqrMagnitude > 1100f * 1100f) continue;
                 float excite = env != null ? env.Excitement(b.centre) : 0f;
+                int f = 0;
                 for (int i = 0; i < b.people.Count; i++)
                 {
                     var (pos, rot, scale, phase) = b.people[i];
                     float idle = Mathf.Sin(t * 1.3f + phase) * 0.02f;
                     float jump = Mathf.Max(0f, Mathf.Sin(t * 7.5f + phase)) * 0.22f * excite;
                     b.matrices[i] = Matrix4x4.TRS(pos + Vector3.up * (idle + jump), rot, Vector3.one * scale);
+                    if (f < b.flagMatrices.Length && HasFlag(phase))
+                    {
+                        // Waving: the flag swings about the hand, faster and wider when the crowd is excited.
+                        float wave = Mathf.Sin(t * (3.2f + 4f * excite) + phase) * (14f + 22f * excite);
+                        var hand = new Vector3(0.17f, 0.78f, 0.04f);
+                        var m = Matrix4x4.Translate(hand) * Matrix4x4.Rotate(Quaternion.Euler(0f, 0f, wave)) * Matrix4x4.Translate(-hand);
+                        b.flagMatrices[f++] = b.matrices[i] * m;
+                    }
                 }
                 Graphics.DrawMeshInstanced(mesh, 0, shirts[b.colour], b.matrices, b.matrices.Length, null, ShadowCastingMode.Off, false);
                 Graphics.DrawMeshInstanced(mesh, 1, skin, b.matrices, b.matrices.Length, null, ShadowCastingMode.Off, false);
+                if (f > 0 && handFlag != null)
+                {
+                    Graphics.DrawMeshInstanced(handFlag, 0, pole, b.flagMatrices, f, null, ShadowCastingMode.Off, false);
+                    Graphics.DrawMeshInstanced(handFlag, 1, cloth, b.flagMatrices, f, null, ShadowCastingMode.Off, false);
+                }
             }
         }
     }

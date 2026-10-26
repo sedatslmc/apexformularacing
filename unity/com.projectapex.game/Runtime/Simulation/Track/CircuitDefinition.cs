@@ -15,6 +15,8 @@ namespace Apex.Tracks
         public string name = "";
         public string description = "";
         public string direction = "";
+        /// <summary>Event identity for branding (e.g. "bosphorus"); empty = generic circuit dressing.</summary>
+        public string identity = "";
         public float defaultWidth = 13f;
         public float startLineDistance;
         public float[] sectorFractions = { 0f, 1f / 3f, 2f / 3f };
@@ -137,6 +139,7 @@ namespace Apex.Tracks
                 name = Str(root, "name"),
                 description = Str(root, "description"),
                 direction = Str(root, "direction"),
+                identity = Str(root, "identity"),
                 defaultWidth = Num(root, "default_width", 13f),
                 startLineDistance = Num(root, "start_line_distance", 0f),
             };

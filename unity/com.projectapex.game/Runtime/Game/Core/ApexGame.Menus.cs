@@ -281,8 +281,19 @@ namespace Apex.Game
             int corners = cornerCounts[id];
             ApexStyle.Text(new Rect(r.x + 20f, r.y + 14f, r.width - 40f, 40f), def.name, 28, ApexStyle.Fg, FontStyle.Bold);
             ApexStyle.Text(new Rect(r.x + 20f, r.y + 52f, r.width - 40f, 30f), $"{g.Length / 1000f:0.00} km · {corners} Kurven · 3 Sektoren · Höhenunterschied {maxY - minY:0} m", 20, ApexStyle.TextDim);
-            var mapRect = new Rect(r.x + 20f, r.y + 96f, r.width - 40f, r.height - 220f);
-            DrawTrackMap(mapRect, g, def, null, 4f, true);
+            bool named = def.corners.Count > 0;
+            if (def.identity == EventIdentity.Bosphorus)
+                ApexStyle.Text(new Rect(r.x + 20f, r.y + 78f, r.width - 40f, 24f), EventIdentity.Slogan, 16, ApexStyle.Accent, FontStyle.Bold);
+            var mapRect = new Rect(r.x + 20f, r.y + 104f, r.width - 40f, r.height - (named ? 300f : 228f));
+            DrawTrackMap(mapRect, g, def, null, 4f, true, named);
+            if (named)
+            {
+                // Corner names in lap order, numbered like the labels on the map.
+                var order = CornersInLapOrder(def, g.Length);
+                var sb = new System.Text.StringBuilder();
+                for (int k = 0; k < order.Count; k++) sb.Append(k == 0 ? "" : " · ").Append(k + 1).Append(' ').Append(order[k].name);
+                ApexStyle.Text(new Rect(r.x + 20f, r.yMax - 192f, r.width - 40f, 76f), WordWrap(sb.ToString(), 78), 15, ApexStyle.Fg, FontStyle.Normal, TextAnchor.UpperLeft);
+            }
             ApexStyle.Text(new Rect(r.x + 20f, r.yMax - 116f, r.width - 40f, 100f), WordWrap(def.description, 70), 18, ApexStyle.TextDim, FontStyle.Normal, TextAnchor.UpperLeft);
             double best = SaveService.BestLap(Settings, id);
             if (best > 0) ApexStyle.Text(new Rect(r.x + 20f, r.yMax - 40f, r.width - 40f, 30f), "Dein Rekord: " + ApexStyle.FormatTime(best), 20, ApexStyle.Best);
@@ -316,7 +327,14 @@ namespace Apex.Game
         }
 
         /// <summary>Top-down map from the same spline data (north up). Optionally shows cars.</summary>
-        void DrawTrackMap(Rect r, TrackGeometry g, CircuitDefinition def, RaceController race, float dot, bool sectors)
+        static List<CircuitDefinition.CornerMark> CornersInLapOrder(CircuitDefinition def, float L)
+        {
+            var list = new List<CircuitDefinition.CornerMark>(def.corners);
+            list.Sort((a, b) => ApexMath.PosMod(a.distance - def.startLineDistance, L).CompareTo(ApexMath.PosMod(b.distance - def.startLineDistance, L)));
+            return list;
+        }
+
+        void DrawTrackMap(Rect r, TrackGeometry g, CircuitDefinition def, RaceController race, float dot, bool sectors, bool cornerNumbers = false)
         {
             float minX = float.MaxValue, maxX = float.MinValue, minZ = float.MaxValue, maxZ = float.MinValue;
             foreach (var p in g.Positions)
@@ -345,6 +363,18 @@ namespace Apex.Game
             var sl = g.PositionAt(def.startLineDistance);
             var sm2 = Map(sl.X, sl.Z);
             ApexStyle.Box(new Rect(sm2.x - dot, sm2.y - dot, dot * 2f, dot * 2f), Color.white);
+            if (cornerNumbers)
+            {
+                var order = CornersInLapOrder(def, g.Length);
+                for (int k = 0; k < order.Count; k++)
+                {
+                    // Number on the outside of the corner, a little off the line.
+                    float d = order[k].distance;
+                    g.FrameAt(d, out var cp, out _, out _, (order[k].right ? -1f : 1f) * 18f / Mathf.Max(scale, 1e-3f));
+                    var m = Map(cp.X, cp.Z);
+                    ApexStyle.Text(new Rect(m.x - 12f, m.y - 10f, 24f, 20f), (k + 1).ToString(), 14, ApexStyle.Fg, FontStyle.Bold, TextAnchor.MiddleCenter);
+                }
+            }
             if (race == null) return;
             foreach (var rc in race.Cars)
             {

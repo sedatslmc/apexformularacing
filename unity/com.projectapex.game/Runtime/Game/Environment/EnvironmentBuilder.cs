@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Apex.Core;
 using Apex.Environment;
+using Apex.Race;
 using Apex.Tracks;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -43,6 +44,8 @@ namespace Apex.Game
             float cx = (field.MinX + field.MaxX) * 0.5f, cz = (field.MinZ + field.MaxZ) * 0.5f;
             BuildWaterAndFarLand(root.transform, env, field, def, cx, cz);
             var reserved = new List<CityLayout.Reserved>();
+            // Event buildings (pit building, timing tower, race control) keep stands and city away.
+            foreach (var (x, z, r) in ci.EventFootprints) reserved.Add(new CityLayout.Reserved(x, z, r));
             BuildWaterfront(root.transform, env, ci, reserved);
             var opts = new CityLayout.Options { quality = q };
             opts.reserved.AddRange(reserved);
@@ -547,6 +550,7 @@ namespace Apex.Game
             }
             AddMeshObject(ts, "Pavements_Lamps", parts.parts, false);
             var font = CircuitBuilder.BuiltinFont();
+            bool eventDress = EventBrandingBuilder.IsEvent(ci.Definition);
             // Turkish street-name signs (white on blue, as in Istanbul).
             foreach (var (text, x, z) in StreetSigns)
             {
@@ -573,21 +577,38 @@ namespace Apex.Game
                     string text = Sponsors[sponsor++ % Sponsors.Length];
                     Color bg = sponsor % 3 == 0 ? new Color(0.05f, 0.08f, 0.16f) : sponsor % 3 == 1 ? new Color(0.92f, 0.92f, 0.92f) : new Color(0.0f, 0.55f, 0.7f);
                     Color fg = sponsor % 3 == 1 ? new Color(0.06f, 0.1f, 0.2f) : Color.white;
+                    // Event circuits: every third board carries a Turkish welcome message in the event colours.
+                    if (eventDress && sponsor % 3 == 0)
+                    {
+                        text = EventIdentity.Banners[(sponsor / 3) % EventIdentity.Banners.Length];
+                        bool red = (sponsor / 3) % 2 == 0;
+                        bg = red ? EventGeometry.RedC : EventGeometry.NavyC;
+                        fg = red ? EventGeometry.IvoryC : EventGeometry.GoldC;
+                    }
                     Board(ts, font, p, Quaternion.LookRotation(facing, Vector3.up), text, bg, fg, 11f, 0.95f, false);
                 }
             }
-            // LED screens behind the main grandstands.
+            // LED screens behind the main grandstands (event circuits: live messages, see EventScreenComponent).
+            var screens = eventDress ? ts.gameObject.AddComponent<EventScreenComponent>() : null;
             for (int k = 1; k < env.grandstandCentres.Count; k += 4)
             {
                 var c = env.grandstandCentres[k];
                 var pr = g.Project(new System.Numerics.Vector3(c.x, 0f, c.z));
                 var toTrack = (TrackPoint(g, pr.index, 0f, 0f) - c); toTrack.y = 0f;
-                Board(ts, font, c + Vector3.up * 13f, Quaternion.LookRotation(-toTrack.normalized, Vector3.up), "BOĞAZ GP", new Color(0.02f, 0.03f, 0.05f), new Color(0.2f, 0.85f, 1f), 9f, 4.5f, true);
+                var screen = Board(ts, font, c + Vector3.up * 13f, Quaternion.LookRotation(-toTrack.normalized, Vector3.up), "BOĞAZ GRAND PRIX", new Color(0.02f, 0.03f, 0.05f), new Color(0.2f, 0.85f, 1f), 9f, 4.5f, true);
+                if (screens != null && screen != null)
+                {
+                    // Long messages ("SANAL GÜVENLİK ARACI") must fit the 9 m screen.
+                    screen.characterSize = Mathf.Min(4.5f * 0.11f, 9f / 22f * 0.21f);
+                    screens.Add(screen);
+                }
             }
             // Flags: shared wind, sizes by place, distant ones cheap.
             var flags = new GameObject("Flags").transform;
             flags.SetParent(ts, false);
-            // Small flags on the start gantry posts.
+            // Small flags on the start gantry posts (event circuits place their own flags).
+            env.flagSpots.AddRange(ci.EventFlags);
+            if (!eventDress)
             {
                 var pose = ci.PoseAt(start, 0f, 0f);
                 float w = g.WidthAt(start);
@@ -604,7 +625,7 @@ namespace Apex.Game
             }
         }
 
-        static void Board(Transform parent, Font font, Vector3 pos, Quaternion rot, string text, Color bg, Color fg, float width, float height, bool posts)
+        static TextMesh Board(Transform parent, Font font, Vector3 pos, Quaternion rot, string text, Color bg, Color fg, float width, float height, bool posts)
         {
             var root = new GameObject("Board_" + text);
             root.transform.SetParent(parent, false);
@@ -613,7 +634,7 @@ namespace Apex.Game
             if (posts)
                 foreach (float s in new[] { -0.42f, 0.42f })
                     Cube(root.transform, new Vector3(s * width, -height * 0.5f - 1.3f, 0.06f), new Vector3(0.1f, 2.6f, 0.1f), ApexMaterials.Get("Steel"));
-            if (font == null) return;
+            if (font == null) return null;
             var label = new GameObject("Text");
             label.transform.SetParent(root.transform, false);
             label.transform.localPosition = new Vector3(0f, 0f, -0.05f);
@@ -626,6 +647,7 @@ namespace Apex.Game
             tm.characterSize = Mathf.Min(height * 0.11f, width / Mathf.Max(4, text.Length) * 0.21f);
             tm.color = fg;
             label.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            return tm;
         }
 
         static void Cube(Transform parent, Vector3 localPos, Vector3 scale, Material mat)
