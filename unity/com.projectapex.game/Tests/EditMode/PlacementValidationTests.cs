@@ -118,5 +118,27 @@ namespace Apex.Tests
                     Assert.That(Vector2.Distance(new Vector2(p.X, p.Z), new Vector2(layout.flags[b].position.X, layout.flags[b].position.Z)), Is.GreaterThanOrEqualTo(RooftopFlagLayout.MinSpacing));
             }
         }
+
+        [Test]
+        public void RoadKerbAndRunoffUvsAreMetricSoScannedTexturesKeepTheirSize()
+        {
+            var (_, g, surface, _, _) = World();
+            foreach (var sm in new[] { surface.road, surface.kerbs, surface.runoff })
+            {
+                int checkedQuads = 0;
+                for (int t = 0; t + 6 <= sm.triangles[0].Count && checkedQuads < 200; t += 6, checkedQuads++)
+                {
+                    // Each ribbon quad: vertices i (a, b) and j (a, b); UV distance = world distance / UvMetres.
+                    int s0 = sm.triangles[0][t];
+                    var a = sm.vertices[s0]; var b = sm.vertices[s0 + 1]; var aj = sm.vertices[s0 + 2];
+                    var ua = sm.uvs[s0]; var ub = sm.uvs[s0 + 1]; var uaj = sm.uvs[s0 + 2];
+                    // Planar mapping: the UVs follow the horizontal width (the run-off edge drops 12 cm).
+                    float across = new Vector2(a.X - b.X, a.Z - b.Z).Length(), uvAcross = MathF.Abs(ub.X - ua.X);
+                    Assert.That(uvAcross * RoadSurface.UvMetres, Is.EqualTo(across).Within(0.02f + across * 0.02f), sm.name + " across");
+                    Assert.That(MathF.Abs(uaj.Y - ua.Y) * RoadSurface.UvMetres, Is.EqualTo(g.Spacing).Within(0.01f), sm.name + " along");
+                }
+                Assert.That(checkedQuads, Is.GreaterThan(0), sm.name);
+            }
+        }
     }
 }

@@ -27,7 +27,8 @@ namespace Apex.Game
 
         ParticleSystem rain;
         ParticleSystem.EmissionModule rainEmission;
-        readonly List<(Material mat, Color baseColor, float baseSmooth)> wetMaterials = new List<(Material, Color, float)>();
+        /// <summary>Wet-able materials: base colour and smoothness, and the mean of a scanned smoothness map (-1 = none).</summary>
+        readonly List<(Material mat, Color baseColor, float baseSmooth, float glossMean)> wetMaterials = new List<(Material, Color, float, float)>();
         float sunBaseIntensity = 1.25f;
         Color sunBaseColor = Color.white;
 
@@ -45,7 +46,13 @@ namespace Apex.Game
                     mats[i] = inst;
                     var col = inst.HasProperty("_BaseColor") ? inst.GetColor("_BaseColor") : inst.HasProperty("_Color") ? inst.GetColor("_Color") : Color.gray;
                     float sm = inst.HasProperty("_Smoothness") ? inst.GetFloat("_Smoothness") : inst.HasProperty("_Glossiness") ? inst.GetFloat("_Glossiness") : 0.2f;
-                    wetMaterials.Add((inst, col, sm));
+                    float glossMean = -1f;
+                    if (SurfaceTextures.HasGlossMap(inst))
+                    {
+                        var info = SurfaceTextures.Load(n == "Kerbs" ? SurfaceTextures.Kerb : SurfaceTextures.Asphalt);
+                        glossMean = info != null && info.meanSmoothness >= 0f ? info.meanSmoothness : 0.3f;
+                    }
+                    wetMaterials.Add((inst, col, sm, glossMean));
                 }
                 mr.sharedMaterials = mats;
             }
@@ -145,7 +152,7 @@ namespace Apex.Game
                 rain.transform.position = cameraTransform.position + Vector3.up * 14f + cameraTransform.forward * 8f;
                 rainEmission.rateOverTime = rainI * 1400f;
             }
-            foreach (var (mat, baseColor, baseSmooth) in wetMaterials)
+            foreach (var (mat, baseColor, baseSmooth, glossMean) in wetMaterials)
             {
                 // Wet asphalt: darker and much smoother (sky and lights reflect).
                 var c = Color.Lerp(baseColor, baseColor * 0.55f, wet);
@@ -153,6 +160,14 @@ namespace Apex.Game
                 if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
                 if (mat.HasProperty("_Color")) mat.SetColor("_Color", c);
                 float sm = Mathf.Lerp(baseSmooth, 0.88f, Mathf.Clamp01(wet * 1.4f));
+                if (glossMean >= 0f)
+                {
+                    // Scanned smoothness map: _Smoothness scales the map and cannot raise it to a wet film.
+                    // Dry: the map as scanned; wet: a uniform wet smoothness from the map's mean upwards.
+                    bool dry = wet < 0.02f;
+                    if (dry) mat.EnableKeyword("_METALLICSPECGLOSSMAP"); else mat.DisableKeyword("_METALLICSPECGLOSSMAP");
+                    sm = dry ? 1f : Mathf.Lerp(glossMean, 0.88f, Mathf.Clamp01(wet * 1.4f));
+                }
                 if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", sm);
                 if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", sm);
             }

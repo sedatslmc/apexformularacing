@@ -340,8 +340,22 @@ namespace Apex.Game
             if (materialsReady) return;
             materialsReady = true;
             var asphaltA = AsphaltTexture(out var asphaltN);
-            ApexMaterials.Register("Asphalt", Lit("Asphalt", new Color(0.62f, 0.62f, 0.64f), 0.22f, asphaltA, asphaltN, new Vector2(3.3f, 3.3f)));
-            ApexMaterials.Register("RunoffAsphalt", Lit("RunoffAsphalt", new Color(0.78f, 0.77f, 0.75f), 0.18f, asphaltA, asphaltN, new Vector2(2.5f, 2.5f)));
+            // Road and run-off: the scanned CC0 asphalt set when imported (tools/textures/import_cc0.py), else procedural.
+            var road = Lit("Asphalt", new Color(0.62f, 0.62f, 0.64f), 0.22f, asphaltA, asphaltN, new Vector2(3.3f, 3.3f));
+            if (SurfaceTextures.TryApply(road, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres)) SetColor(road, new Color(0.95f, 0.95f, 0.95f));
+            ApexMaterials.Register("Asphalt", road);
+            var runoff = Lit("RunoffAsphalt", new Color(0.78f, 0.77f, 0.75f), 0.18f, asphaltA, asphaltN, new Vector2(6.25f, 6.25f));
+            // The run-off is older, paler asphalt: same scan, lighter tint.
+            if (SurfaceTextures.TryApply(runoff, SurfaceTextures.Asphalt, SurfaceTextures.RoadUvMetres)) SetColor(runoff, new Color(1.08f, 1.07f, 1.05f));
+            ApexMaterials.Register("RunoffAsphalt", runoff);
+            // Kerbs: red and white paint on the scanned kerb set (paint base tinted by the kerb colour); without it the plain palette colours stay.
+            if (SurfaceTextures.Load(SurfaceTextures.Kerb) != null)
+                foreach (var key in new[] { "KerbRed", "KerbWhite" })
+                {
+                    var kerb = Lit(key, ApexMaterials.Palette[key], 0.35f);
+                    SurfaceTextures.TryApply(kerb, SurfaceTextures.Kerb, SurfaceTextures.RoadUvMetres, paint: true);
+                    ApexMaterials.Register(key, kerb);
+                }
             ApexMaterials.Register(TrackInfrastructureGeometry.Patch, Lit("Patch", new Color(0.48f, 0.48f, 0.5f), 0.2f, asphaltA, asphaltN, new Vector2(1f, 1f)));
             ApexMaterials.Register(TrackInfrastructureGeometry.Concrete, Lit("BarrierConcrete", Color.white, 0.12f, ConcreteTexture()));
             ApexMaterials.Register(TrackInfrastructureGeometry.Armco, Lit("Armco", new Color(0.72f, 0.74f, 0.76f), 0.55f));
