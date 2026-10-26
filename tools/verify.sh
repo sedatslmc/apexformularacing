@@ -12,6 +12,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT/build"
 dotnet build Apex.Simulation/Apex.Simulation.csproj -nologo -v q
 dotnet test Apex.Simulation.Tests/Apex.Simulation.Tests.csproj -nologo -v q
+dotnet build Apex.Tests.CompileCheck/Apex.Tests.CompileCheck.csproj -nologo -v q   # EditMode tests against Unity's NUnit 3.5
 dotnet build Apex.Runtime.CompileCheck/Apex.Runtime.CompileCheck.csproj -nologo -v q
 dotnet build Apex.Editor.CompileCheck/Apex.Editor.CompileCheck.csproj -nologo -v q
 dotnet run --project Apex.ModelPreview/Apex.ModelPreview.csproj -c Release -v q -- "${TMPDIR:-/tmp}/apex_model_preview" --check

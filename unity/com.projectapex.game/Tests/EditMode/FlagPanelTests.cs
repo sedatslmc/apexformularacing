@@ -42,9 +42,10 @@ namespace Apex.Tests
                 logic.Update(rc, t);
                 seen.Add(logic.Evaluate(4000f, L, rc, cars, t));
             }
-            Assert.That(seen, Does.Contain(PanelSignal.VirtualSafetyCar));
-            Assert.That(seen, Does.Contain(PanelSignal.Green), "green after the VSC ends");
-            Assert.That(seen, Does.Not.Contain(PanelSignal.SafetyCar));
+            // Plain bool asserts: Unity's NUnit (3.5) has no collection overloads of Does.Contain.
+            Assert.That(seen.Contains(PanelSignal.VirtualSafetyCar), Is.True, "VSC board");
+            Assert.That(seen.Contains(PanelSignal.Green), Is.True, "green after the VSC ends");
+            Assert.That(seen.Contains(PanelSignal.SafetyCar), Is.False, "no safety car for an off-track car");
         }
 
         [Test]
