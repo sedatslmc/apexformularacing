@@ -21,6 +21,11 @@ namespace Apex.AI
         public readonly float[] curvature;
         /// <summary>Base speed profile (m/s) at grip usage 1.0.</summary>
         public readonly float[] speed;
+        /// <summary>Grip-limited part of the profile (m/s): cornering and braking only, without the
+        /// top-speed cap and the acceleration limit. Only this part scales with the driver's grip.</summary>
+        public readonly float[] gripSpeed;
+        /// <summary>Top speed of the profile (m/s); straights run at this cap.</summary>
+        public const float MaxSpeed = 95f;
 
         public float Mu { get; }
         public float DownforcePerMass { get; }
@@ -35,6 +40,7 @@ namespace Apex.AI
             offsets = new float[n];
             curvature = new float[n];
             speed = new float[n];
+            gripSpeed = new float[n];
             var limit = new float[n];
             for (int i = 0; i < n; i++) limit[i] = MathF.Max(0f, geometry.Widths[i] * 0.5f - edgeMargin);
             var next = new float[n];
@@ -76,6 +82,8 @@ namespace Apex.AI
 
         public float SpeedAt(float distance) => speed[geometry.IndexAt(distance)];
 
+        public float GripSpeedAt(float distance) => gripSpeed[geometry.IndexAt(distance)];
+
         void ComputeCurvature()
         {
             int n = geometry.Count;
@@ -105,18 +113,10 @@ namespace Apex.AI
                 float k = 0f;
                 for (int o = -2; o <= 2; o++) k = MathF.Max(k, MathF.Abs(curvature[((i + o) % n + n) % n]));
                 float denom = k - Mu * DownforcePerMass;
-                speed[i] = denom <= 1e-5f ? 95f : MathF.Min(95f, MathF.Sqrt(Mu * g / denom));
+                gripSpeed[i] = denom <= 1e-5f ? 400f : MathF.Min(400f, MathF.Sqrt(Mu * g / denom));
             }
-            // Longitudinal grade (+ uphill): gravity helps braking uphill and hurts it downhill, and the
-            // other way round when accelerating.
-            for (int pass = 0; pass < 2; pass++)
-                for (int step = 0; step < n; step++)
-                {
-                    int i = n - 1 - step;
-                    float v = speed[(i + 1) % n];
-                    float decel = MathF.Max(1f, Mu * (g + DownforcePerMass * v * v) * 0.85f + g * geometry.GradeAt(geometry.Distances[i]));
-                    speed[i] = MathF.Min(speed[i], MathF.Sqrt(v * v + 2f * decel * ds));
-                }
+            BrakingPass(gripSpeed);
+            for (int i = 0; i < n; i++) speed[i] = MathF.Min(MaxSpeed, gripSpeed[i]);
             for (int pass = 0; pass < 2; pass++)
                 for (int i = 0; i < n; i++)
                 {
@@ -124,6 +124,27 @@ namespace Apex.AI
                     float accel = MathF.Max(0.5f, ApexMath.Clamp(14f - v * 0.09f, 3f, 14f) - g * geometry.GradeAt(geometry.Distances[i]));
                     int j = (i + 1) % n;
                     speed[j] = MathF.Min(speed[j], MathF.Sqrt(v * v + 2f * accel * ds));
+                }
+        }
+
+        void BrakingPass(float[] profile)
+        {
+            int n = geometry.Count;
+            const float g = 9.81f;
+            float ds = geometry.Spacing;
+            // Longitudinal grade (+ uphill): gravity helps braking uphill and hurts it downhill, and the
+            // other way round when accelerating.
+            for (int pass = 0; pass < 2; pass++)
+                for (int step = 0; step < n; step++)
+                {
+                    int i = n - 1 - step;
+                    float v = profile[(i + 1) % n];
+                    // Friction circle: braking gets what the cornering at this point leaves of the grip.
+                    float aTotal = Mu * (g + DownforcePerMass * v * v);
+                    float aLat = v * v * MathF.Abs(curvature[i]);
+                    float aLong = MathF.Sqrt(MathF.Max(0f, aTotal * aTotal - aLat * aLat));
+                    float decel = MathF.Max(1f, aLong * 0.85f + g * geometry.GradeAt(geometry.Distances[i]));
+                    profile[i] = MathF.Min(profile[i], MathF.Sqrt(v * v + 2f * decel * ds));
                 }
         }
 

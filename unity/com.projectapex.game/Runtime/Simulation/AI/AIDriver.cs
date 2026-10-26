@@ -111,8 +111,13 @@ namespace Apex.AI
         /// <summary>Target speed (m/s) at a distance for this driver.</summary>
         public float TargetSpeed(float distance)
         {
-            // The base profile scales with sqrt(grip usage) in corners (v ~ sqrt(mu)).
-            return MathF.Min(line.SpeedAt(distance) * MathF.Sqrt(PaceFactor()), MathF.Min(speedCap, controlSpeedCap));
+            // Only the grip-limited part (corners, braking) scales with sqrt(grip usage) (v ~ sqrt(mu));
+            // straights and exits are power-limited, so cold tyres or a slower driver do not lift there.
+            float k = MathF.Sqrt(PaceFactor());
+            float power = line.SpeedAt(distance);
+            power = power >= RacingLine.MaxSpeed - 0.01f ? float.PositiveInfinity : power * MathF.Max(1f, k);
+            float v = MathF.Min(power, line.GripSpeedAt(distance) * k);
+            return MathF.Min(v, MathF.Min(speedCap, controlSpeedCap));
         }
 
         /// <summary>Highest speed now that still allows the offset path ahead (incl. braking).</summary>
