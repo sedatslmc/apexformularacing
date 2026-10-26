@@ -16,6 +16,8 @@ namespace Apex.Game
     /// </summary>
     public sealed class InputRouter : MonoBehaviour
     {
+        /// <summary>The player drives <see cref="VehicleSetup.Legacy"/>: old steering ramps and linear stick too.</summary>
+        public bool legacyHandling;
         public SettingsData settings = new SettingsData();
         public bool manualGears;
         /// <summary>Car speed (m/s), set by the game; makes digital steering more progressive at speed.</summary>
@@ -176,7 +178,9 @@ namespace Apex.Game
                 padThrottle = pad.rightTrigger.ReadValue();
                 padBrake = pad.leftTrigger.ReadValue();
                 padSteer = pad.leftStick.ReadValue().x;
-                if (Mathf.Abs(padSteer) > 0.08f) analogSteer = true;
+                // The stickDeadzone processor already returns exactly 0 in the centre; a threshold here
+                // would cut the first percent of travel again (fine corrections at speed).
+                if (Mathf.Abs(padSteer) > 0.001f) analogSteer = true;
             }
 
             // Touch buttons.
@@ -213,15 +217,15 @@ namespace Apex.Game
             }
 
             float digitalSteer = Mathf.Clamp(kSteer + tSteer, -1f, 1f);
-            if (analogSteer) Steer = InputTuning.StickSteer(padSteer);
+            if (analogSteer) Steer = InputTuning.StickSteer(padSteer, legacyHandling);
             else if (tiltMode && TiltAvailable && digitalSteer == 0f) Steer = tiltSteer;
             else
             {
                 // Direct but progressive: full digital input takes ~0.18 s when slow and
                 // ~0.33 s at high speed (the lock itself is limited by the simulation).
                 float k = Mathf.Clamp01(vehicleSpeed / 60f);
-                steerAxis.pressRate = InputTuning.SteerPressRate(k);
-                steerAxis.releaseRate = InputTuning.SteerReleaseRate(k);
+                steerAxis.pressRate = InputTuning.SteerPressRate(k, legacyHandling);
+                steerAxis.releaseRate = InputTuning.SteerReleaseRate(k, legacyHandling);
                 steerAxis.reverseRate = InputTuning.SteerReverseRate;
                 Steer = steerAxis.Update(digitalSteer, dt);
             }

@@ -11,24 +11,23 @@ namespace Apex.InputLogic
     {
         // Faster than before (5.5→3 press, 8→5.5 release): full input at speed took up to 0.33 s, which
         // read as a delay. Full input at speed is bounded by the speed-sensitive lock, so this stays safe.
-        public static float SteerPressRate(float k) => ApexMath.Lerp(8f, 4.5f, k);
-        public static float SteerReleaseRate(float k) => ApexMath.Lerp(10f, 7f, k);
+        public static float SteerPressRate(float k, bool legacy = false) => legacy ? ApexMath.Lerp(5.5f, 3f, k) : ApexMath.Lerp(8f, 4.5f, k);
+        public static float SteerReleaseRate(float k, bool legacy = false) => legacy ? ApexMath.Lerp(8f, 5.5f, k) : ApexMath.Lerp(10f, 7f, k);
         public const float SteerReverseRate = 10f;
         public const float ThrottleRate = 7f;
         public const float BrakeRate = 9f;
 
-        /// <summary>Gamepad stick dead zone (fraction of travel), rescaled so output starts at 0 just outside it.</summary>
-        public const float StickDeadZone = 0.06f;
         /// <summary>Stick response exponent: &gt; 1 gives finer control around the centre, full lock unchanged.</summary>
         public const float StickExponent = 1.35f;
 
-        /// <summary>Analogue stick to steering: dead zone with rescale, then the response curve (sign kept).</summary>
-        public static float StickSteer(float x)
+        /// <summary>Analogue stick to steering: response curve only (sign kept). The Input System's
+        /// stickDeadzone processor on Gamepad.leftStick already removes the centre (0.125) and
+        /// rescales, so a second dead zone here would stack.</summary>
+        public static float StickSteer(float x, bool legacy = false)
         {
-            float a = System.MathF.Abs(x);
-            if (a <= StickDeadZone) return 0f;
-            float t = ApexMath.Clamp01((a - StickDeadZone) / (1f - StickDeadZone));
-            return System.MathF.Sign(x) * System.MathF.Pow(t, StickExponent);
+            if (legacy) return ApexMath.Clamp(x, -1f, 1f);
+            float a = ApexMath.Clamp01(System.MathF.Abs(x));
+            return System.MathF.Sign(x) * System.MathF.Pow(a, StickExponent);
         }
     }
 }

@@ -36,6 +36,8 @@ namespace Apex.Game
         Vignette vignette;
         Volume volume;
         UniversalAdditionalCameraData cameraData;
+        bool cameraPostBefore;
+        AntialiasingMode cameraAaBefore;
 #endif
         bool active;
 
@@ -59,6 +61,11 @@ namespace Apex.Game
             volume.priority = 10f;
             volume.sharedProfile = profile;
             if (cam != null) cameraData = cam.GetUniversalAdditionalCameraData();
+            if (cameraData != null)
+            {
+                cameraPostBefore = cameraData.renderPostProcessing;
+                cameraAaBefore = cameraData.antialiasing;
+            }
 #endif
             active = !enabledBySettings;
             SetEnabled(enabledBySettings);
@@ -72,8 +79,8 @@ namespace Apex.Game
             if (volume != null) volume.enabled = on;
             if (cameraData != null)
             {
-                cameraData.renderPostProcessing = on;
-                cameraData.antialiasing = on ? AntialiasingMode.FastApproximateAntialiasing : AntialiasingMode.None;
+                cameraData.renderPostProcessing = on || cameraPostBefore;
+                cameraData.antialiasing = on ? AntialiasingMode.FastApproximateAntialiasing : cameraAaBefore;
             }
 #endif
         }
@@ -96,9 +103,13 @@ namespace Apex.Game
 
         void OnDestroy()
         {
-            // The camera outlives the race world: leave it without post-processing.
-            SetEnabled(false);
 #if APEX_URP
+            // The camera outlives the race world: give it back the state it had before the race.
+            if (cameraData != null)
+            {
+                cameraData.renderPostProcessing = cameraPostBefore;
+                cameraData.antialiasing = cameraAaBefore;
+            }
             if (profile != null) Destroy(profile);
 #endif
         }
