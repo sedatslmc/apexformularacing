@@ -599,6 +599,17 @@ else if (mode == "profile-csv")
     }
     Console.WriteLine("wrote " + args[2]);
 }
+else if (mode == "flagsite")
+{
+    // Search the monumental flag site (slow, offline): flagsite <track>. Store the result in the circuit file (build_track_a.py).
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json), withTerrain: false);
+    var site = new Apex.Environment.MonumentalFlagSite(new Apex.Environment.TerrainField(bed.g, bed.def), bed.g, new TrackClearance(bed.surface), bed.def);
+    Console.WriteLine(site.found
+        ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "monumental_flag game [{0:F1}, {1:F1}], ground {2:F1} m, visible from {3:P0} of the lap, {4:F0} m from the nearest barrier line", site.position.X, site.position.Z, site.position.Y, site.visibleShare, site.trackMargin)
+        : "no site found");
+}
 else if (mode == "errors")
 {
     // Driver-error matrix per profile and setup: does a mistake cost control where it should?

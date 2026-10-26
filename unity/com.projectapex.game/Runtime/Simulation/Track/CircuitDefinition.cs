@@ -127,6 +127,9 @@ namespace Apex.Tracks
 
         public readonly List<Sightline> sightlines = new List<Sightline>();
 
+        /// <summary>Site of the monumental Turkish flag (game frame east, north), if the circuit has one.</summary>
+        public (float east, float north)? monumentalFlag;
+
         public Landmark FindLandmark(string landmarkId) => landmarks.Find(l => l.id == landmarkId);
 
         public static CircuitDefinition FromJson(string json)
@@ -201,6 +204,9 @@ namespace Apex.Tracks
                         bearing = Num(sd, "bearing_deg", 0f),
                     });
                 }
+            if (root.TryGetValue("monumental_flag", out var mf) && mf is Dictionary<string, object> mfd
+                && mfd.TryGetValue("game", out var mfg) && mfg is List<object> mfl && mfl.Count >= 2)
+                def.monumentalFlag = (Convert.ToSingle(mfl[0]), Convert.ToSingle(mfl[1]));
             if (root.TryGetValue("geo", out var geo) && geo is Dictionary<string, object> gd)
             {
                 def.trueNorthBearing = Num(gd, "true_north_bearing_deg", float.NaN);

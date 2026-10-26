@@ -84,5 +84,19 @@ namespace Apex.Tests
                 Assert.That(clear.Margin(pos.X, pos.Z), Is.GreaterThan(0.3f), $"event flag at {pos.X:F0},{pos.Z:F0}");
             TestContext.WriteLine($"{lots} near buildings, {city.trees.Count} trees, {ev.flags.Count} event flags checked");
         }
+
+        [Test]
+        public void MonumentalFlagStandsOnTheYildizSlopeClearOfTheTrackAndIsSeenFromTheLap()
+        {
+            var (def, g, _, clear, field) = World();
+            Assert.That(def.monumentalFlag.HasValue, "bosphorus_a has a monumental flag site");
+            var (x, z) = def.monumentalFlag.Value;
+            Assert.That(MonumentalFlagSite.Validate(field, g, clear, x, z, out float share, out float margin), "on land and clear of every track part");
+            TestContext.WriteLine($"site {x:F0},{z:F0}: {margin:F0} m from the nearest barrier line, mid-flag visible from {share:P0} of the lap");
+            Assert.That(margin, Is.GreaterThan(MonumentalFlagSite.FlagLength + MonumentalFlagSite.TrackMargin), "the flag's sweep never reaches the circuit");
+            Assert.That(share, Is.GreaterThan(0.4f), "a signature view from much of the lap");
+            var park = def.FindLandmark("yildiz_park");
+            Assert.That(MathF.Sqrt((x - park.east) * (x - park.east) + (z - park.north) * (z - park.north)), Is.LessThan(MonumentalFlagSite.SearchRadius + 1f), "on the Yıldız hills");
+        }
     }
 }
