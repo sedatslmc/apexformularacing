@@ -37,6 +37,10 @@ STREET_CLASSES = {"primary", "primary_link", "secondary", "secondary_link", "ter
                   "unclassified", "living_street", "service", "pedestrian", "footway", "steps", "path"}
 GREEN = {"park", "garden", "forest", "wood", "cemetery", "grass", "scrub", "recreation_ground"}
 LEVEL_HEIGHT = 3.2
+# Historic ensembles OSM does not name, identified by place and form (local metres, radius, storeys):
+# Akaretler row houses (Akaretler Sıra Evleri, 1875, Sarkis Balyan) on Şair Nedim Caddesi: the 18 three-storey
+# terraced houses in a row of about 7 m frontages.
+ENSEMBLES = {"akaretler": {"centre": (121.0, 315.0), "radius": 70.0, "levels": 3, "max_area": 130.0}}
 
 
 def track_points():
@@ -163,6 +167,10 @@ def main(argv=None):
                 h = min(h, 7.0)
             b["height"], b["source"] = h, "estimate"
         b["height"] = round(min(max(b["height"], 3.0), 60.0), 1)
+        for name, e in ENSEMBLES.items():
+            if (math.dist(b["_c"], e["centre"]) < e["radius"] and b["_a"] < e["max_area"]
+                    and b["source"] == "levels" and abs(b["height"] - e["levels"] * LEVEL_HEIGHT) < 1.0):
+                b["ensemble"] = name
         del b["_c"], b["_a"]
 
     streets = []
@@ -201,6 +209,8 @@ def main(argv=None):
     }
     with open(OUT, "w", encoding="utf-8") as f:
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"))
+    ens = sum(1 for b in buildings if b.get("ensemble"))
+    print(f"{ens} buildings in historic ensembles")
     srcs = {}
     for b in buildings:
         srcs[b["source"]] = srcs.get(b["source"], 0) + 1

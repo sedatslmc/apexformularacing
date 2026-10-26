@@ -24,6 +24,7 @@ namespace UnityEngine
         public static Vector2 operator -(Vector2 a, Vector2 b) => new Vector2(a.x - b.x, a.y - b.y);
         public static Vector2 operator *(Vector2 a, float d) => new Vector2(a.x * d, a.y * d);
         public static Vector2 operator *(float d, Vector2 a) => new Vector2(a.x * d, a.y * d);
+        public static float Distance(Vector2 a, Vector2 b) => MathF.Sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
         public float magnitude => MathF.Sqrt(x * x + y * y);
     }
 
@@ -50,6 +51,8 @@ namespace UnityEngine
         public Vector3 normalized { get { float m = magnitude; return m > 1e-9f ? this / m : zero; } }
         public static float Dot(Vector3 a, Vector3 b) => a.x * b.x + a.y * b.y + a.z * b.z;
         public static Vector3 Cross(Vector3 a, Vector3 b) => new Vector3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+        public static float Distance(Vector3 a, Vector3 b) => MathF.Sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) + (a.z - b.z) * (a.z - b.z));
+        public static Vector3 Lerp(Vector3 a, Vector3 b, float t) { t = t < 0f ? 0f : t > 1f ? 1f : t; return new Vector3(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t); }
         public static Vector3 Scale(Vector3 a, Vector3 b) => new Vector3(a.x * b.x, a.y * b.y, a.z * b.z);
         public static Vector3 ProjectOnPlane(Vector3 v, Vector3 n) { float d = Dot(n, n); return d < 1e-12f ? v : v - n * (Dot(v, n) / d); }
     }
@@ -107,6 +110,7 @@ namespace UnityEngine
         public static int Min(int a, int b) => Math.Min(a, b);
         public static float Sin(float a) => MathF.Sin(a);
         public static float Atan2(float y, float x) => MathF.Atan2(y, x);
+        public static float Asin(float a) => MathF.Asin(a);
         public static float Cos(float a) => MathF.Cos(a);
         public static float Sqrt(float a) => MathF.Sqrt(a);
         public static float Abs(float a) => MathF.Abs(a);

@@ -18,6 +18,7 @@ COLORS = {
     "Mirror": (0.8, 0.85, 0.9), "Interior": (0.2, 0.2, 0.22), "Belt": (0.75, 0.1, 0.1),
     "Helmet": (0.92, 0.92, 0.95), "Visor": (0.05, 0.05, 0.08), "Glove": (0.15, 0.15, 0.15),
     "Display": (0.0, 0.0, 0.0),
+    "Marble": (0.93, 0.92, 0.89), "Stone": (0.78, 0.75, 0.68), "Lead": (0.45, 0.48, 0.5), "Gilt": (0.83, 0.66, 0.3),
     # City life (--citylife export).
     "CityCar0": (0.86, 0.86, 0.85), "CityCar4": (0.1, 0.15, 0.3), "CityCar5": (0.4, 0.07, 0.08),
     "CityTaxi": (0.95, 0.75, 0.05), "CityBus": (0.82, 0.84, 0.86), "Glass": (0.18, 0.24, 0.29),
@@ -35,7 +36,7 @@ def load(path):
         elif line.startswith("usemtl"):
             mat = line.split()[1]
         elif line.startswith("f "):
-            faces.append([int(x) - 1 for x in line.split()[1:4]])
+            faces.append([int(x.split("/")[0]) - 1 for x in line.split()[1:4]])
             mats.append(mat)
     return np.array(verts), np.array(faces), mats
 

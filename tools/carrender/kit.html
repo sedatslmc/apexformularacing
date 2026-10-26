@@ -96,6 +96,13 @@ const mats = {
   FlagPole: M({ color: 0xd4d7da, metalness: 0.85, roughness: 0.3 }),
   EventGold: M({ color: 0xc9a66b, metalness: 1.0, roughness: 0.25 }),
   Ground: M({ color: 0x5f6b45, roughness: 1 }),
+  // Landmarks (ModelPreview --landmarks): values as in ApexMaterials.
+  Marble: M({ map: concrete, color: 0xf6f3ec, roughness: 0.55 }),
+  Lead: M({ color: 0x737a80, metalness: 0.6, roughness: 0.65 }),
+  Gilt: M({ color: 0xd4a84d, metalness: 1.0, roughness: 0.4 }),
+  Glass: M({ color: 0x2e3d4a, metalness: 0.2, roughness: 0.08 }),
+  ClockFace: M({ color: 0xf2efe6, roughness: 0.4 }),
+  RowPlaster: M({ map: concrete, color: 0xe6d6bc, roughness: 0.8 }),
   TurkishFlag: M({ map: new THREE.TextureLoader().load('/flag_tex.png', (t) => { t.colorSpace = THREE.SRGBColorSpace; }), side: THREE.DoubleSide, roughness: 0.75 }),
 };
 // Optional scanned CC0 sets (&cc0=1): files prepared in ./cc0/ from Resources/Textures/CC0 (gitignored);
@@ -197,6 +204,8 @@ if (params.get('fence')) {
   const lvl = +(params.get('night') || 0);
   mats.BridgeSteel = M({ color: 0x8c9196, metalness: 0.4, roughness: 0.5 });
   mats.BridgeCable = M({ color: 0x9aa0a6, metalness: 0.5, roughness: 0.45 });
+  mats.BridgeRoad = M({ color: 0x333336, roughness: 0.85 });
+  mats.LampHead = M({ color: 0xd9d9cc, emissive: new THREE.Color(1, 0.82, 0.58).multiplyScalar(2.2 * lvl), roughness: 0.4 });
   mats.BridgeRed = M({ color: 0x9e1214, emissive: new THREE.Color(0.89, 0.04, 0.09).multiplyScalar(1.3 * lvl), roughness: 0.5 });
   mats.BridgeWhite = M({ color: 0xebebe6, emissive: new THREE.Color(1, 0.97, 0.92).multiplyScalar(2.4 * lvl), roughness: 0.5 });
   if (params.get('waterplane')) {

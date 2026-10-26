@@ -122,5 +122,38 @@ namespace Apex.Tests
             Assert.That(city.trees.Count, Is.GreaterThan(1500), "parks, woods, cemeteries and street trees");
             Assert.That(cypress, Is.GreaterThan(50), "cypresses in the cemeteries");
         }
+
+        [Test]
+        public void ThePalacesStandOnTheirOwnFootprints()
+        {
+            var (_, _, clear, _, city) = World();
+            var wings = city.buildings.FindAll(b => b.classical == OsmCity.PalaceWing);
+            var deps = city.buildings.FindAll(b => b.classical == OsmCity.PalaceDependency);
+            var towers = city.buildings.FindAll(b => b.classical == OsmCity.ClockTower);
+            TestContext.WriteLine($"{wings.Count} palace wings, {deps.Count} service buildings, {towers.Count} clock tower(s)");
+            foreach (var key in new[] { "Selamlık", "Harem", "Muayede", "Çırağan" })
+                Assert.That(wings.Exists(b => b.name.Contains(key)), Is.True, key + " is built from its footprint");
+            Assert.That(wings.Find(b => b.name.Contains("Muayede")).height, Is.EqualTo(26f));
+            Assert.That(towers.Count, Is.EqualTo(1), "Dolmabahçe clock tower");
+            // 18 houses in the data; the four at the southern end touch the circuit corner and give way to the barriers.
+            Assert.That(city.buildings.FindAll(b => b.classical == OsmCity.RowHouse).Count, Is.EqualTo(14), "Akaretler row houses");
+            Assert.That(wings.Exists(b => b.name.Contains("Kempinski")), Is.False, "the modern hotel stays generic");
+            // Service buildings ("Daire", "Köşk", "Kapı") only next to a palace.
+            foreach (var d in deps)
+            {
+                var c = Centre(d.outline);
+                Assert.That(wings.Exists(w => Vector2.Distance(Centre(w.outline), c) < 400f), Is.True, d.name);
+            }
+            foreach (var b in wings)
+                foreach (var p in b.outline)
+                    Assert.That(clear.Margin(p.X, p.Y), Is.GreaterThanOrEqualTo(OsmCity.BuildingClearance), b.name);
+        }
+
+        static Vector2 Centre(List<Vector2> o)
+        {
+            var c = Vector2.Zero;
+            foreach (var p in o) c += p;
+            return c / o.Count;
+        }
     }
 }

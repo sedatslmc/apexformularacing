@@ -48,9 +48,10 @@ if (Array.IndexOf(args, "--art") >= 0)
 if (Array.IndexOf(args, "--landmarks") >= 0)
 {
     // One OBJ per landmark, each at the origin, for inspection renders.
-    void Export(string name, System.Action<LandmarkGeometry> build)
+    void Export(string name, System.Action<LandmarkGeometry> build) => ExportD(name, 0, build);
+    void ExportD(string name, int detail, System.Action<LandmarkGeometry> build)
     {
-        var lg = new LandmarkGeometry();
+        var lg = new LandmarkGeometry(detail);
         build(lg);
         var sbl = new StringBuilder();
         int vb = 1, tr = 0;
@@ -78,7 +79,67 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
         LandmarkGeometry.BridgeIllumination(new Vector3(0f, 30f, 0f), new Vector3(1560f, 20f, 0f), -0.4f, l.B("BridgeRed"), l.B("BridgeWhite"));
     });
     Export("ortakoy", l => l.OrtakoyMosque());
+    for (int d = 0; d < 3; d++) { int dd = d; ExportD("ortakoy_lod" + d, dd, l => l.OrtakoyMosqueDetailed()); }
     Export("dolmabahce", l => { l.Palace(284f, 48f, 18f, true); });
+    for (int d = 0; d < 3; d++) { int dd = d; ExportD("clocktower_lod" + d, dd, l => l.ClockTowerDetailed()); }
+    {
+        // Palace ensembles from the OSM footprints (ground at 0; around Dolmabahçe and Çırağan).
+        string cityFile = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/City/bosphorus_a.json");
+        var city = Apex.Environment.CityData.FromJson(File.ReadAllText(cityFile));
+        for (int d = 0; d < 3; d++)
+        {
+            int dd = d;
+            ExportD("akaretler_lod" + d, dd, l =>
+            {
+                int seed = 0;
+                foreach (var b in city.buildings)
+                {
+                    if (Apex.Environment.OsmCity.ClassicalKind(b) != Apex.Environment.OsmCity.RowHouse) continue;
+                    var o = new List<Vector2>();
+                    foreach (var p in b.outline) o.Add(new Vector2(p.X - 121f, p.Y - 315f));
+                    float area = 0f;
+                    for (int i = 0; i < o.Count; i++) area += o[i].x * o[(i + 1) % o.Count].y - o[(i + 1) % o.Count].x * o[i].y;
+                    if (area < 0f) o.Reverse();
+                    int front = 0; float near = float.MaxValue;
+                    for (int i = 0; i < o.Count; i++)
+                    {
+                        var m = (o[i] + o[(i + 1) % o.Count]) * 0.5f;
+                        foreach (var s in city.streets)
+                            foreach (var q in s.points)
+                            {
+                                float dx = q.X - 121f - m.x, dz = q.Y - 315f - m.y, d2 = dx * dx + dz * dz;
+                                if (d2 < near) { near = d2; front = i; }
+                            }
+                    }
+                    l.RowHouse(o, b.height, front, seed++);
+                }
+            });
+        }
+        foreach (var (name, cx, cz, radius) in new[] { ("dolmabahce_osm", -100f, 0f, 260f), ("ciragan_osm", 1150f, 433f, 120f) })
+            for (int d = 0; d < 2; d++)
+            {
+                int dd = d;
+                ExportD(name + "_lod" + d, dd, l =>
+                {
+                    int seed = 0;
+                    foreach (var b in city.buildings)
+                    {
+                        int kind = Apex.Environment.OsmCity.ClassicalKind(b);
+                        if (kind == 0 || kind == 3) continue;
+                        var o = new List<Vector2>();
+                        foreach (var p in b.outline) o.Add(new Vector2(p.X - cx, p.Y - cz));
+                        float area = 0f;
+                        for (int i = 0; i < o.Count; i++) area += o[i].x * o[(i + 1) % o.Count].y - o[(i + 1) % o.Count].x * o[i].y;
+                        if (area < 0f) o.Reverse();
+                        var c = Vector2.zero; foreach (var p in o) c += p; c /= o.Count;
+                        if (c.x * c.x + c.y * c.y > radius * radius) continue;
+                        float h = Apex.Environment.OsmCity.ClassicalHeight(b, kind);
+                        l.ClassicalBuilding(o, h, seed++, kind == 1);
+                        if (b.name.Contains("Muayede")) l.InFrame(new Vector3(c.x, 0f, c.y), 0f, () => l.HallDome(h, 11f));
+                    }
+                });
+            }
+    }
     Export("galata", l => l.GalataTower(63f));
     Export("maiden", l => l.MaidensTower());
     Export("sultanahmet", l => l.ImperialMosque(11.7f, 26f, 6, 64f, LandmarkGeometry.Stone));

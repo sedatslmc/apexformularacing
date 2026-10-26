@@ -85,7 +85,7 @@ namespace Apex.Game
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
             foreach (var f in new RooftopFlagLayout(allLots, field, def, g, q).flags)
                 env.flagSpots.Add((V(f.position), f.length, f.pole, 1));
-            BuildLandmarks(root.transform, env, ci);
+            BuildLandmarks(root.transform, env, ci, osm != null && osm.buildings.Exists(b => b.classical == OsmCity.PalaceWing));
             if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
             BuildTrackside(root.transform, env, ci);
             BuildShips(root.transform, env, def, field.land);
@@ -271,6 +271,71 @@ namespace Apex.Game
             Debug.Log($"[Apex] City life: {life.props.Count} props, {life.parked.Count} parked cars, {life.pedestrians.Count} pedestrians, {life.vehicles.Count} vehicles.");
         }
 
+        /// <summary>LOD screen heights of the palace buildings (per building, they are up to 140 m long).</summary>
+        static readonly float[] PalaceLods = { 0.3f, 0.08f, 0.01f };
+        static readonly float[] RowLods = { 0.12f, 0.03f, 0.004f };
+
+        /// <summary>
+        /// The palaces on their OSM footprints with modelled classical facades (LandmarkGeometry.ClassicalBuilding),
+        /// the dome over Dolmabahçe's ceremonial hall, and the clock tower; each building with three LODs.
+        /// </summary>
+        static void BuildClassical(Transform root, OsmCity osm)
+        {
+            var palaceRoot = new GameObject("Palaces").transform;
+            palaceRoot.SetParent(root, false);
+            int seed = 0, count = 0;
+            foreach (var b in osm.buildings)
+            {
+                if (b.classical == OsmCity.NotClassical) continue;
+                var c = System.Numerics.Vector2.Zero;
+                foreach (var p in b.outline) c += p;
+                c /= b.outline.Count;
+                var local = new List<Vector2>(b.outline.Count);
+                foreach (var p in b.outline) local.Add(new Vector2(p.X - c.X, p.Y - c.Y));
+                var pos = new Vector3(c.X, b.ground, c.Y);
+                string name = string.IsNullOrEmpty(b.name) ? "Palace building" : b.name;
+                int s = seed++;
+                if (b.classical == OsmCity.RowHouse)
+                {
+                    // Street front: the edge whose midpoint lies nearest to a street.
+                    int front = 0;
+                    float near = float.MaxValue;
+                    for (int i = 0; i < b.outline.Count; i++)
+                    {
+                        var m = (b.outline[i] + b.outline[(i + 1) % b.outline.Count]) * 0.5f;
+                        float d = osm.StreetDistance(m.X, m.Y);
+                        if (d < near) { near = d; front = i; }
+                    }
+                    float h = b.height;
+                    PlaceDetailed(palaceRoot, "osm_classical_" + s, "Akaretler row house", h, g => g.RowHouse(local, h, front, s), pos, 0f, RowLods);
+                }
+                else if (b.classical == OsmCity.ClockTower)
+                {
+                    // Faces square to the longest footprint edge.
+                    float best = 0f, yaw = 0f;
+                    for (int i = 0; i < local.Count; i++)
+                    {
+                        var d = local[(i + 1) % local.Count] - local[i];
+                        if (d.magnitude > best) { best = d.magnitude; yaw = Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; }
+                    }
+                    PlaceDetailed(palaceRoot, LandmarkAssets.DolmabahceClockTowerId, name, 27f, g => g.ClockTowerDetailed(), pos + Vector3.up * 0.6f, yaw, PalaceLods);
+                }
+                else
+                {
+                    bool palace = b.classical == OsmCity.PalaceWing;
+                    bool hall = b.name != null && b.name.Contains("Muayede");
+                    float h = b.height;
+                    PlaceDetailed(palaceRoot, "osm_classical_" + s, name, h, g =>
+                    {
+                        g.ClassicalBuilding(local, h, s, palace);
+                        if (hall) g.HallDome(h, 11f);
+                    }, pos, 0f, PalaceLods);
+                }
+                count++;
+            }
+            Debug.Log($"[Apex] Palaces: {count} classical buildings on their OSM footprints.");
+        }
+
         /// <summary>The OSM buildings in chunks with two LODs (detailed: cornices, parapets, roof tanks).</summary>
         static void BuildOsmCity(Transform root, OsmCity osm)
         {
@@ -278,8 +343,10 @@ namespace Apex.Game
             cityRoot.SetParent(root, false);
             var chunks = new Dictionary<(int, int), List<OsmCity.Building>>();
             const float size = 192f;
+            BuildClassical(root, osm);
             foreach (var b in osm.buildings)
             {
+                if (b.classical != OsmCity.NotClassical) continue;
                 var p = b.outline[0];
                 var key = (Mathf.FloorToInt(p.X / size), Mathf.FloorToInt(p.Y / size));
                 if (!chunks.TryGetValue(key, out var list)) chunks[key] = list = new List<OsmCity.Building>();
@@ -355,6 +422,33 @@ namespace Apex.Game
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
         }
 
+        /// <summary>LOD screen heights of the detailed mosque (40 m tall: LOD0 to about 140 m, LOD1 to about 580 m at 60° FOV).</summary>
+        static readonly float[] OrtakoyLods = { 0.25f, 0.06f, 0.004f };
+
+        /// <summary>
+        /// Places an in-house detailed landmark (LandmarkModels) with three LODs built from the same code at
+        /// detail 0, 1 and 2, unless an authored model exists under Resources/Landmarks/&lt;id&gt;.
+        /// </summary>
+        static void PlaceDetailed(Transform root, string id, string name, float refHeight, System.Action<LandmarkGeometry> build, Vector3 pos, float yawDeg, float[] screenHeights)
+        {
+            if (PlaceAuthored(root, id, name, refHeight, pos, yawDeg)) return;
+            var go = new GameObject(name);
+            go.transform.SetParent(root, false);
+            go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
+            go.isStatic = true;
+            var lods = new LOD[3];
+            for (int d = 0; d < 3; d++)
+            {
+                var lg = new LandmarkGeometry(d);
+                build(lg);
+                var child = AddMeshObject(go.transform, name + "_LOD" + d, lg.parts, d < 2);
+                lods[d] = new LOD(screenHeights[d], new Renderer[] { child.GetComponent<Renderer>() });
+            }
+            var group = go.AddComponent<LODGroup>();
+            group.SetLODs(lods);
+            group.RecalculateBounds();
+        }
+
         static bool PlaceAuthored(Transform root, string id, string name, float refHeight, Vector3 pos, float yawDeg)
         {
             var prefab = Resources.Load<GameObject>(LandmarkAssets.ResourceFolder + "/" + id);
@@ -381,7 +475,7 @@ namespace Apex.Game
             return Mathf.Atan2(b - a, 120f) * Mathf.Rad2Deg;
         }
 
-        static void BuildLandmarks(Transform root, EnvironmentInstance env, CircuitInstance ci)
+        static void BuildLandmarks(Transform root, EnvironmentInstance env, CircuitInstance ci, bool realCity)
         {
             var def = ci.Definition;
             var field = ci.Terrain;
@@ -439,28 +533,36 @@ namespace Apex.Game
                 switch (l.id)
                 {
                     case "ortakoy_mosque":
-                        lg.OrtakoyMosque();
-                        // Stone platform: the mosque stands on the quay at the water's edge.
-                        lg.B(LandmarkGeometry.Stone).Box(new Vector3(0f, -3f, 0f), new Vector3(46f, 6f, 46f));
-                        pos.y = Mathf.Max(pos.y, 1.6f);
-                        Place(lmRoot, l, lg, pos, qibla, true);
+                    {
+                        // In-house detailed model on its own quay terrace, axis and plan from the OSM footprint.
+                        float yaw = LandmarkGeometry.OrtakoyAxis;
+                        pos += Quaternion.Euler(0f, yaw, 0f) * LandmarkGeometry.OrtakoyHallOffset;
+                        pos.y = Mathf.Max(field.Height(pos.x, pos.z), 1.6f);
+                        PlaceDetailed(lmRoot, l.id, l.name, l.height, g => g.OrtakoyMosqueDetailed(), pos, yaw, OrtakoyLods);
                         break;
+                    }
                     case "dolmabahce":
                     {
+                        // The palace and its clock tower stand on their OSM footprints (BuildClassical); with the
+                        // procedural city (no OSM data) the simple massing remains.
                         float yaw = ShoreYaw(def.shoreline, l.north);
-                        lg.Palace(284f, 48f, 18f, true);
                         pos = OnLand(field, pos, Vector3.left, 40f);
                         pos.y = field.Height(pos.x, pos.z);
-                        Place(lmRoot, l, lg, pos, yaw, true);
-                        var tower = new LandmarkGeometry(0);
-                        tower.ClockTower(27f);
-                        var tp = OnLand(field, new Vector3(pos.x, 0f, pos.z - 170f), Vector3.left, 25f);
-                        tp.y = field.Height(tp.x, tp.z);
-                        Place(lmRoot, LandmarkAssets.DolmabahceClockTowerId, "Dolmabahçe-Uhrturm", 27f, tower, tp, yaw, true);
+                        if (!realCity)
+                        {
+                            lg.Palace(284f, 48f, 18f, true);
+                            Place(lmRoot, l, lg, pos, yaw, true);
+                            var tower = new LandmarkGeometry(0);
+                            tower.ClockTower(27f);
+                            var tp = OnLand(field, new Vector3(pos.x, 0f, pos.z - 170f), Vector3.left, 25f);
+                            tp.y = field.Height(tp.x, tp.z);
+                            Place(lmRoot, LandmarkAssets.DolmabahceClockTowerId, "Dolmabahçe-Uhrturm", 27f, tower, tp, yaw, true);
+                        }
                         env.flagSpots.Add((pos + Quaternion.Euler(0f, yaw, 0f) * new Vector3(30f, 0f, 0f), 5f, 24f, 0));
                         break;
                     }
                     case "ciragan":
+                        if (realCity) break;
                         lg.Palace(160f, 30f, 14f, false);
                         pos = OnLand(field, pos, Vector3.left, 28f);
                         pos.y = field.Height(pos.x, pos.z);

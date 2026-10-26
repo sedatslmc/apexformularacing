@@ -97,6 +97,11 @@
 - **Aufgaben:** Dolmabahçe mit Uhrturm, Çırağan, Akaretler-Reihenhäuser, Brücke; Fernwahrzeichen (Galata, Leanderturm, Hagia Sophia, Sultan Ahmed, Beylerbeyi) als hochwertige Impostors.
 - **Weg:** externe Produktion bzw. Kauf über den vorhandenen Drop-in (`Resources/Landmarks/<id>`, Höhen-Plausibilitätsprüfung).
 
+- **Umgesetzt (2026-10-26, `LANDMARK_MODELS.md`; Overhaul-Phase 4):** eigene detaillierte Modelle mit drei LOD-Stufen
+  - Ortaköy-Moschee, Dolmabahçe (OSM-Grundrisse, Kuppel des Muayede-Saals, Uhrturm), Çırağan, Akaretler-Reihenhäuser
+  - Brücke mit Zickzack-Hängern und Fahrbahnausstattung
+  - **Status:** implementiert, getestet, offline gerendert; in Unity nicht gesehen; nicht fotorealistisch
+
 ### Phase 4 – Stadt entlang der ganzen Runde
 - **Gebäudekits je Viertel:**
   - Beşiktaş/Ortaköy: gemischt, Läden

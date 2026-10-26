@@ -91,6 +91,8 @@ namespace Apex.Environment
             public List<Vector2> outline;
             public float height;
             public string source;
+            /// <summary>Historic ensemble the data pipeline identified by place and form ("akaretler"), else empty.</summary>
+            public string ensemble = "";
         }
 
         public sealed class Street
@@ -125,7 +127,7 @@ namespace Apex.Environment
                 d.buildings.Add(new Building
                 {
                     id = Str(b, "id"), type = Str(b, "type"), name = Str(b, "name"), historic = Str(b, "historic"), amenity = Str(b, "amenity"),
-                    outline = outline, height = Num(b, "height", 12f), source = Str(b, "source"),
+                    outline = outline, height = Num(b, "height", 12f), source = Str(b, "source"), ensemble = Str(b, "ensemble"),
                 });
             }
             foreach (var o in List(root, "streets"))
@@ -211,6 +213,46 @@ namespace Apex.Environment
             public int roof;
             public bool historic, shop;
             public string name;
+            /// <summary>Built as an in-house landmark model, not as a generic block (see <see cref="ClassicalKind"/>).</summary>
+            public int classical;
+        }
+
+        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4;
+
+        /// <summary>
+        /// Historic palace buildings from their OSM names, built with modelled classical facades instead of the
+        /// generic facade texture: the Dolmabahçe and Çırağan palaces (wings, halls, gates), their named service
+        /// buildings (Daire, Köşk, Kapı) and the Dolmabahçe clock tower. Later additions (the Kempinski hotel,
+        /// the footbridge) stay generic.
+        /// </summary>
+        public static int ClassicalKind(CityData.Building b)
+        {
+            string n = b.name;
+            if (b.ensemble == "akaretler") return RowHouse;
+            if (n.Length == 0) return b.type == "palace" ? PalaceWing : NotClassical;
+            if (n.Contains("Kempinski") || n.Contains("Geçidi")) return NotClassical;
+            if (n.Contains("Saat Kulesi")) return ClockTower;
+            if (n.Contains("Saray") || b.type == "palace") return PalaceWing;
+            if (n.EndsWith("Dairesi") || n.EndsWith("Daire") || n.Contains("Köşkü") || n.EndsWith("Kapı") || n.EndsWith("Kapısı")) return PalaceDependency;
+            return NotClassical;
+        }
+
+        /// <summary>
+        /// Height for the classical models. OSM has no height for most palace wings and the neighbourhood estimate
+        /// is far too low for their tall storeys, so the known ones are set (estimates from photos and the storey
+        /// count: Dolmabahçe selamlık 3 storeys, ceremonial hall 26 m to the cornice under its dome, harem and the
+        /// crown prince's wing lower; Çırağan 2 tall storeys over a basement); others keep at least 7.5 m.
+        /// </summary>
+        public static float ClassicalHeight(CityData.Building b, int kind)
+        {
+            string n = b.name;
+            if (kind == ClockTower) return 27f;
+            if (n.Contains("Muayede")) return 26f;
+            if (n.Contains("Selamlık")) return 21f;
+            if (n.Contains("Harem")) return 17f;
+            if (n.Contains("Çırağan")) return 17f;
+            if (kind == PalaceWing) return MathF.Max(b.height, 14f);
+            return MathF.Max(b.height, 7.5f);
         }
 
         public readonly List<Building> buildings = new List<Building>();
@@ -232,11 +274,38 @@ namespace Apex.Environment
             reserved = LandmarkModelAreas(def);
             if (extraReserved != null) reserved.AddRange(extraReserved);
             foreach (var b in data.buildings) TryBuilding(b, def);
+            DemoteStrayDependencies(data);
             IndexBuildings();
             IndexStreets(data);
             PlantGreen(data, quality);
             PlantStreetTrees(data, quality);
             PlantOpenLand(data, def, quality);
+        }
+
+        /// <summary>"Daire", "Köşk" and "Kapı" are palace service buildings only next to a palace; elsewhere (a tax office, "Vergi Dairesi") they stay generic.</summary>
+        void DemoteStrayDependencies(CityData data)
+        {
+            var palaces = new List<Vector2>();
+            foreach (var b in buildings) if (b.classical == PalaceWing || b.classical == ClockTower) palaces.Add(Centre(b.outline));
+            for (int i = 0; i < buildings.Count; i++)
+            {
+                var b = buildings[i];
+                if (b.classical != PalaceDependency) continue;
+                var c = Centre(b.outline);
+                bool near = false;
+                foreach (var p in palaces) if (Vector2.DistanceSquared(p, c) < 400f * 400f) near = true;
+                if (near) continue;
+                b.classical = NotClassical;
+                foreach (var d in data.buildings) if (d.name == b.name) b.height = d.height;
+                buildings[i] = b;
+            }
+        }
+
+        static Vector2 Centre(List<Vector2> o)
+        {
+            var c = Vector2.Zero;
+            foreach (var p in o) c += p;
+            return c / o.Count;
         }
 
         /// <summary>Areas the landmark models occupy (their own geometry); parks are planted, not reserved.</summary>
@@ -248,8 +317,7 @@ namespace Apex.Environment
                 float radius;
                 switch (l.kind)
                 {
-                    case "palace": radius = 190f; break;
-                    case "palace_small": radius = 110f; break;
+                    // Palaces: built from their own OSM footprints (ClassicalKind); the area around them stays real city.
                     case "mosque": radius = 45f; break;
                     case "mosque_big": radius = 120f; break;
                     case "tower": radius = 25f; break;
@@ -282,7 +350,8 @@ namespace Apex.Environment
             foreach (var p in o) c += p;
             c /= o.Count;
             if (field.IsWater(c.X, c.Y)) { removedWater++; return; }
-            if (Reserved(c.X, c.Y, 0f)) { removedReserved++; return; }
+            int classical = ClassicalKind(b);
+            if (classical == NotClassical && Reserved(c.X, c.Y, 0f)) { removedReserved++; return; }
             // Every corner and edge midpoint outside the racing envelope.
             float ground = float.MaxValue;
             for (int i = 0; i < o.Count; i++)
@@ -301,7 +370,8 @@ namespace Apex.Environment
             {
                 outline = o,
                 ground = ground - 0.6f,
-                height = b.height,
+                height = classical != NotClassical ? ClassicalHeight(b, classical) : b.height,
+                classical = classical,
                 style = historic ? CityLayout.Styles - 1 : hash % CityLayout.Styles,
                 roof = roof,
                 historic = historic,

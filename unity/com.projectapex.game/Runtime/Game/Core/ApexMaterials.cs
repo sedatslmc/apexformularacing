@@ -53,6 +53,10 @@ namespace Apex.Game
             ["Stone"] = new Color(0.86f, 0.83f, 0.76f),
             ["Marble"] = new Color(0.93f, 0.92f, 0.89f),
             ["Lead"] = new Color(0.45f, 0.48f, 0.5f),
+            ["Gilt"] = new Color(0.83f, 0.66f, 0.3f),
+            ["ClockFace"] = new Color(0.95f, 0.94f, 0.9f),
+            ["RowPlaster"] = new Color(0.86f, 0.8f, 0.7f),
+            ["BridgeRoad"] = new Color(0.2f, 0.2f, 0.21f),
             ["BridgeSteel"] = new Color(0.62f, 0.64f, 0.66f),
             ["BridgeCable"] = new Color(0.32f, 0.34f, 0.37f),
             ["Glass"] = new Color(0.18f, 0.24f, 0.29f),
@@ -108,6 +112,7 @@ namespace Apex.Game
             ["FlagPole"] = (0.7f, 0.8f),
             ["Marble"] = (0.45f, 0f),
             ["Lead"] = (0.35f, 0.6f),
+            ["Gilt"] = (0.6f, 1f),
             ["FerryHull"] = (0.6f, 0.1f),
         };
 
