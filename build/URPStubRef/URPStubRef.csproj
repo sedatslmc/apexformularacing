@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Minimal API stubs of URP 17 (Unity 6) volume overrides and camera data, so code behind
+       APEX_URP compile-checks without Unity. Only members Apex.Runtime uses are declared, with
+       the real names and types; opening the project in the Unity 6 editor stays the real check. -->
+  <Import Project="../UnityRefs.props" />
+  <PropertyGroup>
+    <AssemblyName>URPStubRef</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="*.cs" />
+  </ItemGroup>
+</Project>

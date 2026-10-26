@@ -1,6 +1,8 @@
 # Fahrverhalten – Validierung
 
 Stand: 2026-10-25 (nach Spielertest 2). Erzeugt mit `cd build/Apex.Tuning && dotnet run -c Release -- validate`.
+> **Hinweis (2026-10-26):** Seit der Fahrverhaltens-Überarbeitung gelten die Zahlen in `docs/HANDLING_OVERHAUL.md` (6-DOF-Prüfstand, `dotnet run -- handling`). Die Tastatur-Runden laufen jetzt auf der echten `bosphorus_a`-Collider-Fläche (`KeyboardDrivingTests`). Die Tabellen unten stammen vom alten quasistatischen `FlatGroundRig` und sind historisch.
+
 Status: **implementiert, auf dem Prüfstand getestet.** Im Unity-Editor und auf dem Gerät **nicht getestet.**
 
 ## Methode

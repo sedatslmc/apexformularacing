@@ -137,19 +137,22 @@ namespace Apex.Tests
         [TestCase(250f)]
         public void QuickKeyboardSteerWithAssistKeepsRearBelowLimit(float kmh)
         {
-            var rig = RigAtSpeed(kmh, true, true);
+            // 6-DOF rig (in-game force code incl. anti-roll bars), full steering assist and TC (Accessible).
+            var hb = new HandlingBenchmark(null, 0);
+            var rig = hb.NewRig(kmh, out var sim);
             var axis = new Apex.InputLogic.DigitalAxis(1.7f, 3.5f, 7f);
             float maxRear = 0f, maxBeta = 0f;
             for (int i = 0; i < 120 * 3; i++)
             {
-                rig.sim.throttle = Math.Clamp((kmh / 3.6f - rig.u) * 0.4f + 0.25f, 0f, 1f);
-                rig.sim.steer = axis.Update(1f, Dt);
+                sim.throttle = Math.Clamp((kmh / 3.6f - rig.ForwardSpeed) * 0.4f + 0.25f, 0f, 1f);
+                sim.steer = axis.Update(1f, Dt);
                 rig.Step(Dt);
-                maxRear = Math.Max(maxRear, Math.Abs(rig.sim.wheels[2].slipAngle));
-                maxBeta = Math.Max(maxBeta, Math.Abs(MathF.Atan2(rig.v, rig.u)));
+                maxRear = Math.Max(maxRear, 0.5f * (Math.Abs(sim.wheels[2].slipAngle) + Math.Abs(sim.wheels[3].slipAngle)));
+                float u = System.Numerics.Vector3.Dot(rig.velocity, rig.Forward), v = System.Numerics.Vector3.Dot(rig.velocity, rig.Right);
+                maxBeta = Math.Max(maxBeta, Math.Abs(MathF.Atan2(v, u)));
             }
             TestContext.WriteLine($"{kmh} km/h: rear slip {maxRear * 57.3f:F1}°, sideslip {maxBeta * 57.3f:F1}°");
-            Assert.That(maxRear, Is.LessThan(rig.sim.tireRear.slipAnglePeak), "rear stays below its grip peak");
+            Assert.That(maxRear, Is.LessThan(sim.tireRear.slipAnglePeak), "rear stays below its grip peak");
             Assert.That(maxBeta, Is.LessThan(0.1f), "no snap oversteer");
         }
 

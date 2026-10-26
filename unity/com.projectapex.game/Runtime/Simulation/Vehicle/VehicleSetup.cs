@@ -28,12 +28,17 @@ namespace Apex.Vehicle
 
         // Suspension
         public float suspensionTravel = 0.09f;
-        public float springFront = 140000f;
-        public float springRear = 125000f;
+        // Stiffer than before (140/125 kN/m) in proportion to the higher downforce, so the aero
+        // compression and the body clearance at speed stay about the same (HandlingBenchmark, limits).
+        public float springFront = 190000f;
+        public float springRear = 170000f;
         public float damperBump = 6000f;
         public float damperRebound = 8500f;
-        public float antiRollFront = 60000f;
-        public float antiRollRear = 40000f;
+        // Roll stiffness biased to the rear: with 60/40 kN/m the front axle took 57 % of the lateral
+        // load transfer, the inside front unloaded to ~600 N and the car pushed (front/rear slip use
+        // 1.8-2.0 at the limit). 25/80 gives 1.2-1.3: mild understeer, both axles working.
+        public float antiRollFront = 25000f;
+        public float antiRollRear = 80000f;
         public float bumpStopRate = 900000f;
 
         // Wheels and steering
@@ -51,7 +56,9 @@ namespace Apex.Vehicle
         public float steerRateHighSpeedDeg = 70f;
         /// <summary>Counter-steer assist gain (rad of wheel angle per rad of excess rear slip).</summary>
         public float counterSteerGain = 1.2f;
-        public float ackermann = 0.12f;
+        /// <summary>Ackermann share (0 = parallel steer). Pro-Ackermann over-steered the unloaded inside
+        /// front past its peak at the limit; open-wheelers run close to parallel.</summary>
+        public float ackermann = 0f;
         /// <summary>Steering-wheel rotation per unit of road-wheel angle (cockpit wheel and hands).</summary>
         public float steeringWheelRatio = 5f;
         public float tireRelaxationLength = 0.35f;
@@ -63,8 +70,10 @@ namespace Apex.Vehicle
 
         // Aero
         public float dragArea = 1.25f;
-        public float downforceArea = 3.6f;
-        public float aeroBalanceFront = 0.43f;
+        // Downforce raised from 3.6 m² (1.25 × weight at 240 km/h) towards a modern formula car:
+        // ~1.6 × weight at 240 km/h, 4.4 g in fast corners. Balance slightly forward with it.
+        public float downforceArea = 4.6f;
+        public float aeroBalanceFront = 0.44f;
         public float airDensity = 1.225f;
 
         // Ground effect (approximation, see docs/PHYSICS_MODEL.md)
@@ -102,11 +111,11 @@ namespace Apex.Vehicle
         public float absSlipThreshold = 0.12f;
 
         /// <summary>Front tires (narrower).</summary>
-        public TireModel tireFront = new TireModel { nominalLoad = 2800f };
+        public TireModel tireFront = new TireModel { nominalLoad = 2800f, muPeak = 1.8f, loadSensitivity = 0.08f, slideFloor = 0.82f };
         /// <summary>Rear tires: wider, so a higher nominal load and slightly more grip.
         /// This keeps the rear from being the weaker axle despite carrying 55 % of the
         /// weight, which is what makes real open-wheelers stable on turn-in.</summary>
-        public TireModel tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f };
+        public TireModel tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f, loadSensitivity = 0.08f, slideFloor = 0.78f };
         public EngineModel engine = new EngineModel();
         public Gearbox gearbox = new Gearbox();
 

@@ -8,7 +8,7 @@ using Apex.Tracks;
 using Apex.Vehicle;
 // Usage: dotnet run -- launch | brake | steer | slide | aero | validate | line | field | lap <track_id> [trace]
 // Road surface (Bosphorus fix): surface <track> [grid|lap|all] | validate-road <track> [out.txt] | limits <track> <csv>
-//   | vmax | probe-surface <track> <from> <to> | trace <track> <from> <to> [pace] | profile-csv <json> <csv>
+//   | handling [profile 0|1|2] | tune [profile] key=value… | step-trace <kmh> [frac] [profile] | corners <track> [pace] | vmax | probe-surface <track> <from> <to> | trace <track> <from> <to> [pace] | profile-csv <json> <csv>
 const float Dt = 1f / 120f;
 string mode = args.Length > 0 ? args[0] : "launch";
 
@@ -238,7 +238,7 @@ else if (mode == "keyboard")
     Console.WriteLine("|---|---|---|---|---|");
     foreach (var pr in profiles)
     {
-        var sim = new VehicleSimulation(new VehicleSetup()) { tractionLevel = pr.tc, assistAbs = pr.abs, steeringAssist = pr.assist };
+        var sim = new VehicleSimulation(SetupWithOverrides(Environment.GetEnvironmentVariable("APEX_SETUP"))) { tractionLevel = pr.tc, assistAbs = pr.abs, steeringAssist = pr.assist };
         if (Environment.GetEnvironmentVariable("APEX_WET") != null) { sim.trackWetness = 0.6f; sim.FitTires(TireCompound.Intermediate); }
         var csEnv = Environment.GetEnvironmentVariable("APEX_CS");
         if (csEnv != null) sim.setup.counterSteerGain = float.Parse(csEnv, System.Globalization.CultureInfo.InvariantCulture);
@@ -557,11 +557,14 @@ else if (mode == "trace")
         float pitch = MathF.Asin(rig.Forward.Y) * 57.3f, roll = MathF.Asin(rig.Right.Y) * 57.3f;
         Console.WriteLine($"{d,7:F1} v {rig.velocity.Length() * 3.6f,5:F0} (line {bed.line.SpeedAt(d) * 3.6f:F0}) vy {rig.velocity.Y,6:F2} pitch {pitch,5:F2} roll {roll,5:F2} grade {bed.g.GradeAt(d) * 100:F1}% " +
             $"thr {s.throttle:F2} brk {s.brake:F2} st {s.steer,5:F2} comp {s.wheels[0].compression * 1000,3:F0}/{s.wheels[1].compression * 1000,3:F0}/{s.wheels[2].compression * 1000,3:F0}/{s.wheels[3].compression * 1000,3:F0} mm " +
-            $"wheels {string.Join("/", rig.wheelParts)} clearance {rig.MinClearance * 1000,4:F0} mm ({rig.ClearancePart}) body {rig.BodyContacts} slipF {s.wheels[0].slipAngle:F3}");
+            $"wheels {string.Join("/", rig.wheelParts)} clearance {rig.MinClearance * 1000,4:F0} mm ({rig.ClearancePart}) body {rig.BodyContacts} slipF {s.wheels[0].slipAngle:F3} grip {s.tires.Average(t => t.GripMultiplier(s.trackWetness)):F3} usage {MathF.Max(MathF.Abs(s.wheels[0].slipAngle), MathF.Abs(s.wheels[1].slipAngle)) / s.tireFront.slipAnglePeak:F2}");
         if (d > to - 1f) done = true;
     };
     var (d0, l0) = bed.GridSlot(0);
-    bed.Drive(d0, l0, to - d0 + 50f, 200f, pace: pace);
+    bool kb = Environment.GetEnvironmentVariable("APEX_KEYBOARD") != null;
+    float assist = float.Parse(Environment.GetEnvironmentVariable("APEX_ASSIST") ?? "1", inv);
+    int tcl = int.Parse(Environment.GetEnvironmentVariable("APEX_TC") ?? "2");
+    bed.Drive(d0, l0, to - d0 + 50f, 200f, pace: pace, digitalInput: kb, configure: sm => { sm.steeringAssist = assist; sm.tractionLevel = tcl; });
 }
 else if (mode == "validate-road")
 {
@@ -596,6 +599,111 @@ else if (mode == "profile-csv")
     }
     Console.WriteLine("wrote " + args[2]);
 }
+else if (mode == "handling")
+{
+    // Handling benchmark on the 6-DOF rig (flat pad): cornering capacity and balance, steering response, braking, traction.
+    var profiles = args.Length > 1 ? new[] { int.Parse(args[1]) } : new[] { 0, 1, 2 };
+    foreach (int p in profiles) Console.Write(new HandlingBenchmark(null, p).Report());
+}
+else if (mode == "step-trace")
+{
+    // Time trace of a steering step on the flat pad: step-trace <kmh> [fraction] [profile].
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    float kmh = float.Parse(args[1], inv), frac = args.Length > 2 ? float.Parse(args[2], inv) : 0.5f;
+    var su0 = new VehicleSetup();
+    foreach (var a in args.Skip(4))
+    {
+        var kv = a.Split('=');
+        object target = su0; string field = kv[0];
+        if (field.Contains('.')) { var parts = field.Split('.'); target = su0.GetType().GetField(parts[0]).GetValue(su0); field = parts[1]; }
+        var fi = target.GetType().GetField(field);
+        fi.SetValue(target, Convert.ChangeType(float.Parse(kv[1], inv), fi.FieldType));
+    }
+    var hb = new HandlingBenchmark(su0, args.Length > 3 ? int.Parse(args[3]) : 1);
+    var r = hb.NewRig(kmh, out var sim);
+    for (int i = 0; i < 120 * 2; i++)
+    {
+        sim.steer = frac;
+        sim.throttle = Math.Clamp(0.15f + (kmh / 3.6f - r.ForwardSpeed) * 0.4f, 0f, 1f);
+        r.Step(Dt);
+        if (i % 6 == 0)
+        {
+            float yaw = Vector3.Dot(r.angularVelocity, r.Up) * 57.3f;
+            float roll = MathF.Asin(r.Right.Y) * 57.3f;
+            Console.WriteLine($"t {r.time - 0.5f:F2} wheel {sim.SteerAngle * 57.3f:F2}° cs {sim.CounterSteer * 57.3f:F2}° thr {sim.throttle:F2} tc {sim.TcActive} yaw {yaw:F1}°/s roll {roll:F2}° slipF {sim.wheels[0].slipAngle * 57.3f:F1}/{sim.wheels[1].slipAngle * 57.3f:F1} slipR {sim.wheels[2].slipAngle * 57.3f:F1}/{sim.wheels[3].slipAngle * 57.3f:F1} loadF {sim.wheels[0].load:F0}/{sim.wheels[1].load:F0} loadR {sim.wheels[2].load:F0}/{sim.wheels[3].load:F0} v {r.ForwardSpeed * 3.6f:F0}");
+        }
+    }
+}
+else if (mode == "tune")
+{
+    // Benchmark with setup overrides: tune [profile] key=value ... (fields of VehicleSetup, tireFront.x, tireRear.x, engine.x).
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var su = new VehicleSetup();
+    int prof = 1;
+    foreach (var a in args.Skip(1))
+    {
+        if (!a.Contains('=')) { prof = int.Parse(a); continue; }
+        var kv = a.Split('=');
+        object target = su;
+        string field = kv[0];
+        if (field.Contains('.'))
+        {
+            var parts = field.Split('.');
+            target = su.GetType().GetField(parts[0]).GetValue(su);
+            field = parts[1];
+        }
+        var fi = target.GetType().GetField(field) ?? throw new ArgumentException("unknown field " + kv[0]);
+        fi.SetValue(target, Convert.ChangeType(float.Parse(kv[1], inv), fi.FieldType));
+    }
+    var hb = new HandlingBenchmark(su, prof);
+    bool quick = Environment.GetEnvironmentVariable("APEX_QUICK") != null;
+    if (quick)
+    {
+        foreach (float kmh in new[] { 80f, 150f, 250f })
+        {
+            var c = hb.CorneringCapacity(kmh);
+            var st = hb.SteeringResponse(kmh);
+            var lim = hb.LimitStep(kmh);
+            var tb = hb.TrailBrake(kmh);
+            var pe = hb.PowerExit(kmh * 0.5f);
+            Console.WriteLine($"{kmh,3:F0} km/h: trail brake {(tb.spun ? "SPIN" : "ok")} {tb.maxBetaDeg:F1}°, power exit at {kmh * 0.5f:F0} {(pe.spun ? "SPIN" : "ok")} {pe.maxBetaDeg:F1}°");
+            Console.WriteLine($"{kmh,3:F0} km/h: {c.maxLateralG:F2} g, balance {c.Balance:F2} ({c.frontUse:F2}/{c.rearUse:F2}), 25% step t63 {st.t63ms:F0} ms overshoot {st.overshootPct:F0} %, sine lag {st.sineLagMs:F0} ms gain {st.sineGain:F2}; full step {(lim.spun ? "SPIN" : "ok")} beta {lim.maxBetaDeg:F1}° {lim.lateralG:F2} g");
+        }
+    }
+    else Console.Write(hb.Report());
+}
+else if (mode == "corners")
+{
+    // Corner-by-corner driving characteristics from a flying AI lap on the real surface: corners <track> [pace].
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    float pace = args.Length > 2 ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0.955f * Apex.Core.Roster.DifficultyScale(1f);
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var ca = new CornerAnalysis(new CircuitTestBed(CircuitDefinition.FromJson(json)), pace);
+    Console.Write(ca.Report());
+}
+else if (mode == "keyboard6")
+{
+    // Keyboard driver (digital keys through the game's ramps) on the 6-DOF rig over the real surface: keyboard6 <track> [wet].
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    bool wet = args.Length > 2 && args[2] == "wet";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    string spec = Environment.GetEnvironmentVariable("APEX_SETUP");
+    bed.setupFactory = () => SetupWithOverrides(spec);
+    Console.WriteLine($"| Profil | Runde | Dreher | von der Strecke | Ereignisse |");
+    Console.WriteLine("|---|---|---|---|---|");
+    foreach (var (name, tc, abs, assist) in new[] { ("Einsteiger", 3, true, 1f), ("Ausgewogen", 2, true, 0.5f), ("Profi", 1, true, 0f) })
+    {
+        var (d0, l0) = bed.GridSlot(0);
+        var r = bed.Drive(d0, l0, 0f, 420f, laps: 2, pace: 0.95f, digitalInput: true, configure: sim =>
+        {
+            sim.tractionLevel = tc; sim.assistAbs = abs; sim.steeringAssist = assist; sim.speedSensitiveSteering = true;
+            if (wet) { sim.trackWetness = 0.6f; sim.FitTires(TireCompound.Intermediate); }
+        });
+        string lap = r.lapTimes.Count > 1 ? $"{r.lapTimes[1]:F2} s" : "–";
+        Console.WriteLine($"| {name} | {lap} | {r.Count(CircuitTestBed.EventKind.Spin)} | {r.Count(CircuitTestBed.EventKind.LeftTrack)} | {string.Join("; ", r.events.FindAll(e => e.kind != CircuitTestBed.EventKind.Grounding).ConvertAll(e => $"{e.kind}@{e.distance:F0}").Take(4))} |");
+    }
+}
 else if (mode == "lap")
 {
     string id = args.Length > 1 ? args[1] : "test_loop";
@@ -628,4 +736,19 @@ else if (mode == "lap")
     Console.WriteLine($"mean slip power kW: FL {pSum[0] / pN / 1000:F1} FR {pSum[1] / pN / 1000:F1} RL {pSum[2] / pN / 1000:F1} RR {pSum[3] / pN / 1000:F1}");
     var tt = rig.sim.tires;
     Console.WriteLine($"tire temps FL {tt[0].temperature:F0} FR {tt[1].temperature:F0} RL {tt[2].temperature:F0} RR {tt[3].temperature:F0} wear {rig.sim.AverageTireWear() * 100f:F2}%");
+}
+
+static VehicleSetup SetupWithOverrides(string spec)
+{
+    var su = new VehicleSetup();
+    if (string.IsNullOrWhiteSpace(spec)) return su;
+    foreach (var a in spec.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+    {
+        var kv = a.Split('=');
+        object target = su; string field = kv[0];
+        if (field.Contains('.')) { var parts = field.Split('.'); target = su.GetType().GetField(parts[0]).GetValue(su); field = parts[1]; }
+        var fi = target.GetType().GetField(field) ?? throw new ArgumentException("unknown field " + kv[0]);
+        fi.SetValue(target, Convert.ChangeType(float.Parse(kv[1], System.Globalization.CultureInfo.InvariantCulture), fi.FieldType));
+    }
+    return su;
 }

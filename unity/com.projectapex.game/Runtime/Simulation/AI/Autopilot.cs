@@ -51,7 +51,10 @@ namespace Apex.AI
                 {
                     int i = n - 1 - step;
                     float v = profile[(i + 1) % n];
-                    float decel = mu * (g + downforcePerMass * v * v) * 0.85f;
+                    // Friction circle (as RacingLine): braking gets what the cornering here leaves of the grip.
+                    float aTotal = mu * (g + downforcePerMass * v * v);
+                    float aLat = v * v * MathF.Abs(geometry.Curvatures[i]);
+                    float decel = MathF.Max(1f, MathF.Sqrt(MathF.Max(0f, aTotal * aTotal - aLat * aLat)) * 0.85f);
                     profile[i] = MathF.Min(profile[i], MathF.Sqrt(v * v + 2f * decel * geometry.Spacing));
                 }
             for (int pass = 0; pass < 2; pass++)

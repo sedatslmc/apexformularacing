@@ -481,7 +481,7 @@ namespace Apex.Game
         List<Row> SettingsRows()
         {
             var s = Settings;
-            return new List<Row>
+            var rows = new List<Row>
             {
                 new Row { label = "Steuerung", value = () => s.controlPreset == ControlPreset.Keyboard ? "Tastatur/Gamepad" : s.controlPreset == ControlPreset.TouchButtons ? "Touch-Tasten" : "Neigung (Gyro)",
                     change = d => s.controlPreset = (ControlPreset)Wrap((int)s.controlPreset + (d < 0 ? -1 : 1), 3) },
@@ -512,6 +512,10 @@ namespace Apex.Game
                     change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
+            // Only with URP: the built-in pipeline has no post-processing stack here.
+            if (PostFxStack.Supported)
+                rows.Insert(rows.Count - 1, new Row { label = "Nachbearbeitung (Farbe, Bloom, FXAA)", value = () => OnOff(s.postProcessing), change = d => s.postProcessing = !s.postProcessing });
+            return rows;
         }
 
         void DrawSettings()
@@ -558,6 +562,7 @@ namespace Apex.Game
             Settings.MigrateAndValidate();
             input.ApplySettings(Settings);
             ApplyAssists();
+            if (weatherVisuals != null) weatherVisuals.postProcessing = Settings.postProcessing;
             SaveService.SaveSettings(Settings);
         }
 

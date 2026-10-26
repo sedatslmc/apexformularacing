@@ -362,6 +362,7 @@ namespace Apex.Game
             weatherVisuals.environment = circuit.Environment;
             if (circuit.Environment != null) circuit.Environment.ambienceVolume = Settings.masterVolume * 0.6f;
             weatherVisuals.cameraTransform = cam.transform;
+            weatherVisuals.postProcessing = Settings.postProcessing;
             weatherVisuals.Bind(circuit.gameObject);
 
             trackId = def.id;

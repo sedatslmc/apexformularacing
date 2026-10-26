@@ -43,7 +43,7 @@ namespace Apex.Tracks
             world = new CollisionWorld(surface.All);
         }
 
-        public enum EventKind { Grounding, Airborne, VerticalSpike, OffRoadSurface, Stuck, LeftTrack }
+        public enum EventKind { Grounding, Airborne, VerticalSpike, OffRoadSurface, Stuck, LeftTrack, Spin }
 
         public struct DriveEvent
         {
@@ -86,9 +86,12 @@ namespace Apex.Tracks
         public (float distance, float lateral) GridSlot(int slot) =>
             (g.Wrap(def.startLineDistance - (12f + slot * 8f)), slot % 2 == 0 ? -3f : 3f);
 
+        /// <summary>Vehicle setup for the drives (default: the game's setup).</summary>
+        public Func<VehicleSetup> setupFactory = () => new VehicleSetup();
+
         public SurfaceRig NewRig(out VehicleSimulation sim)
         {
-            sim = new VehicleSimulation(new VehicleSetup());
+            sim = new VehicleSimulation(setupFactory());
             return new SurfaceRig(sim, world);
         }
 
@@ -103,7 +106,8 @@ namespace Apex.Tracks
 
         public DriveResult Drive(float rawDistance, float lateral, float distance, float maxTime, float initialSpeed = 0f,
             bool throttleOnly = false, float pace = 0.95f, int laps = 0, float groundingImpulse = 5f,
-            Func<float, float> lateralAt = null, float speedLimit = float.PositiveInfinity, int seed = 3)
+            Func<float, float> lateralAt = null, float speedLimit = float.PositiveInfinity, int seed = 3,
+            Action<VehicleSimulation> configure = null, bool digitalInput = false)
         {
             var rig = NewRig(out var sim);
             g.FrameAt(rawDistance, out _, out var f, out _, lateral);
@@ -111,13 +115,18 @@ namespace Apex.Tracks
             if (initialSpeed > 0f) rig.SetSpeed(initialSpeed, Math.Max(1, sim.gearbox.gear));
             var ai = new AIDriver(line, AIPersonality.Make(pace, 0f, 1f, 0.5f, 0.5f), seed) { forcedLateral = throttleOnly ? lateral : float.NaN };
             sim.speedLimit = speedLimit;
+            configure?.Invoke(sim);
+            // Keyboard/touch driver: the AI decides, but the car only gets digital keys through the game's ramps.
+            var steerKey = new InputLogic.DigitalAxis();
+            var thrKey = new InputLogic.DigitalAxis(InputLogic.InputTuning.ThrottleRate, InputLogic.InputTuning.ThrottleRate, InputLogic.InputTuning.ThrottleRate);
+            var brkKey = new InputLogic.DigitalAxis(InputLogic.InputTuning.BrakeRate, InputLogic.InputTuning.BrakeRate, InputLogic.InputTuning.BrakeRate);
             var states = new List<CarState>();
             var timer = new LapTimer(g.Length, Array.ConvertAll(def.sectorFractions, x => x * g.Length));
             var res = new DriveResult();
             int hint = -1;
             float airborne = 0f, stuck = 0f, prevVy = 0f;
             float lastRaw = rawDistance;
-            bool grounded = false, offRoad = false;
+            bool grounded = false, offRoad = false, spinning = false;
             for (int step = 0; step < (int)(maxTime / Dt); step++)
             {
                 var pr = g.Project(rig.position, hint);
@@ -131,12 +140,32 @@ namespace Apex.Tracks
                 states.Clear();
                 states.Add(st);
                 if (lateralAt != null) ai.forcedLateral = lateralAt(pr.distance);
+                // As RaceController: the driver knows the conditions (grip of the tyres, wet track).
+                float grip = 0f;
+                foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;
+                ai.gripFactor = grip;
+                ai.wet = sim.trackWetness > 0.25f;
                 ai.maxSteerRad = sim.CurrentMaxLock();
                 ai.frontSlipUsage = MathF.Max(MathF.Abs(sim.wheels[0].slipAngle), MathF.Abs(sim.wheels[1].slipAngle)) / sim.tireFront.slipAnglePeak;
                 var c = ai.Drive(st, states, Dt);
-                sim.throttle = throttleOnly ? 1f : c.throttle;
-                sim.brake = throttleOnly ? 0f : c.brake;
-                sim.steer = c.steer;
+                if (digitalInput)
+                {
+                    float k = ApexMath.Clamp01(rig.ForwardSpeed / 60f);
+                    steerKey.pressRate = InputLogic.InputTuning.SteerPressRate(k);
+                    steerKey.releaseRate = InputLogic.InputTuning.SteerReleaseRate(k);
+                    steerKey.reverseRate = InputLogic.InputTuning.SteerReverseRate;
+                    float key = 0f;
+                    if (MathF.Abs(c.steer) > 0.05f && (c.steer - steerKey.Value) * MathF.Sign(c.steer) > 0.03f) key = MathF.Sign(c.steer);
+                    sim.steer = steerKey.Update(key, Dt);
+                    sim.throttle = thrKey.Update(c.throttle > 0.5f ? 1f : 0f, Dt);
+                    sim.brake = brkKey.Update(c.brake > 0.25f ? 1f : 0f, Dt);
+                }
+                else
+                {
+                    sim.throttle = throttleOnly ? 1f : c.throttle;
+                    sim.brake = throttleOnly ? 0f : c.brake;
+                    sim.steer = c.steer;
+                }
                 rig.Step(Dt);
                 trace?.Invoke(pr.distance, rig);
                 if (laps > 0) timer.Update(g.Wrap(pr.distance - def.startLineDistance), rig.time);
@@ -165,7 +194,7 @@ namespace Apex.Tracks
                 float vy = rig.velocity.Y;
                 float ay = (vy - prevVy) / Dt;
                 prevVy = vy;
-                if (step > 10 && MathF.Abs(ay) > 2.5f * SurfaceRig.Gravity) res.events.Add(Ev(EventKind.VerticalSpike, ay));
+                if (rig.time > 0.5f && MathF.Abs(ay) > 2.5f * SurfaceRig.Gravity) res.events.Add(Ev(EventKind.VerticalSpike, ay));
                 // A wheel on terrain or barrier means the road surface is missing or covered there.
                 bool off = false; string offPart = null;
                 for (int w = 0; w < 4; w++)
@@ -180,6 +209,10 @@ namespace Apex.Tracks
                     res.events.Add(Ev(EventKind.LeftTrack, pr.lateral));
                     break;
                 }
+                // Spin: body slip angle beyond 26° (as the keyboard lap tests count it).
+                float beta = MathF.Abs(MathF.Atan2(Vector3.Dot(rig.velocity, rig.Right), MathF.Abs(rig.ForwardSpeed) + 0.1f));
+                if (beta > 0.45f && !spinning) { res.events.Add(Ev(EventKind.Spin, beta * ApexMath.Rad2Deg)); spinning = true; }
+                if (beta < 0.1f) spinning = false;
                 if (v < 1f && rig.time > 3f) stuck += Dt; else stuck = 0f;
                 if (stuck > 3f)
                 {

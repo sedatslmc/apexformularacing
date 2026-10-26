@@ -193,6 +193,41 @@ namespace Apex.Tests
             Assert.That(quay.water, Is.GreaterThan(street.water));
             Assert.That(quay.crowd, Is.GreaterThan(0.5f));
         }
+
+        [Test]
+        public void AuthoredLandmarkHeightCheckCatchesWrongUnits()
+        {
+            Assert.That(LandmarkAssets.CheckHeight("ortakoy_mosque", 40f, 42f), Is.Null);
+            Assert.That(LandmarkAssets.CheckHeight("ortakoy_mosque", 40f, 4000f), Does.Contain("units"), "centimetre export");
+            Assert.That(LandmarkAssets.CheckHeight("dolmabahce", 25f, 12f), Is.Not.Null);
+            Assert.That(LandmarkAssets.CheckHeight("pier", 0f, 5f), Is.Null, "no reference height");
+        }
+
+        [Test]
+        public void ColorGradeIsWarmAtGoldenHourAndFlatInTheRain()
+        {
+            var golden = ColorGrading.Get(TimeOfDay.GoldenHour, 0f, 0f);
+            var day = ColorGrading.Get(TimeOfDay.Day, 0f, 0f);
+            var rain = ColorGrading.Get(TimeOfDay.GoldenHour, 1f, 1f);
+            var night = ColorGrading.Get(TimeOfDay.Night, 0f, 0f);
+            Assert.That(golden.temperature, Is.GreaterThan(day.temperature + 10f));
+            Assert.That(rain.temperature, Is.LessThan(0f));
+            Assert.That(rain.saturation, Is.LessThan(golden.saturation));
+            Assert.That(rain.contrast, Is.LessThan(golden.contrast));
+            Assert.That(night.bloomIntensity, Is.GreaterThan(day.bloomIntensity), "street lights bloom at night");
+            foreach (TimeOfDay t in Enum.GetValues(typeof(TimeOfDay)))
+                foreach (float w in new[] { 0f, 0.5f, 1f })
+                {
+                    var g = ColorGrading.Get(t, w, w);
+                    // URP override ranges; natural grade, never a heavy look.
+                    Assert.That(g.temperature, Is.InRange(-30f, 30f));
+                    Assert.That(g.contrast, Is.InRange(-20f, 20f));
+                    Assert.That(g.saturation, Is.InRange(-25f, 15f));
+                    Assert.That(g.bloomIntensity, Is.InRange(0f, 1f));
+                    Assert.That(g.vignette, Is.InRange(0f, 0.3f));
+                    Assert.That(g.postExposure, Is.InRange(-0.5f, 1f));
+                }
+        }
     
         [Test]
         public void BosphorusGrandPrixGeographyAndCity()

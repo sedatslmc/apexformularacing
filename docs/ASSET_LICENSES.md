@@ -17,6 +17,7 @@ Stand: Alle Inhalte sind selbst erstellt oder prozedural erzeugt. Es gibt keine 
 | Schrift (UI) | Unity-Standard-Font | Unity-Lizenz | wird in M4 durch eine lizenzierte Schrift ersetzt (Lizenz hier eintragen) |
 
 ## Regeln für neue Assets
+- Wahrzeichen-Modelle werden als Prefab unter `Runtime/Resources/Landmarks/<id>` abgelegt (Konvention und Budgets: `docs/VISUAL_OVERHAUL.md`). Jedes Prefab braucht hier eine eigene Zeile.
 - Pro Asset: Quelle, Autor, Lizenz (mit Link), Datum, Polygon- und Texturbudget, Änderungen.
 - OpenStreetMap-Daten (ODbL): Attribution im Spiel; Share-Alike für abgeleitete Datenbanken. Vor kommerzieller Nutzung rechtlich prüfen lassen.
 - Verboten: Google-Maps/Earth-Geometrie oder -Texturen, F1-Marken, echte Teams, Fahrer, Sponsoren, Lackierungen, Assets aus anderen Spielen, nicht lizenzierte Musik.

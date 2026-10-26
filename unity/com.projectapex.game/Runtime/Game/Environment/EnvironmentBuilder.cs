@@ -229,10 +229,31 @@ namespace Apex.Game
             return p;
         }
 
-        static void Place(Transform root, string name, LandmarkGeometry lg, Vector3 pos, float yawDeg, bool shadows)
+        static void Place(Transform root, CircuitDefinition.Landmark l, LandmarkGeometry lg, Vector3 pos, float yawDeg, bool shadows) =>
+            Place(root, l.id, l.name, l.height, lg, pos, yawDeg, shadows);
+
+        /// <summary>Places the authored model Resources/Landmarks/&lt;id&gt; if there is one, else the procedural placeholder.</summary>
+        static void Place(Transform root, string id, string name, float refHeight, LandmarkGeometry lg, Vector3 pos, float yawDeg, bool shadows)
         {
+            if (PlaceAuthored(root, id, name, refHeight, pos, yawDeg)) return;
             var go = AddMeshObject(root, name, lg.parts, shadows);
             go.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yawDeg, 0f));
+        }
+
+        static bool PlaceAuthored(Transform root, string id, string name, float refHeight, Vector3 pos, float yawDeg)
+        {
+            var prefab = Resources.Load<GameObject>(LandmarkAssets.ResourceFolder + "/" + id);
+            if (prefab == null) return false;
+            var go = UnityEngine.Object.Instantiate(prefab, pos, Quaternion.Euler(0f, yawDeg, 0f), root);
+            go.name = name;
+            float top = float.NegativeInfinity;
+            foreach (var r in go.GetComponentsInChildren<Renderer>()) top = Mathf.Max(top, r.bounds.max.y);
+            if (!float.IsNegativeInfinity(top))
+            {
+                string warn = LandmarkAssets.CheckHeight(id, refHeight, top - pos.y);
+                if (warn != null) Debug.LogWarning(warn);
+            }
+            return true;
         }
 
         /// <summary>Game-frame yaw (deg) of a true bearing.</summary>
@@ -259,10 +280,15 @@ namespace Apex.Game
             if (eu != null && asia != null)
             {
                 var a = P(eu); var b = P(asia);
-                var lg = new LandmarkGeometry(0);
-                lg.Bridge(a, b, WaterY);
-                AddMeshObject(lmRoot, "Bridge_15Temmuz", lg.parts, true);
-                // Night lighting: small lamps along both deck edges and on the tower tops.
+                var mid = new Vector3((a.x + b.x) * 0.5f, WaterY, (a.z + b.z) * 0.5f);
+                float bridgeYaw = Mathf.Atan2(b.x - a.x, b.z - a.z) * Mathf.Rad2Deg;
+                if (!PlaceAuthored(lmRoot, LandmarkAssets.BridgeId, "Bridge_15Temmuz", LandmarkAssets.BridgeTowerHeight, mid, bridgeYaw))
+                {
+                    var lg = new LandmarkGeometry(0);
+                    lg.Bridge(a, b, WaterY);
+                    AddMeshObject(lmRoot, "Bridge_15Temmuz", lg.parts, true);
+                }
+                // Night lighting (also with an authored model): small lamps along both deck edges and on the tower tops.
                 var lights = new MeshBuilder();
                 foreach (float lat in new[] { -17.2f, 17.2f })
                     foreach (var p in LandmarkGeometry.BridgeLightPath(a, b, WaterY, lat))
@@ -280,7 +306,7 @@ namespace Apex.Game
                         // Stone platform: the mosque stands on the quay at the water's edge.
                         lg.B(LandmarkGeometry.Stone).Box(new Vector3(0f, -3f, 0f), new Vector3(46f, 6f, 46f));
                         pos.y = Mathf.Max(pos.y, 1.6f);
-                        Place(lmRoot, l.name, lg, pos, qibla, true);
+                        Place(lmRoot, l, lg, pos, qibla, true);
                         break;
                     case "dolmabahce":
                     {
@@ -288,12 +314,12 @@ namespace Apex.Game
                         lg.Palace(284f, 48f, 18f, true);
                         pos = OnLand(field, pos, Vector3.left, 40f);
                         pos.y = field.Height(pos.x, pos.z);
-                        Place(lmRoot, l.name, lg, pos, yaw, true);
+                        Place(lmRoot, l, lg, pos, yaw, true);
                         var tower = new LandmarkGeometry(0);
                         tower.ClockTower(27f);
                         var tp = OnLand(field, new Vector3(pos.x, 0f, pos.z - 170f), Vector3.left, 25f);
                         tp.y = field.Height(tp.x, tp.z);
-                        Place(lmRoot, "Dolmabahçe-Uhrturm", tower, tp, yaw, true);
+                        Place(lmRoot, LandmarkAssets.DolmabahceClockTowerId, "Dolmabahçe-Uhrturm", 27f, tower, tp, yaw, true);
                         env.flagSpots.Add((pos + Quaternion.Euler(0f, yaw, 0f) * new Vector3(30f, 0f, 0f), 5f, 24f, 0));
                         break;
                     }
@@ -301,31 +327,31 @@ namespace Apex.Game
                         lg.Palace(160f, 30f, 14f, false);
                         pos = OnLand(field, pos, Vector3.left, 28f);
                         pos.y = field.Height(pos.x, pos.z);
-                        Place(lmRoot, l.name, lg, pos, ShoreYaw(def.shoreline, l.north), true);
+                        Place(lmRoot, l, lg, pos, ShoreYaw(def.shoreline, l.north), true);
                         break;
                     case "beylerbeyi":
                         lg.Palace(65f, 40f, 15f, false);
                         pos = OnLand(field, pos, Vector3.right, 30f);
                         pos.y = field.Height(pos.x, pos.z);
-                        Place(lmRoot, l.name, lg, pos, ShoreYaw(def.farShoreline, l.north), false);
+                        Place(lmRoot, l, lg, pos, ShoreYaw(def.farShoreline, l.north), false);
                         break;
                     case "galata":
                         lg.GalataTower(l.height);
-                        Place(lmRoot, l.name, lg, pos, 0f, false);
+                        Place(lmRoot, l, lg, pos, 0f, false);
                         env.flagSpots.Add((pos + Vector3.up * (l.height + 0.5f), 2.4f, 4f, 2));
                         break;
                     case "maidens_tower":
                         lg.MaidensTower();
-                        Place(lmRoot, l.name, lg, new Vector3(pos.x, WaterY, pos.z), TrueToGame(def, 90f), false);
+                        Place(lmRoot, l, lg, new Vector3(pos.x, WaterY, pos.z), TrueToGame(def, 90f), false);
                         env.flagSpots.Add((new Vector3(pos.x + 4f, WaterY + 20f, pos.z + 2f), 1.8f, 4f, 2));
                         break;
                     case "sultan_ahmed":
                         lg.ImperialMosque(11.7f, 26f, 6, 64f, LandmarkGeometry.Stone);
-                        Place(lmRoot, l.name, lg, pos, qibla, false);
+                        Place(lmRoot, l, lg, pos, qibla, false);
                         break;
                     case "hagia_sophia":
                         lg.ImperialMosque(15.5f, 34f, 4, 60f, LandmarkGeometry.HagiaPlaster);
-                        Place(lmRoot, l.name, lg, pos, TrueToGame(def, 122f), false);
+                        Place(lmRoot, l, lg, pos, TrueToGame(def, 122f), false);
                         break;
                 }
             }

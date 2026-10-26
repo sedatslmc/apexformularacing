@@ -20,7 +20,10 @@ namespace Apex.Game
         /// <summary>True north in the game frame (deg); NaN for schematic circuits.</summary>
         public float trueNorthBearing = float.NaN;
         public EnvironmentInstance environment;
+        /// <summary>Settings switch for the URP post-processing volume (applied live).</summary>
+        public bool postProcessing = true;
         SunModel.Light light;
+        PostFxStack postFx;
 
         ParticleSystem rain;
         ParticleSystem.EmissionModule rainEmission;
@@ -48,6 +51,10 @@ namespace Apex.Game
             }
             ApplyTimeOfDay();
             CreateRain();
+            var fx = new GameObject("PostFx");
+            fx.transform.SetParent(transform, false);
+            postFx = fx.AddComponent<PostFxStack>();
+            postFx.Init(cameraTransform != null ? cameraTransform.GetComponent<Camera>() : null, postProcessing);
         }
 
         void ApplyTimeOfDay()
@@ -122,6 +129,11 @@ namespace Apex.Game
             RenderSettings.fogColor = Color.Lerp(clearFog, clearFog * 0.75f + new Color(0.14f, 0.15f, 0.16f), cloud);
             RenderSettings.fogStartDistance = Mathf.Lerp(600f, 60f, rainI);
             RenderSettings.fogEndDistance = Mathf.Lerp(environment != null ? 8000f : 3500f, 900f, rainI);
+            if (postFx != null)
+            {
+                postFx.SetEnabled(postProcessing);
+                postFx.Apply(ColorGrading.Get(timeOfDay, cloud, rainI));
+            }
             if (environment != null)
             {
                 environment.SetWetness(wet);

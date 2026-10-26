@@ -86,6 +86,12 @@ namespace Apex.Vehicle
         public float Drag { get; private set; }
         public bool TcActive { get; private set; }
         public bool AbsActive { get; private set; }
+        /// <summary>Stability control is braking/cutting drive this step.</summary>
+        public bool EscActive { get; private set; }
+        /// <summary>Rear slip (relative to its peak) above which stability control intervenes.</summary>
+        public const float EscThreshold = 1.0f;
+        /// <summary>Brake torque on the outside front at full intervention, relative to maxBrakeTorque.</summary>
+        public const float EscBrakeShare = 0.6f;
         public float TcCut => tcCut;
         public float SimTime { get; private set; }
         /// <summary>Clutch is slipping (launch, shift sync, anti-stall).</summary>
@@ -286,7 +292,27 @@ namespace Apex.Vehicle
             float requested = clutchLocked
                 ? engine.Torque(engineOmega / RpmToRad, effThrottle) * ratio * eff
                 : clutchCap * MathF.Abs(ratio) * eff;
-            float limited = ApplyTractionControl(requested, throttleIn, dt);
+            // Stability control (part of the steering assist, off at strength 0): when the rear slides
+            // past its grip peak and works harder than the front, brake the outside front wheel (a yaw
+            // moment against the rotation) and cut drive, both scaled with the assist strength.
+            float escExcess = 0f;
+            int escWheel = -1;
+            if (steeringAssist > 0f && Speed > 10f && !holdBrake && gearbox.gear > 0)
+            {
+                float ar = 0.5f * (wheels[2].slipAngle + wheels[3].slipAngle);
+                float af = 0.5f * (wheels[0].slipAngle + wheels[1].slipAngle);
+                float rearUse = MathF.Abs(ar) / tireRear.slipAnglePeak;
+                float frontUse = MathF.Abs(af) / tireFront.slipAnglePeak;
+                if (rearUse > EscThreshold && rearUse > frontUse)
+                {
+                    escExcess = ApexMath.Clamp01((rearUse - EscThreshold) / 0.5f) * ApexMath.Clamp01(steeringAssist);
+                    // Right turn: the rear slides left (negative slip), the outside is the left side.
+                    escWheel = ar < 0f ? 0 : 1;
+                    effThrottle *= 1f - escExcess;
+                }
+            }
+            EscActive = escExcess > 0f;
+            float limited = ApplyTractionControl(requested * (1f - escExcess), throttleIn, dt);
             float tcLimit = limited < requested ? limited : float.PositiveInfinity;
             float engineReflected = engine.inertia * ratio * ratio * 0.5f;
             LimiterActive = false;
@@ -322,6 +348,7 @@ namespace Apex.Vehicle
                         AbsActive = true;
                     }
                 }
+                if (w.index == escWheel) tb = MathF.Max(tb, escExcess * setup.maxBrakeTorque * EscBrakeShare);
                 w.brakeTorque = tb;
             }
 

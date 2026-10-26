@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Same as Apex.Runtime.CompileCheck, with APEX_URP defined against the URP API stubs
+       (build/URPStubRef): checks the code paths that need the URP package. -->
+  <Import Project="../UnityRefs.props" />
+  <PropertyGroup>
+    <AssemblyName>Apex.Runtime</AssemblyName>
+    <DefineConstants>$(UnityVersionDefines);APEX_URP</DefineConstants>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/com.projectapex.game/Runtime/Game/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Apex.Simulation/Apex.Simulation.csproj" />
+    <ProjectReference Include="../InputSystemRef/InputSystemRef.csproj" />
+    <ProjectReference Include="../URPStubRef/URPStubRef.csproj" />
+  </ItemGroup>
+</Project>
