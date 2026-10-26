@@ -1,7 +1,9 @@
 # Bosphorus GP: geografische Neuplanung (Phasen 1–3)
 
 Stand: 2026-10-26. Auftrag: „Complete Master Prompt – Authentic Istanbul“.
-**Status: Phase 3 im Entwurf. Ich warte auf die Freigabe. Die bestehende Unity-Strecke ist unverändert.**
+**Status: Phase 3 ist an echten Straßen ausgearbeitet (Variante A). Ich warte auf die Freigabe. Die bestehende Unity-Strecke ist unverändert.**
+
+> Der Abschnitt „Phase 3: Streckenplan (Entwurf zur Freigabe)“ weiter unten ist der frühere Skizzen-Entwurf. Maßgeblich ist der neue Abschnitt **„Phase 3b“** am Ende.
 
 ## Phase 1: Bestandsaufnahme
 
@@ -95,3 +97,99 @@ Alternativ diese Domains in der Umgebung freigeben: `overpass-api.de` (Reserve: 
 
 ### Nach der Freigabe (Phase 4)
 OSM-Achsen übernehmen → Strecke glätten (Mindestradius, Breite, Steigungsgrenze) → neues Strecken-JSON mit neuer Strecken-ID, damit alte Bestzeiten nicht vermischt werden → Tests anpassen: Länge und Kurvenzahl aus dem Plan, gegen den Uhrzeigersinn bleibt bei Variante A → KI-Runde und volles Rennen auf dem Prüfstand → Boxengasse und Startplätze prüfen.
+
+
+---
+
+## Phase 3b: Variante A an echten Straßenachsen (Stand 2026-10-26, zur Freigabe)
+
+**Datengrundlage:** OSM-Auszüge vom 2026-10-26 (8.032 Straßenabschnitte, 22.224 Gebäude, 114 Küstenabschnitte; © OpenStreetMap-Mitwirkende, ODbL) und Copernicus DEM GLO-30.
+**Werkzeuge:**
+- `tools/geo/road_graph.py`: Straßengraph auf Knotenebene, 19.554 Knoten
+- `tools/geo/route_variants.py`: Routing entlang benannter Straßen. Doppelnutzung und Kreuzungen der eigenen Strecke sind dabei verboten, Tunnel ausgeschlossen
+- `tools/geo/track_analysis.py`: Glättung, Kurven, Sektoren, Profil, Sichtachsen, Breiten
+
+![Plan Variante A](img/bosphorus_plan_A_map.png)
+![Profil Variante A](img/bosphorus_plan_A_profile.png)
+
+### Kennzahlen
+| | Wert |
+|---|---|
+| Länge | **7,64 km** (Straßenachsen geglättet) |
+| Fahrtrichtung | gegen den Uhrzeigersinn |
+| Kurven | 13 (Schwelle: Radius < 220 m und ≥ 18° Richtungsänderung; dazu leichte Knicke auf Çırağan Cd. und Palanga Cd.) |
+| Sektoren | S1 0–2,53 km (Ufer bis Ortaköy) · S2 2,53–5,28 km (Palanga-Anstieg und Barbaros-Abfahrt) · S3 5,28–7,64 km (Akaretler, Bayıldım, Kabataş) |
+| Höhe | 5 bis 103 m über dem Meer (DEM-Straßenniveau, Unsicherheit etwa ±5–8 m absolut) |
+| Steigung | **max. ≈ 11 %** (über ≈ 125 m geglättet), im unteren Palanga-Anstieg und auf der Bayıldım Cd. Die früheren 19 %/27 % stammten aus Dach- und Baumhöhen im Oberflächenmodell. Das Spielprofil begrenzt auf ≤ 12 %, eine Abflachung ist kaum nötig |
+| Kreuzungen der eigenen Strecke | keine. Keine Überführungen, keine Tunnel |
+
+### Abschnitte und Kurven (Geschwindigkeiten sind grobe Schätzungen fürs Balancing)
+| Nr. | km | Straße | Richtung, Winkel, Radius | ≈ km/h | Anlauf | Bemerkung |
+|---|---|---|---|---|---|---|
+| S/Z | 0,0 | Dolmabahçe Caddesi | – | – | – | Start/Ziel, Startaufstellung auf der 13 m breiten Dolmabahçe Cd., Palastmauer rechts |
+| – | 0–2,15 | Dolmabahçe Cd. → Beşiktaş Cd. → Çırağan Cd. | leichte Knicke | 300+ | – | **2,2 km Vollgas am Ufer** („Baku-Gerade“), Palast- und Parkmauern |
+| T1 | 2,15 | Ortaköy (Çırağan Cd. → Taşbasamak Sk.) | links, 193°, R ≈ 26 m | ≈ 100 | 2,2 km | **Ortaköy-Haarnadel, Überholstelle 1**. Moschee rechts voraus |
+| T2–T3 | 2,48–2,64 | Palanga Caddesi | rechts 78°, links 50° | 150–210 | – | Beginn des Anstiegs, bis ≈ 11 % |
+| T4 | 3,49 | Palanga Caddesi (Kamm) | rechts, 21° | ≈ 300 | 0,8 km | schneller Knick über den Yıldız-Kamm, Kuppe |
+| T5 | 3,77 | Palanga → Barbaros (Anschluss) | links, 160°, R ≈ 32 m | ≈ 110 | – | Haarnadel auf die Barbaros Bulvarı |
+| – | 3,77–5,23 | Barbaros Bulvarı (Richtungsfahrbahn Süd) | gerade, bergab bis ≈ 9 % | 300+ | – | **1,45 km Bergabgerade** |
+| T6 | 5,30 | Beşiktaş (Barbaros → Beşiktaş Cd.) | rechts, 65°, R ≈ 71 m | ≈ 180 | 1,4 km | **Überholstelle 2**, harte Bremszone bergab |
+| T7 | 5,55 | Beşiktaş Cd. → Süleyman Seba Cd. | rechts, 51° | ≈ 165 | – | Einfahrt nach Akaretler |
+| T8 | 6,26 | Süleyman Seba Cd. → Maçka/Bayıldım | links, 144°, R ≈ 28 m | ≈ 105 | 0,6 km | **Überholstelle 3**, nach dem Anstieg durch die historischen Akaretler-Reihenhäuser |
+| T9 | 6,64 | Bayıldım Caddesi | rechts, 193°, R ≈ 53 m | ≈ 150 | – | Bayıldım-Kehre, bergab |
+| T10 | 6,86 | Bayıldım → Kadırgalar (Knoten) | links, Haarnadel, R ≈ 19 m | ≈ 85 | – | engste Kurve. Wendet am vorhandenen Knoten von der Bayıldım Cd. auf die Kadırgalar Cd. |
+| T11 | 7,19 | Kabataş (Kadırgalar → Dolmabahçe Cd.) | links, 88° | ≈ 145 | – | auf die Start/Ziel-Gerade |
+| T12–T13 | 7,38–7,49 | Dolmabahçe Caddesi | links 21°, rechts 27° | 260+ | – | Knicke vor Start/Ziel |
+
+### Beşiktaş: Streckenverbindungen geprüft
+- **Hinweg:** Dolmabahçe Cd. → Beşiktaş Cd. (Richtungsfahrbahn Nordost) → Çırağan Cd. Er führt geradeaus durch den Barbaros-Knoten.
+- **Rückweg:** Barbaros Bulvarı (Richtungsfahrbahn Süd) mündet über ihre **vorhandene** Abbiegespur in die Beşiktaş Cd. (Richtungsfahrbahn Südwest). Nach ≈ 300 m geht es rechts in die Süleyman Seba Cd.
+- Hin- und Rückweg liegen auf diesen ≈ 300 m auf den **zwei getrennten Richtungsfahrbahnen derselben Straße**, Achsabstand 10–13 m. Den vorhandenen Mittelstreifen ersetzt eine temporäre Betonwand.
+- Es gibt **keine Kreuzung** der beiden Streckenteile und **keine Überführung**. Geprüft per Graph: keine gemeinsam genutzten Knoten; geometrisch: keine Schnittpunkte.
+- Die anfangs gewählte Route über den Busbahnhof (İETT-Peronlar) habe ich verworfen.
+
+### Boxengasse
+- Landseitig (links) an der Dolmabahçe Cd., von ≈ 170 m vor bis ≈ 230 m nach Start/Ziel, also ≈ 400 m lang.
+- Der Platz ist nach OSM unbebaut, nach DEM nahezu eben (≤ 2–3 m Höhenunterschied innerhalb von 45 m auf ≈ 250 m Länge). Dort liegen der Şairler-Sofrası-Park und der Vorplatz.
+- **20 Boxen à 9 m auf ≈ 180 m** passen. Der Boxenausgang liegt an der beginnenden Beşiktaş Cd. Dort stehen die Gebäude 21–25 m von der Achse entfernt, genug für eine Ausfahrspur von etwa 6 m.
+- **Fiktiv:** Garagen, Paddock und Hospitality als temporäre Bauten auf Park- und Vorplatzflächen, Paddock zusätzlich am İnönü-Park.
+- Auf der Wasserseite liegt der Dolmabahçe-Palast. Er bleibt unberührt.
+
+### Sichtachsen (DEM-Sichtlinie inkl. Gebäudehöhen, Augenhöhe 1 m)
+| Wahrzeichen | sichtbar auf | wo |
+|---|---|---|
+| Ortaköy-Moschee | ≈ 1,0 km | Çırağan Cd. ab km 1,3 bis Ortaköy-Haarnadel (T1), danach kurz im Palanga-Anstieg |
+| Bosporusbrücke (Pylon) | ≈ 3,6 km | Start/Ziel, Çırağan Cd., ganzer Palanga-Anstieg bis zum Kamm, Akaretler, Kabataş |
+| Bosporusbrücke (Fahrbahn) | ≈ 2,6 km | Çırağan Cd. und unterer Palanga-Anstieg |
+| Dolmabahçe-Palast | ≈ 1,9 km | Start/Ziel-Gerade (0–0,8 km), Beşiktaş/Akaretler, Anfahrt von Kabataş |
+| Çırağan-Palast | ≈ 1,5 km | Çırağan Cd. (km 1,0–1,5), Akaretler |
+
+Signaturmoment: Auf der Çırağan Cd. vor der Ortaköy-Haarnadel sind Moschee und Brücke gemeinsam sichtbar. Beide stehen an ihren echten Positionen. Die Brücken-Endpunkte aus OSM stimmen mit Structurae auf ≈ 20 m überein.
+
+### Übernommen oder angepasst
+| Abschnitt | Länge | übernommen | Anpassung fürs Rennspiel |
+|---|---|---|---|
+| Dolmabahçe Cd. | 0,45 km | Verlauf, Breite (13 m, 4 Fahrstreifen) | keine |
+| Beşiktaş Cd. (Nordost, Hinweg) | 0,62 km | Verlauf | Richtungsfahrbahn 6,6 m → 11 m (Mittelstreifen/Gehweg temporär) |
+| Çırağan Cd. | 1,47 km | Verlauf | 9,9 m → 11 m; an Palast- und Parkmauern nur minimal, ggf. 10 m belassen |
+| Ortaköy-Anschluss (Taşbasamak Sk.) | 0,05 km | Verlauf | Haarnadel mit Auslauf, Kreuzung umgestaltet |
+| Palanga Cd. | 1,53 km | Verlauf, Steigung | 6,6 m → 11 m (deutlichste Verbreiterung, Hangstraße) |
+| Anschluss Palanga → Barbaros | 0,04 km | Verlauf | Rampe 3,3 m → 11 m, Kreuzung umgestaltet |
+| Barbaros Bulvarı (Süd) | 1,46 km | Verlauf, Steigung | 9,9 m → 11 m |
+| Beşiktaş Cd. (Südwest, Rückweg) | 0,31 km | Verlauf | 9,9 m → 11 m, temporäre Mittelwand |
+| Süleyman Seba Cd. (Akaretler) | 0,72 km | Verlauf | 6,6 m → 11 m |
+| Bayıldım Cd. | 0,60 km | Verlauf, Kehre | Richtungsfahrbahn 3,3 m → 11 m: beide Richtungsfahrbahnen zusammenlegen |
+| Kadırgalar Cd. → Kabataş | 0,33 km | Verlauf | 9,9 m → 11 m, Knoten Kabataş umgestaltet |
+
+Breitenangaben: aus der OSM-Fahrstreifenzahl × 3,3 m (89 %) oder Standardwerten (11 %) geschätzt, **nicht gemessen**. Alle Anpassungen sind fiktiv und werden im Spiel als temporäre Streckenbauten dargestellt. Kein Wahrzeichen und keine Uferlinie wird verschoben.
+
+### Alternativen
+- **A-Ihlamur** (9,03 km): Rückweg durch das Ihlamur-Tal ohne Doppelnutzung der Beşiktaş Cd. Länger, Ihlamur Yıldız Cd. nur ≈ 3,3–6,6 m breit, Anschluss über Wohnstraßen. Nicht empfohlen.
+- **Optionale Abkürzung am Knoten Kabataş:** eine fiktive Verbindung von ≈ 40–50 m von der Bayıldım Cd. zur Kadırgalar Cd. würde die engste Haarnadel T10 ersetzen. Wegen deines Wunsches nach realen Verbindungen nicht im Plan.
+- **Variante B** ist nicht nötig, weil Variante A als geschlossener Rundkurs funktioniert.
+
+### Noch offen / Risiken
+- Breiten und Höhen sind Schätzungen: OSM-Fahrstreifen bzw. Oberflächenmodell.
+- Kurvengeschwindigkeiten sind grob. Die echte Fahrbarkeit prüfe ich in Phase 4 mit der KI-Linie und dem Simulationsprüfstand.
+- 7,64 km sind länger als bisher (5,1 km); eine Runde dauert schätzungsweise ≈ 2:05–2:20 min. Rennlängen und Rundenzahlen müssen angepasst werden.
+- Die Startaufstellung liegt teils auf den leichten Knicken T12/T13 der Dolmabahçe Cd.

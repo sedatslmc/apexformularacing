@@ -54,3 +54,52 @@ def grid(lat0, lat1, lon0, lon1):
     e0, n0 = enu(lat0, lon0)
     e1, n1 = enu(lat1, lon1)
     return z, (e0, e1, n0, n1)
+
+
+def ground_height(e, n, radius=30.0, q=20):
+    """Street-level estimate from the surface model: a low percentile of DEM samples within
+    `radius` metres (roads lie below roofs and tree crowns). Sea pixels (0) are ignored."""
+    vals = []
+    for dx in (-radius, -radius / 2, 0.0, radius / 2, radius):
+        for dy in (-radius, -radius / 2, 0.0, radius / 2, radius):
+            if dx * dx + dy * dy > radius * radius * 1.01:
+                continue
+            h = height(*latlon(e + dx, n + dy))
+            if h > 0.0:
+                vals.append(h)
+    if not vals:
+        return 0.0
+    vals.sort()
+    return vals[min(len(vals) - 1, int(len(vals) * q / 100))]
+
+
+def road_profile(points, step=10.0, smooth=60.0):
+    """Distances and smoothed street-level heights along a polyline [(e, n), ...]."""
+    s, h, acc = [], [], 0.0
+    for i in range(len(points) - 1):
+        a, b = points[i], points[i + 1]
+        d = math.dist(a, b)
+        k = max(1, int(d / step))
+        for j in range(k):
+            t = j / k
+            x, y = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+            s.append(acc + d * t)
+            h.append(ground_height(x, y))
+        acc += d
+    s.append(acc)
+    h.append(ground_height(*points[-1]))
+    w = max(1, int(smooth / step / 2))
+    hs = [sum(h[max(0, i - w):i + w + 1]) / len(h[max(0, i - w):i + w + 1]) for i in range(len(h))]
+    return s, hs
+
+
+def max_grade(s, h, window=80.0):
+    worst = 0.0
+    j = 0
+    for i in range(len(s)):
+        while j < len(s) and s[j] - s[i] < window:
+            j += 1
+        if j >= len(s):
+            break
+        worst = max(worst, abs(h[j] - h[i]) / (s[j] - s[i]))
+    return worst
