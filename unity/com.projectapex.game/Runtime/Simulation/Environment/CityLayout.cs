@@ -56,6 +56,8 @@ namespace Apex.Environment
             /// <summary>Free quay/promenade strip along the European coast in the near area.</summary>
             public float quay = 24f;
             public float farRadius = 7000f;
+            /// <summary>Within this distance of the track the real OSM city stands (OsmCity): no generic blocks (0 = off).</summary>
+            public float realCityRadius;
             public readonly List<Reserved> reserved = new List<Reserved>();
         }
 
@@ -158,6 +160,7 @@ namespace Apex.Environment
         {
             var land = field.land;
             if (field.IsWater(x, z)) return;
+            if (o.realCityRadius > 0f && field.TrackDistance(x, z, o.realCityRadius, out _) < o.realCityRadius) return;
             string mass = land.HasLand ? land.MassAt(x, z) : "europe";
             float coast = land.HasLand ? land.CoastDistance(x, z) : float.MaxValue;
             bool asia = mass == "asia";

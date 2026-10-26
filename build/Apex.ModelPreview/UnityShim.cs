@@ -46,6 +46,7 @@ namespace UnityEngine
         public static Vector3 operator *(float d, Vector3 a) => a * d;
         public static Vector3 operator /(Vector3 a, float d) => new Vector3(a.x / d, a.y / d, a.z / d);
         public float magnitude => MathF.Sqrt(x * x + y * y + z * z);
+        public float sqrMagnitude => x * x + y * y + z * z;
         public Vector3 normalized { get { float m = magnitude; return m > 1e-9f ? this / m : zero; } }
         public static float Dot(Vector3 a, Vector3 b) => a.x * b.x + a.y * b.y + a.z * b.z;
         public static Vector3 Cross(Vector3 a, Vector3 b) => new Vector3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
@@ -105,6 +106,7 @@ namespace UnityEngine
         public static float Max(float a, float b) => MathF.Max(a, b);
         public static int Min(int a, int b) => Math.Min(a, b);
         public static float Sin(float a) => MathF.Sin(a);
+        public static float Atan2(float y, float x) => MathF.Atan2(y, x);
         public static float Cos(float a) => MathF.Cos(a);
         public static float Sqrt(float a) => MathF.Sqrt(a);
         public static float Abs(float a) => MathF.Abs(a);

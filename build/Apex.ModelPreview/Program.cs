@@ -283,7 +283,24 @@ if (Array.IndexOf(args, "--environment") >= 0)
     var parts = new Dictionary<string, MeshBuilder>();
     MeshBuilder B(string k) { if (!parts.TryGetValue(k, out var m)) parts[k] = m = new MeshBuilder(); return m; }
     var sw = System.Diagnostics.Stopwatch.StartNew();
-    var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality });
+    // --real: the OSM city (Resources/City/<track>.json) near the track, generic blocks beyond (as the game).
+    Apex.Environment.OsmCity osm = null;
+    float realRadius = 0f;
+    string cityPath = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/City/" + trackId + ".json");
+    if (Array.IndexOf(args, "--real") >= 0 && File.Exists(cityPath))
+    {
+        var data = Apex.Environment.CityData.FromJson(File.ReadAllText(cityPath));
+        var su = new Apex.Vehicle.VehicleSetup();
+        var rl = new Apex.AI.RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
+        var pl = new Apex.Tracks.TrackInfrastructurePlan(g, g.CornersFor(def), rl.offsets, rl.speed);
+        var rs = new Apex.Tracks.RoadSurface(g, def, pl.kerbs.left, pl.kerbs.right, pl.kerbs.height);
+        osm = new Apex.Environment.OsmCity(data, field, new Apex.Tracks.TrackClearance(rs), def, null, quality);
+        realRadius = data.radius;
+        foreach (var b in osm.buildings) EnvironmentGeometry.FootprintBuilding(B, b, true);
+        Console.WriteLine($"real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees");
+    }
+    var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality, realCityRadius = realRadius });
+    if (osm != null) city.trees.AddRange(osm.trees);
     Console.WriteLine($"city: {city.lots.Count} lots, {city.trees.Count} trees, {sw.ElapsedMilliseconds} ms");
     int[] bands = new int[3];
     foreach (var lot in city.lots) { bands[lot.band]++; EnvironmentGeometry.Building(B, lot, lot.band == 0); }

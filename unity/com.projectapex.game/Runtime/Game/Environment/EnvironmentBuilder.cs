@@ -58,20 +58,37 @@ namespace Apex.Game
                 if (monumental) reserved.Add(new CityLayout.Reserved(fx, fz, MonumentalFlagSite.ReservedRadius));
                 else Debug.LogWarning($"Monumental flag site {fx:F0},{fz:F0} is not clear of the circuit; not placed.");
             }
-            var opts = new CityLayout.Options { quality = q };
+            // The real city (OSM footprints, streets, green) where the circuit has city data; generic blocks beyond it.
+            var cityText = Resources.Load<TextAsset>("City/" + def.id);
+            CityData cityData = null;
+            if (cityText != null)
+            {
+                try { cityData = CityData.FromJson(cityText.text); }
+                catch (System.Exception e) { Debug.LogError("[Apex] Invalid city data " + def.id + ": " + e.Message); }
+            }
+            OsmCity osm = cityData != null ? new OsmCity(cityData, field, ci.Clearance, def, reserved, q) : null;
+            var opts = new CityLayout.Options { quality = q, realCityRadius = cityData != null ? cityData.radius : 0f };
             opts.reserved.AddRange(reserved);
             var city = new CityLayout(field, def, opts);
+            var allLots = new List<CityLayout.Lot>(city.lots);
+            if (osm != null)
+            {
+                BuildOsmCity(root.transform, osm);
+                allLots.AddRange(osm.AsLots());
+                city.trees.AddRange(osm.trees);
+                Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
+            }
             BuildCity(root.transform, city);
             BuildTrees(root.transform, env, city);
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
-            foreach (var f in new RooftopFlagLayout(city, field, def, g, q).flags)
+            foreach (var f in new RooftopFlagLayout(allLots, field, def, g, q).flags)
                 env.flagSpots.Add((V(f.position), f.length, f.pole, 1));
             BuildLandmarks(root.transform, env, ci);
             if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
             BuildTrackside(root.transform, env, ci);
             BuildShips(root.transform, env, def, field.land);
             BuildGulls(root.transform, env, ci);
-            BuildAmbience(root.transform, env, ci, city);
+            BuildAmbience(root.transform, env, ci, allLots);
             return env;
         }
 
@@ -215,6 +232,43 @@ namespace Apex.Game
                 {
                     new LOD(0.18f, new Renderer[] { lod0.GetComponent<Renderer>() }),
                     new LOD(0.004f, new Renderer[] { lod1.GetComponent<Renderer>() }),
+                });
+                lg.RecalculateBounds();
+            }
+        }
+
+        /// <summary>The OSM buildings in chunks with two LODs (detailed: cornices, parapets, roof tanks).</summary>
+        static void BuildOsmCity(Transform root, OsmCity osm)
+        {
+            var cityRoot = new GameObject("RealCity").transform;
+            cityRoot.SetParent(root, false);
+            var chunks = new Dictionary<(int, int), List<OsmCity.Building>>();
+            const float size = 192f;
+            foreach (var b in osm.buildings)
+            {
+                var p = b.outline[0];
+                var key = (Mathf.FloorToInt(p.X / size), Mathf.FloorToInt(p.Y / size));
+                if (!chunks.TryGetValue(key, out var list)) chunks[key] = list = new List<OsmCity.Building>();
+                list.Add(b);
+            }
+            foreach (var kv in chunks)
+            {
+                var detailed = new PartSet();
+                var simple = new PartSet();
+                foreach (var b in kv.Value)
+                {
+                    EnvironmentGeometry.FootprintBuilding(detailed.B, b, true);
+                    EnvironmentGeometry.FootprintBuilding(simple.B, b, false);
+                }
+                var group = new GameObject($"Real_{kv.Key.Item1}_{kv.Key.Item2}");
+                group.transform.SetParent(cityRoot, false);
+                var lod0 = AddMeshObject(group.transform, "LOD0", detailed.parts, true);
+                var lod1 = AddMeshObject(group.transform, "LOD1", simple.parts, true);
+                var lg = group.AddComponent<LODGroup>();
+                lg.SetLODs(new[]
+                {
+                    new LOD(0.12f, new Renderer[] { lod0.GetComponent<Renderer>() }),
+                    new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
                 });
                 lg.RecalculateBounds();
             }
@@ -774,14 +828,14 @@ namespace Apex.Game
             }
         }
 
-        static void BuildAmbience(Transform root, EnvironmentInstance env, CircuitInstance ci, CityLayout city)
+        static void BuildAmbience(Transform root, EnvironmentInstance env, CircuitInstance ci, List<CityLayout.Lot> lots)
         {
             var g = ci.Geometry;
             var field = ci.Terrain;
             // Enclosure per track sample: tall blocks within 45 m on both sides make a street canyon.
             int step = Mathf.Max(1, Mathf.RoundToInt(20f / g.Spacing));
             var grid = new Dictionary<(int, int), int>();
-            foreach (var lot in city.lots)
+            foreach (var lot in lots)
             {
                 if (lot.band != 0 || lot.height < 9f) continue;
                 var key = (Mathf.FloorToInt(lot.x / 30f), Mathf.FloorToInt(lot.z / 30f));

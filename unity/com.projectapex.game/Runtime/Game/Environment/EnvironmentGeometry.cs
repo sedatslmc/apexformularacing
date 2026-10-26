@@ -113,6 +113,103 @@ namespace Apex.Game
         }
 
         /// <summary>
+        /// A real building from its OSM footprint (<see cref="OsmCity"/>): facade walls along every edge (the
+        /// facade texture runs continuously around the building, shopfronts at street level), a cornice band,
+        /// and either a flat roof with a parapet, water tanks and a stair head (most Istanbul apartment blocks)
+        /// or, for small four-cornered houses, a tiled hip roof. `detailed` = false gives the LOD1 mass.
+        /// </summary>
+        public static void FootprintBuilding(Parts B, OsmCity.Building b, bool detailed)
+        {
+            var o = b.outline;
+            int n = o.Count;
+            float y0 = b.ground, y1 = b.ground + 0.6f + b.height;
+            float tileH = CityLayout.FloorHeight * TileBays, tileW = BayWidth * TileBays;
+            string wall = Facade(b.style);
+            Vector3 W(int i, float y) => new Vector3(o[i % n].X, y, o[i % n].Y);
+            float u = (o[0].X * 0.37f + o[0].Y * 0.11f) % tileW;
+            float vb = -0.6f / tileH, vt = (y1 - y0 - 0.6f) / tileH;
+            for (int i = 0; i < n; i++)
+            {
+                var a = W(i, 0f); var c = W(i + 1, 0f);
+                var edge = c - a;
+                float len = edge.magnitude;
+                if (len < 0.05f) continue;
+                // Counter-clockwise footprint (x right, z up): the outside is to the right of the edge.
+                var outward = new Vector3(edge.z, 0f, -edge.x) / len;
+                B(wall).QuadFacing(Up(a, y0), Up(c, y0), Up(c, y1), Up(a, y1),
+                    new Vector2(u / tileW, vb), new Vector2((u + len) / tileW, vb), new Vector2((u + len) / tileW, vt), new Vector2(u / tileW, vt), outward);
+                u += len;
+                if (!detailed) continue;
+                // Cornice: a 0.35 m ledge projecting 0.3 m just under the roof line.
+                var off = outward * 0.3f;
+                string trim = b.historic ? LandmarkGeometry.Stone : Concrete;
+                B(trim).QuadFacing(Up(a, y1 - 0.35f) + off, Up(c, y1 - 0.35f) + off, Up(c, y1) + off, Up(a, y1) + off, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, outward);
+                B(trim).QuadFacing(Up(a, y1), Up(c, y1), Up(c, y1) + off, Up(a, y1) + off, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                B(trim).QuadFacing(Up(a, y1 - 0.35f), Up(c, y1 - 0.35f), Up(c, y1 - 0.35f) + off, Up(a, y1 - 0.35f) + off, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.down);
+            }
+            if (b.roof == 1 && n == 4)
+            {
+                HipRoof(B, o, y1);
+                return;
+            }
+            // Flat roof (triangulated footprint) with a 0.9 m parapet.
+            var tris = Polygon.Triangulate(o);
+            var roof = B(RoofFlat);
+            for (int t = 0; t + 2 < tris.Count; t += 3)
+                roof.TriangleFacing(W(tris[t], y1), W(tris[t + 1], y1), W(tris[t + 2], y1),
+                    new Vector2(o[tris[t]].X, o[tris[t]].Y) / 6f, new Vector2(o[tris[t + 1]].X, o[tris[t + 1]].Y) / 6f, new Vector2(o[tris[t + 2]].X, o[tris[t + 2]].Y) / 6f, Vector3.up);
+            if (!detailed) return;
+            for (int i = 0; i < n; i++)
+            {
+                var a = W(i, y1); var c = W(i + 1, y1);
+                var edge = c - a;
+                if (edge.sqrMagnitude < 0.01f) continue;
+                var inward = new Vector3(-edge.z, 0f, edge.x).normalized;
+                B(Concrete).QuadFacing(a, c, c + Vector3.up * 0.9f, a + Vector3.up * 0.9f, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, inward);
+            }
+            // Water tanks and a stair head on larger roofs (positions from the footprint, deterministic).
+            float area = Polygon.SignedArea(o);
+            if (area > 120f)
+            {
+                var ctr = System.Numerics.Vector2.Zero;
+                foreach (var p in o) ctr += p;
+                ctr /= n;
+                var e0 = o[1] - o[0];
+                float yaw = Mathf.Atan2(e0.X, e0.Y) * Mathf.Rad2Deg;
+                var q = Quaternion.Euler(0f, yaw, 0f);
+                var dir = new Vector3(e0.X, 0f, e0.Y).normalized;
+                var side = new Vector3(dir.z, 0f, -dir.x);
+                var c3 = new Vector3(ctr.X, y1, ctr.Y);
+                B(RoofFlat).Box(c3 - dir * 2f + Vector3.up * 1.2f, new Vector3(3f, 2.4f, 3f), q);
+                B(Tank).Box(c3 + dir * 2.5f + side * 1.5f + Vector3.up * 0.7f, new Vector3(1.6f, 1.4f, 1.1f), q);
+                if (area > 400f) B(Tank).Box(c3 + dir * 4.5f - side * 1.8f + Vector3.up * 0.7f, new Vector3(1.6f, 1.4f, 1.1f), q);
+            }
+        }
+
+        /// <summary>Tiled hip roof over a four-cornered footprint (ridge along the longer pair of sides).</summary>
+        static void HipRoof(Parts B, List<System.Numerics.Vector2> o, float y1)
+        {
+            var e = new Vector3[4];
+            for (int i = 0; i < 4; i++) e[i] = new Vector3(o[i].X, y1, o[i].Y);
+            var ctr = (e[0] + e[1] + e[2] + e[3]) * 0.25f;
+            float l01 = (e[1] - e[0]).magnitude + (e[3] - e[2]).magnitude, l12 = (e[2] - e[1]).magnitude + (e[0] - e[3]).magnitude;
+            // Rotate so that edges 0-1 and 2-3 are the long sides.
+            if (l12 > l01) e = new[] { e[1], e[2], e[3], e[0] };
+            float halfLong = ((e[1] - e[0]).magnitude + (e[3] - e[2]).magnitude) * 0.25f;
+            float halfShort = ((e[2] - e[1]).magnitude + (e[0] - e[3]).magnitude) * 0.25f;
+            var along = ((e[1] - e[0]) + (e[2] - e[3])).normalized;
+            float r = Mathf.Max(0f, halfLong - halfShort);
+            float rise = halfShort * 1.1f * 0.5f;
+            var ra = ctr - along * r + Vector3.up * rise;
+            var rb = ctr + along * r + Vector3.up * rise;
+            Vector3 Out(Vector3 p) => (p - ctr) + Vector3.up * 2f;
+            B(RoofTile).QuadFacing(e[0], e[1], rb, ra, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.75f, 1), new Vector2(0.25f, 1), Out((e[0] + e[1]) * 0.5f));
+            B(RoofTile).QuadFacing(e[2], e[3], ra, rb, new Vector2(0, 0), new Vector2(1, 0), new Vector2(0.75f, 1), new Vector2(0.25f, 1), Out((e[2] + e[3]) * 0.5f));
+            B(RoofTile).TriangleFacing(e[1], e[2], rb, Vector2.zero, Vector2.right, new Vector2(0.5f, 1f), Out((e[1] + e[2]) * 0.5f));
+            B(RoofTile).TriangleFacing(e[3], e[0], ra, Vector2.zero, Vector2.right, new Vector2(0.5f, 1f), Out((e[3] + e[0]) * 0.5f));
+        }
+
+        /// <summary>
         /// Far landscape on a 96 m grid around the near terrain (cells inside the near
         /// area are left out; it meets them on shared grid lines). Cells entirely under
         /// water are skipped.
