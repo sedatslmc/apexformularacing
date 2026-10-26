@@ -98,5 +98,25 @@ namespace Apex.Tests
             var park = def.FindLandmark("yildiz_park");
             Assert.That(MathF.Sqrt((x - park.east) * (x - park.east) + (z - park.north) * (z - park.north)), Is.LessThan(MonumentalFlagSite.SearchRadius + 1f), "on the Yıldız hills");
         }
+
+        [Test]
+        public void RooftopFlagsSitOnFlatRoofsNearTheTrackAndAreSpacedOut()
+        {
+            var (def, g, _, clear, field) = World();
+            var city = new CityLayout(field, def, new CityLayout.Options { quality = 1 });
+            var layout = new RooftopFlagLayout(city, field, def, g, 1);
+            TestContext.WriteLine($"{layout.flags.Count} rooftop flags");
+            Assert.That(layout.flags.Count, Is.InRange(20, 32));
+            for (int a = 0; a < layout.flags.Count; a++)
+            {
+                var p = layout.flags[a].position;
+                Assert.That(clear.Margin(p.X, p.Z), Is.GreaterThan(3f), "on a building, not over the circuit");
+                Assert.That(field.TrackDistance(p.X, p.Z, RooftopFlagLayout.MaxTrackDistance + 1f, out _), Is.LessThan(RooftopFlagLayout.MaxTrackDistance + 0.5f));
+                Assert.That(city.lots.Exists(l => l.band == 0 && l.roof != 1 && MathF.Abs(l.ground + l.height - p.Y) < 0.01f
+                    && MathF.Sqrt((l.x - p.X) * (l.x - p.X) + (l.z - p.Z) * (l.z - p.Z)) < 0.5f * MathF.Sqrt(l.w * l.w + l.d * l.d)), "on top of a flat roof or tower");
+                for (int b = a + 1; b < layout.flags.Count; b++)
+                    Assert.That(Vector2.Distance(new Vector2(p.X, p.Z), new Vector2(layout.flags[b].position.X, layout.flags[b].position.Z)), Is.GreaterThanOrEqualTo(RooftopFlagLayout.MinSpacing));
+            }
+        }
     }
 }

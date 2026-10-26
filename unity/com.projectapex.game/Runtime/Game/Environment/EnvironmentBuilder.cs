@@ -61,6 +61,9 @@ namespace Apex.Game
             var city = new CityLayout(field, def, opts);
             BuildCity(root.transform, city);
             BuildTrees(root.transform, env, city);
+            // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
+            foreach (var f in new RooftopFlagLayout(city, field, def, g, q).flags)
+                env.flagSpots.Add((V(f.position), f.length, f.pole, 1));
             BuildLandmarks(root.transform, env, ci);
             if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
             BuildTrackside(root.transform, env, ci);
