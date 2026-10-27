@@ -72,6 +72,9 @@ namespace Apex.Tests
             }
             for (int i = 0; i < life.vehicles.Count; i++) moved += Vector3.Distance(start[i], life.vehicles[i].position);
             Assert.That(moved / life.vehicles.Count, Is.GreaterThan(30f), "traffic flows");
+            TestContext.WriteLine($"{life.connectedEnds} connected street ends, {life.junctionTurns} turns at junctions in two minutes");
+            Assert.That(life.connectedEnds, Is.GreaterThan(100), "street network with junctions");
+            Assert.That(life.junctionTurns, Is.GreaterThan(life.vehicles.Count / 2), "vehicles turn into other streets instead of only turning round");
             foreach (var p in life.props) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
             foreach (var p in life.parked) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
         }
@@ -135,6 +138,10 @@ namespace Apex.Tests
                 Assert.That(wings.Exists(b => b.name.Contains(key)), Is.True, key + " is built from its footprint");
             Assert.That(wings.Find(b => b.name.Contains("Muayede")).height, Is.EqualTo(26f));
             Assert.That(towers.Count, Is.EqualTo(1), "Dolmabahçe clock tower");
+            var gates = city.buildings.FindAll(b => b.classical == OsmCity.Gate);
+            Assert.That(gates.Count, Is.EqualTo(2), "Saltanat and Hazine gates");
+            Assert.That(gates.Exists(b => b.name.Contains("Saltanat")) && gates.Exists(b => b.name.Contains("Hazine")), Is.True);
+            Assert.That(deps.Exists(b => b.name.Contains("Koltuk Kapısı")), Is.True, "a square gate house stays a service building");
             // 18 houses in the data; the four at the southern end touch the circuit corner and give way to the barriers.
             Assert.That(city.buildings.FindAll(b => b.classical == OsmCity.RowHouse).Count, Is.EqualTo(14), "Akaretler row houses");
             Assert.That(wings.Exists(b => b.name.Contains("Kempinski")), Is.False, "the modern hotel stays generic");

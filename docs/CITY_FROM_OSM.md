@@ -60,13 +60,22 @@ Straßen sind rein visuell: kein Collider, nicht befahrbar.
   - GPU-Instancing mit `Graphics.DrawMeshInstanced` in Gruppen zu je 1.023
   - statische Objekte in 120-m-Zellen
   - Bewegung ohne Physik und ohne Collider
-- **Test `CityLifeStaysOffTheRacingSurfaceAndMoves`:** 120 s Simulation, nichts in der Sperrzone, der Verkehr fließt.
+- **Kreuzungen** (seit 2026-10-27):
+  - Jeder befahrbare Straßenabschnitt ist ein Knoten im Straßengraph. Endet ein Abschnitt höchstens 5 m von einem Punkt eines anderen, ist dort eine Kreuzung.
+  - Fahrzeuge biegen dort in die verbundene Straße ab, wobei sie die Ausfahrten reihum wählen. Nur an echten Sackgassen und an der gesperrten Strecke wenden sie.
+  - Abschnitte auf beiden Seiten der Rennstrecke werden nie verbunden.
+  - Ergebnis: 1.575 verbundene Straßenenden, 1.877 Abbiegevorgänge in zwei Minuten bei 211 Fahrzeugen.
+- **Fahrzeuglichter:**
+  - Scheinwerfer und Rücklichter leuchten nachts; sie werden über das Nachtlicht-System der Umgebung gesteuert.
+  - Geparkte Autos bleiben dunkel.
+- **Test `CityLifeStaysOffTheRacingSurfaceAndMoves`:**
+  - 120 s Simulation, nichts in der Sperrzone, der Verkehr fließt
+  - Fahrzeuge biegen an Kreuzungen ab
 
 ## 5. Grenzen (ehrlich)
 - **Modelle:** Fahrzeuge, Personen und Möbel sind einfache prozedurale Low-Poly-Platzhalter (zusammen ca. 2.000 Dreiecke). Sie sind für Entfernungen ab etwa 20 m gedacht, nicht für Nahaufnahmen.
   - Vorschau: `dotnet run -- <dir> --citylife`, dann `python3 tools/render_car_preview.py <dir>/citylife.obj <bild.png>`.
 - **Fehlt noch:**
-  - Ampeln und Kreuzungslogik: Fahrzeuge fahren auf ihrem Straßenzug hin und her und wechseln nicht an Kreuzungen.
-  - Nachtlichter der Fahrzeuge
+  - Ampeln und Vorfahrt: Fahrzeuge biegen ab, warten aber nicht an Kreuzungen und können sich dort kurz überlappen.
   - Fußgängeranimation über die zwei Posen hinaus
 - **Kosten:** Draw-Call- und Frame-Kosten sind nicht gemessen (Phase 7).

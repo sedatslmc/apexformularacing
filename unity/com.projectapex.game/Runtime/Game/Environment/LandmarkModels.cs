@@ -19,6 +19,13 @@ namespace Apex.Game
 
         public int Detail => detail;
 
+        /// <summary>Metric box-projected UVs on the textured masonry materials (marble ashlar, lime plaster).</summary>
+        public void MasonryUVs()
+        {
+            foreach (var key in new[] { Marble, RowPlaster })
+                if (parts.TryGetValue(key, out var mb)) mb.MetricUVs();
+        }
+
         /// <summary>Runs build() and moves every vertex it added, in all materials, by yaw about y and then origin.</summary>
         public void InFrame(Vector3 origin, float yawDeg, System.Action build)
         {
@@ -794,6 +801,139 @@ namespace Apex.Game
             ArchBand(mb, 0f, 0f, rIn, rOut, z0, depth, seg / 2);
             // Lower half: the upper half rotated by 180° about z, then moved to the centre.
             mb.TransformLast(mb.VertexCount - b0, v => new Vector3(c.x - v.x, c.y - v.y, v.z));
+        }
+
+        // --- Monumental palace gates (Dolmabahçe: Saltanat Kapısı, Hazine Kapısı) ---------------
+
+        /// <summary>
+        /// Monumental palace gate after the two Dolmabahçe show gates: a triumphal-arch block (width × depth from the
+        /// OSM footprint, long axis along x, passage along z) with a round-arched passage and wrought-iron gate
+        /// leaves, paired columns on pedestals on both faces, niches in the side bays, a deep cornice, an attic with a
+        /// gilded medallion (no inscription) under a segmental pediment, and urns. Origin at the footprint centre.
+        /// </summary>
+        public void GateMonument(float width, float depth, float height)
+        {
+            string W = Marble;
+            float cornice = height * 0.72f, r = Mathf.Min(3.2f, width * 0.16f), spring = cornice * 0.6f;
+            float half = width * 0.5f, hd = depth * 0.5f;
+            B(Stone).Box(new Vector3(0f, -0.4f, 0f), new Vector3(width + 1f, 1.6f, depth + 1f));
+            ArchedWall(W, half, spring, r, cornice, -hd, depth);
+            // Gate leaves in the passage.
+            var leaf = ArchOutline(0f, 0f, r * 2f, spring, ArcSeg(r));
+            if (detail == 0)
+            {
+                for (float x = -r + 0.12f; x < r; x += 0.14f)
+                {
+                    float top = spring + Mathf.Sqrt(Mathf.Max(0f, r * r - x * x)) - 0.1f;
+                    B(Lead).Box(new Vector3(x, top * 0.5f, 0f), new Vector3(0.035f, top, 0.035f));
+                    if (Mathf.Abs(x) < r - 0.4f && Mathf.Repeat(x, 0.56f) < 0.14f) B(Gilt).Box(new Vector3(x, top + 0.06f, 0f), new Vector3(0.08f, 0.14f, 0.08f));
+                }
+                foreach (float y in new[] { 0.25f, 2.2f, spring - 0.2f })
+                    B(Lead).Box(new Vector3(0f, y, 0f), new Vector3(r * 2f, 0.08f, 0.06f));
+                B(Gilt).Box(new Vector3(0f, spring * 0.5f, 0f), new Vector3(0.06f, spring, 0.08f));
+            }
+            else Panel(B(Lead), leaf, 0.04f, 0.08f);
+            // Both faces.
+            foreach (float yaw in new[] { 0f, 180f })
+            {
+                var n = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                InFrame(n * hd, yaw, () =>
+                {
+                    B(Stone).Box(new Vector3(0f, 0.6f, 0.2f), new Vector3(width + 0.6f, 1.2f, 0.4f));
+                    ArchBand(B(W), 0f, spring, r, r + 0.55f, 0f, 0.3f, ArcSeg(r));
+                    foreach (float sx in new[] { -1f, 1f })
+                        B(W).Box(new Vector3(sx * (r + 0.27f), spring * 0.5f, 0.15f), new Vector3(0.55f, spring, 0.3f));
+                    B(W).Box(new Vector3(0f, spring + r + 0.45f, 0.35f), new Vector3(0.9f, 1.1f, 0.7f));   // keystone
+                    foreach (float sx in new[] { -1f, 1f })
+                    {
+                        // Paired columns on pedestals flanking the arch.
+                        foreach (float off in new[] { 1.05f, 2.25f })
+                        {
+                            float x = sx * (r + off);
+                            B(W).Box(new Vector3(x, 1.2f + 0.9f, 0.55f), new Vector3(1f, 1.8f, 1.1f));
+                            if (detail < 2) InFrame(new Vector3(0f, 0f, 0.5f), 0f, () => Column(W, x, 3f, cornice - 3.3f, 0.38f));
+                            else B(W).Box(new Vector3(x, (cornice + 3f) * 0.5f, 0.55f), new Vector3(0.7f, cornice - 3f, 0.7f));
+                        }
+                        // Side bay: arched niche with a statue-less shell head, a framed panel above.
+                        float bx = sx * (r + 2.25f + (half - r - 2.25f) * 0.5f + 0.3f);
+                        if (half - r - 2.8f > 1.4f)
+                        {
+                            ArchWindow(W, bx, 2.4f, 1.3f, cornice * 0.5f, 0.2f);
+                            if (detail < 2)
+                            {
+                                Pediment(W, bx, cornice * 0.5f + 1.25f, 2f, true, 0.25f);
+                                B(W).Box(new Vector3(bx, cornice - 1.9f, 0.08f), new Vector3(1.8f, 1.1f, 0.16f));
+                            }
+                        }
+                    }
+                    Cornice(W, -half - 0.3f, half + 0.3f, cornice - 0.8f, 1.1f);
+                    // Attic with the medallion, segmental pediment and urns.
+                    float attic = height - cornice;
+                    B(W).Box(new Vector3(0f, cornice + attic * 0.4f, 0.2f), new Vector3(r * 2f + 4.6f, attic * 0.8f, 0.4f));
+                    ClockDialLike(new Vector3(0f, cornice + attic * 0.42f, 0.45f), Mathf.Min(1.1f, attic * 0.3f));
+                    Pediment(W, 0f, cornice + attic * 0.8f, r * 2f + 5.2f, false, 0.7f);
+                    if (detail < 2)
+                        foreach (float sx in new[] { -1f, 1f })
+                        {
+                            Urn(W, new Vector3(sx * (half - 0.4f), cornice, 0.3f), 1.2f);
+                            Urn(W, new Vector3(sx * (r + 2.6f), cornice + attic * 0.8f, 0.3f), 0.9f);
+                        }
+                });
+            }
+            // Attic core and roof.
+            B(W).Box(new Vector3(0f, cornice + (height - cornice) * 0.4f, 0f), new Vector3(r * 2f + 4.6f, (height - cornice) * 0.8f, depth));
+            B(Lead).Box(new Vector3(0f, cornice + 0.05f, 0f), new Vector3(width, 0.1f, depth));
+        }
+
+        /// <summary>Gilded round medallion (frame and disc), as on the palace gates; no lettering.</summary>
+        void ClockDialLike(Vector3 c, float r)
+        {
+            var ring = new List<Vector2>();
+            int seg = detail == 0 ? 24 : 12;
+            for (int i = 0; i < seg; i++) { float t = Mathf.PI * 2f * i / seg; ring.Add(new Vector2(c.x + Mathf.Cos(t) * r, c.y + Mathf.Sin(t) * r)); }
+            Panel(B(Gilt), ring, c.z, 0.1f);
+            if (detail < 2) ArchBandRing(B(W0), c, r, r + 0.25f, c.z - 0.05f, 0.15f, seg);
+        }
+
+        const string W0 = Marble;
+
+        /// <summary>
+        /// Wall from y = 0 to top across x = ±halfW, z = z0 .. z0 + depth, with a round-arched passage of radius r
+        /// springing at `spring` (piers, spandrels on both faces, the arch soffit).
+        /// </summary>
+        void ArchedWall(string mat, float halfW, float spring, float r, float top, float z0, float depth)
+        {
+            var mb = B(mat);
+            float z1 = z0 + depth;
+            foreach (float s in new[] { -1f, 1f })
+                mb.Box(new Vector3(s * (halfW + r) * 0.5f, top * 0.5f, (z0 + z1) * 0.5f), new Vector3(halfW - r, top, depth));
+            // Angles of the arch, including the two where the rays from the centre hit the spandrel's top corners.
+            float corner = Mathf.Atan2(top - spring, r);
+            var angles = new List<float>();
+            int seg = ArcSeg(r) * 2;
+            for (int i = 0; i <= seg; i++) angles.Add(Mathf.PI * i / seg);
+            angles.Add(corner); angles.Add(Mathf.PI - corner);
+            angles.Sort();
+            Vector2 Arc(float t) => new Vector2(r * Mathf.Cos(t), spring + r * Mathf.Sin(t));
+            Vector2 Rim(float t)
+            {
+                float c = Mathf.Cos(t), sn = Mathf.Sin(t);
+                float sSide = Mathf.Abs(c) > 1e-5f ? r / Mathf.Abs(c) : float.MaxValue;
+                float sTop = sn > 1e-5f ? (top - spring) / sn : float.MaxValue;
+                float k = Mathf.Min(sSide, sTop);
+                return new Vector2(c * k, spring + sn * k);
+            }
+            for (int i = 0; i + 1 < angles.Count; i++)
+            {
+                float a = angles[i], b = angles[i + 1];
+                if (b - a < 1e-5f) continue;
+                Vector2 p0 = Arc(a), p1 = Arc(b), q0 = Rim(a), q1 = Rim(b);
+                foreach (var (z, f) in new[] { (z1, Vector3.forward), (z0, Vector3.back) })
+                    mb.QuadFacing(new Vector3(p0.x, p0.y, z), new Vector3(p1.x, p1.y, z), new Vector3(q1.x, q1.y, z), new Vector3(q0.x, q0.y, z), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, f);
+                var inward = -new Vector3(Mathf.Cos((a + b) * 0.5f), Mathf.Sin((a + b) * 0.5f), 0f);
+                mb.QuadFacing(new Vector3(p0.x, p0.y, z0), new Vector3(p1.x, p1.y, z0), new Vector3(p1.x, p1.y, z1), new Vector3(p0.x, p0.y, z1), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, inward);
+            }
+            mb.QuadFacing(new Vector3(-r, top, z0), new Vector3(r, top, z0), new Vector3(r, top, z1), new Vector3(-r, top, z1), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
         }
     }
 }

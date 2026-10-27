@@ -83,7 +83,7 @@ namespace Apex.Game
                 var prop = (CityLife.Prop)p.kind;
                 AddStatic(KindFor("Prop" + p.kind, B => EnvironmentGeometry.StreetProp(B, prop)), V(p.position), p.yaw);
             }
-            foreach (var p in life.parked) AddStatic(VehicleKind(p.kind, p.variant), V(p.position), p.yaw);
+            foreach (var p in life.parked) AddStatic(VehicleKind(p.kind, p.variant, true), V(p.position), p.yaw);
             foreach (var b in statics)
             {
                 b.matrices = b.list.ToArray();
@@ -111,11 +111,13 @@ namespace Apex.Game
             for (int i = 0; i < TrouserColours.Length; i++) EnsureColour("CityTrousers" + i, TrouserColours[i]);
         }
 
-        int VehicleKind(int kind, int variant)
+        /// <summary>Mesh kind of a vehicle; parked ones get unlit lamp lenses so they stay dark at night.</summary>
+        int VehicleKind(int kind, int variant, bool parked = false)
         {
             var k = (CityLife.Vehicle)kind;
             string body = k == CityLife.Vehicle.Taxi ? "CityTaxi" : k == CityLife.Vehicle.Bus ? "CityBus" : "CityCar" + (variant % CarColours.Length);
-            return KindFor("Veh" + kind + body, B => EnvironmentGeometry.CityVehicle(B, k, body));
+            if (!parked) return KindFor("Veh" + kind + body, B => EnvironmentGeometry.CityVehicle(B, k, body));
+            return KindFor("Parked" + kind + body, B => EnvironmentGeometry.CityVehicle(m => B(m == EnvironmentGeometry.Headlight ? EnvironmentGeometry.Glass : m == EnvironmentGeometry.Taillight ? "SeatAccent" : m), k, body));
         }
 
         int KindFor(string key, System.Action<EnvironmentGeometry.Parts> build)

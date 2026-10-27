@@ -57,6 +57,8 @@ namespace Apex.Game
             ["ClockFace"] = new Color(0.95f, 0.94f, 0.9f),
             ["RowPlaster"] = new Color(0.86f, 0.8f, 0.7f),
             ["BridgeRoad"] = new Color(0.2f, 0.2f, 0.21f),
+            ["CarHeadlight"] = new Color(0.9f, 0.9f, 0.86f),
+            ["CarTaillight"] = new Color(0.45f, 0.04f, 0.04f),
             ["BridgeSteel"] = new Color(0.62f, 0.64f, 0.66f),
             ["BridgeCable"] = new Color(0.32f, 0.34f, 0.37f),
             ["Glass"] = new Color(0.18f, 0.24f, 0.29f),
@@ -122,7 +124,7 @@ namespace Apex.Game
         {
             "RainLight", "BrakeDisc", "Display",
             // Night: street lamps, bridge lighting, floodlit monuments, lit office towers.
-            "LampHead", "BridgeLight", "BridgeRed", "BridgeWhite", "Stone", "Marble", "HagiaPlaster", "TowerGlass",
+            "LampHead", "CarHeadlight", "CarTaillight", "BridgeLight", "BridgeRed", "BridgeWhite", "Stone", "Marble", "HagiaPlaster", "TowerGlass",
         };
 
         static readonly Dictionary<string, Material> Cache = new Dictionary<string, Material>();

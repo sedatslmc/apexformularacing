@@ -213,6 +213,13 @@ if (params.get('fence')) {
     w.rotation.x = -Math.PI / 2; w.position.y = -0.4; scene.add(w);
   }
 }
+// Procedural masonry (&masonry=1): PNGs from ModelPreview --masonry in ./masonry/; metric UVs, repeat = 1 / tile.
+if (params.get('masonry')) {
+  const L = new THREE.TextureLoader();
+  const tex = (f, tile, srgb) => { const t = L.load('/masonry/' + f); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / tile, 1 / tile); t.anisotropy = 16; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  mats.Marble = M({ map: tex('marble_albedo.png', 2.4, true), normalMap: tex('marble_normal.png', 2.4, false), normalScale: new THREE.Vector2(0.8, 0.8), color: 0xefede4, roughness: 0.58 });
+  mats.RowPlaster = M({ map: tex('plaster_albedo.png', 2.0, true), normalMap: tex('plaster_normal.png', 2.0, false), normalScale: new THREE.Vector2(0.5, 0.5), color: 0xeedcc0, roughness: 0.85 });
+}
 const fallback = M({ color: 0xff00ff });
 
 // Lighting. Default: the original golden-hour look (sun 252° true, 11°, true north 308°).

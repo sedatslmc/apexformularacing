@@ -217,7 +217,7 @@ namespace Apex.Environment
             public int classical;
         }
 
-        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4;
+        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4, Gate = 5;
 
         /// <summary>
         /// Historic palace buildings from their OSM names, built with modelled classical facades instead of the
@@ -232,9 +232,29 @@ namespace Apex.Environment
             if (n.Length == 0) return b.type == "palace" ? PalaceWing : NotClassical;
             if (n.Contains("Kempinski") || n.Contains("Geçidi")) return NotClassical;
             if (n.Contains("Saat Kulesi")) return ClockTower;
+            // Monumental gates: a "Kapı" whose footprint is a slender block (the show gates of Dolmabahçe).
+            if ((n.EndsWith("Kapı") || n.EndsWith("Kapısı")) && Slenderness(b.outline) >= 2f) return Gate;
             if (n.Contains("Saray") || b.type == "palace") return PalaceWing;
             if (n.EndsWith("Dairesi") || n.EndsWith("Daire") || n.Contains("Köşkü") || n.EndsWith("Kapı") || n.EndsWith("Kapısı")) return PalaceDependency;
             return NotClassical;
+        }
+
+        /// <summary>Length of the longest edge over the footprint's extent across it (1 = square, 5 = a slender block).</summary>
+        public static float Slenderness(List<Vector2> o)
+        {
+            float best = 0f; Vector2 dir = Vector2.UnitX;
+            for (int i = 0; i < o.Count; i++)
+            {
+                var d = o[(i + 1) % o.Count] - o[i];
+                if (d.Length() > best) { best = d.Length(); dir = Vector2.Normalize(d); }
+            }
+            float minU = float.MaxValue, maxU = float.MinValue, minV = float.MaxValue, maxV = float.MinValue;
+            foreach (var p in o)
+            {
+                float u = Vector2.Dot(p, dir), v = p.X * -dir.Y + p.Y * dir.X;
+                minU = MathF.Min(minU, u); maxU = MathF.Max(maxU, u); minV = MathF.Min(minV, v); maxV = MathF.Max(maxV, v);
+            }
+            return (maxU - minU) / MathF.Max(0.1f, maxV - minV);
         }
 
         /// <summary>
@@ -247,6 +267,7 @@ namespace Apex.Environment
         {
             string n = b.name;
             if (kind == ClockTower) return 27f;
+            if (kind == Gate) return 14f;
             if (n.Contains("Muayede")) return 26f;
             if (n.Contains("Selamlık")) return 21f;
             if (n.Contains("Harem")) return 17f;
@@ -286,7 +307,7 @@ namespace Apex.Environment
         void DemoteStrayDependencies(CityData data)
         {
             var palaces = new List<Vector2>();
-            foreach (var b in buildings) if (b.classical == PalaceWing || b.classical == ClockTower) palaces.Add(Centre(b.outline));
+            foreach (var b in buildings) if (b.classical == PalaceWing || b.classical == ClockTower || b.classical == Gate) palaces.Add(Centre(b.outline));
             for (int i = 0; i < buildings.Count; i++)
             {
                 var b = buildings[i];

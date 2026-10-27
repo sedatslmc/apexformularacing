@@ -306,6 +306,8 @@ namespace Apex.Game
         // --- City life: street furniture, vehicles, pedestrians (local frame: +z forward, y up, base at 0) ---
 
         public const string Wood = "Bark", DarkSteel = "KitDark", Glass = "Glass", Tyre = "Tire";
+        /// <summary>Vehicle lamps: emissive at night (EnvironmentMaterials registers them as night lights).</summary>
+        public const string Headlight = "CarHeadlight", Taillight = "CarTaillight";
 
         /// <summary>Street furniture by <see cref="CityLife.Prop"/>; +z faces the street.</summary>
         public static void StreetProp(Parts B, CityLife.Prop kind)
@@ -350,6 +352,14 @@ namespace Apex.Game
         /// </summary>
         public static void CityVehicle(Parts B, CityLife.Vehicle kind, string body)
         {
+            void Lamps(float halfX, float front, float rear, float y, float size)
+            {
+                foreach (float x in new[] { -halfX, halfX })
+                {
+                    B(Headlight).Box(new Vector3(x, y, front), new Vector3(size * 1.6f, size, 0.06f));
+                    B(Taillight).Box(new Vector3(x, y + 0.05f, rear), new Vector3(size * 1.4f, size * 0.8f, 0.06f));
+                }
+            }
             void Wheels(float track, float[] zs, float r)
             {
                 foreach (float z in zs)
@@ -363,12 +373,14 @@ namespace Apex.Game
                     B(Glass).Box(new Vector3(0f, 2.1f, 0f), new Vector3(2.52f, 0.9f, 11.6f));
                     B(body).Box(new Vector3(0f, 2.75f, 0f), new Vector3(2.5f, 0.4f, 12f));
                     Wheels(1.05f, new[] { -3.8f, 3.6f }, 0.5f);
+                    Lamps(0.95f, 6.01f, -6.01f, 0.75f, 0.22f);
                     break;
                 case CityLife.Vehicle.Van:
                     B(body).Box(new Vector3(0f, 0.95f, -0.3f), new Vector3(1.95f, 1.5f, 4.2f));
                     B(body).Box(new Vector3(0f, 0.75f, 2.0f), new Vector3(1.9f, 1.0f, 0.9f));
                     B(Glass).Box(new Vector3(0f, 1.4f, 1.62f), new Vector3(1.8f, 0.6f, 0.4f), Quaternion.Euler(-25f, 0f, 0f));
                     Wheels(0.85f, new[] { -1.5f, 1.7f }, 0.36f);
+                    Lamps(0.75f, 2.46f, -2.41f, 0.8f, 0.18f);
                     break;
                 case CityLife.Vehicle.Scooter:
                     B(body).Box(new Vector3(0f, 0.55f, 0f), new Vector3(0.45f, 0.5f, 1.3f));
@@ -376,6 +388,8 @@ namespace Apex.Game
                     B(Skin).Box(new Vector3(0f, 1.15f, -0.1f), new Vector3(0.36f, 0.6f, 0.3f));   // rider
                     B(DarkSteel).Box(new Vector3(0f, 1.55f, -0.1f), new Vector3(0.24f, 0.26f, 0.26f));   // helmet
                     foreach (float z in new[] { -0.65f, 0.65f }) B(Tyre).Tube(new Vector3(-0.05f, 0.25f, z), new Vector3(0.05f, 0.25f, z), 0.25f, 10, true);
+                    B(Headlight).Box(new Vector3(0f, 0.95f, 0.62f), new Vector3(0.16f, 0.12f, 0.06f));
+                    B(Taillight).Box(new Vector3(0f, 0.7f, -0.66f), new Vector3(0.14f, 0.08f, 0.04f));
                     break;
                 default:   // sedan (cars and taxis)
                     B(body).Box(new Vector3(0f, 0.6f, 0f), new Vector3(1.8f, 0.6f, 4.5f));
@@ -385,6 +399,7 @@ namespace Apex.Game
                     B(Glass).Box(new Vector3(0f, 1.12f, -0.2f), new Vector3(1.62f, 0.34f, 1.8f));
                     if (body == "CityTaxi") B(DarkSteel).Box(new Vector3(0f, 1.42f, -0.2f), new Vector3(0.5f, 0.14f, 0.2f));   // TAKSİ roof sign
                     Wheels(0.82f, new[] { -1.4f, 1.4f }, 0.32f);
+                    Lamps(0.66f, 2.26f, -2.26f, 0.68f, 0.16f);
                     break;
             }
         }

@@ -70,6 +70,20 @@ Jedes Modell entsteht aus demselben Code in drei Detailstufen und hängt an eine
 - Sattelgehäuse auf den Pylonen, Ankerblöcke
 - Die rot-weiße Nachtbeleuchtung nutzt dieselben Hängerpunkte.
 
+## Ergänzungen (2026-10-27)
+- **Dolmabahçe-Prunktore** (Saltanat- und Hazine-Kapısı; `LandmarkGeometry.GateMonument`):
+  - Triumphbogen-Block auf dem OSM-Grundriss: Durchfahrtsbogen mit Bogenlaibung und schmiedeeisernem Tor mit vergoldeten Spitzen
+  - auf beiden Seiten Säulenpaare auf Postamenten, Nischen mit Giebel in den Seitenfeldern, tiefes Gesims
+  - Attika mit vergoldetem Medaillon (ohne Inschrift) unter einem Segmentgiebel, Urnen
+  - 4.900 / 2.900 / 900 Dreiecke; Höhe 14 m geschätzt
+  - Erkannt als „Kapı“ mit schlankem Grundriss (Längen-Breiten-Verhältnis ≥ 2). Das fast quadratische Koltuk Kapısı bleibt ein Dienstgebäude.
+- **Steintexturen** (`MasonryTextures`, prozedural, keine externen Dateien):
+  - Marmor-Quaderwerk für Paläste, Tore, Uhrturm und Moschee: Lagen 0,6 m, Blöcke 1,2 m im Halbverband, 8-mm-Fugen, leichte Tönung je Block, feine Äderung, Normalmap; Wiederholung alle 2,4 m
+  - Kalkputz mit Kellenstruktur und Regenspuren für die Akaretler-Häuser; Wiederholung alle 2 m
+  - Die Modelle bekommen metrische UVs (Box-Projektion). Auf Wänden schräg zu den Weltachsen wird die Textur bis zum Faktor 1,41 gestreckt (bei 45°).
+  - Tests: nahtlos kachelbar, Fugenanteil 1–12 %, Helligkeit im erwarteten Bereich.
+  - Vorschau: `dotnet run -- <dir> --masonry` schreibt PPMs. Für `kit.html` als PNG in `tools/carrender/masonry/` ablegen und `&masonry=1` anhängen.
+
 ## Zuordnung aus den Daten
 - **Paläste:** `OsmCity.ClassicalKind` erkennt sie am OSM-Namen.
   - Palastgebäude: Name enthält „Saray“ bzw. Gebäudetyp `palace`.
@@ -94,6 +108,6 @@ Bilder: `docs/img/landmark_*.jpg`. three.js mit Abendsonne, nicht die Unity-Dars
 
 ## Offen
 - **Kosten:** In Unity prüfen: Bild, Bildrate, LOD-Sprünge. Dolmabahçe hat im LOD 1 noch viele Dreiecke; nach dem Profiling (Phase 7) eventuell eine zusätzliche Impostor-Stufe.
-- **Dolmabahçe:** reichere Ornamentik: Saltanat- und Hazine-Tor als eigene Prunkmodelle, Kai-Gitter am Wasser.
-- **Materialien:** Marmor- und Putztexturen (CC0) für Paläste und Moschee. Bisher sind es einfarbige Lit-Materialien.
+- **Dolmabahçe:** Kai-Gitter am Wasser, reichere Reliefs (Rosetten, Girlanden).
+- **Materialien:** Die Bleidächer haben noch keine Stehfalz-Textur. Gescannte Marmor-Sätze (CC0) wären eine mögliche Verbesserung gegenüber der prozeduralen Textur.
 - **Moschee:** Innenraum-Andeutung hinter den Fenstern (Interior Mapping).
