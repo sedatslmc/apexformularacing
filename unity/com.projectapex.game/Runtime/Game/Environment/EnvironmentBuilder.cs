@@ -41,14 +41,14 @@ namespace Apex.Game
             env.quality = q;
             env.wind = WindField.ForCircuit(def.trueNorthBearing);
             env.land = field.land;
-            EnvironmentMaterials.Ensure(env);
+            Safe("materials", () => EnvironmentMaterials.Ensure(env));
 
             float cx = (field.MinX + field.MaxX) * 0.5f, cz = (field.MinZ + field.MaxZ) * 0.5f;
-            BuildWaterAndFarLand(root.transform, env, field, def, cx, cz);
+            Safe("water and far land", () => BuildWaterAndFarLand(root.transform, env, field, def, cx, cz));
             var reserved = new List<CityLayout.Reserved>();
             // Event buildings (pit building, timing tower, race control) keep stands and city away.
             foreach (var (x, z, r) in ci.EventFootprints) reserved.Add(new CityLayout.Reserved(x, z, r));
-            BuildWaterfront(root.transform, env, ci, reserved);
+            Safe("waterfront", () => BuildWaterfront(root.transform, env, ci, reserved));
             // Monumental Turkish flag (site from the circuit file, re-checked against the built circuit): keep the city away.
             bool monumental = false;
             if (def.monumentalFlag.HasValue)
@@ -66,35 +66,51 @@ namespace Apex.Game
                 try { cityData = CityData.FromJson(cityText.text); }
                 catch (System.Exception e) { Debug.LogError("[Apex] Invalid city data " + def.id + ": " + e.Message); }
             }
-            OsmCity osm = cityData != null ? new OsmCity(cityData, field, ci.Clearance, def, reserved, q) : null;
-            var opts = new CityLayout.Options { quality = q, realCityRadius = cityData != null ? cityData.radius : 0f };
+            OsmCity osm = null;
+            if (cityData != null) Safe("OSM city data", () => osm = new OsmCity(cityData, field, ci.Clearance, def, reserved, q));
+            var opts = new CityLayout.Options { quality = q, realCityRadius = osm != null ? cityData.radius : 0f };
             opts.reserved.AddRange(reserved);
             var city = new CityLayout(field, def, opts);
             var allLots = new List<CityLayout.Lot>(city.lots);
             if (osm != null)
             {
-                BuildOsmCity(root.transform, osm);
-                BuildStreets(root.transform, new StreetNetwork(cityData, field, ci.Clearance, q));
-                BuildCityLife(root.transform, new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240), q);
+                Safe("OSM buildings", () => BuildOsmCity(root.transform, osm));
+                Safe("streets", () => BuildStreets(root.transform, new StreetNetwork(cityData, field, ci.Clearance, q)));
+                Safe("city life", () => BuildCityLife(root.transform, new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240), q));
                 allLots.AddRange(osm.AsLots());
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
             }
-            BuildCity(root.transform, city);
-            BuildTrees(root.transform, env, city);
+            Safe("generic city", () => BuildCity(root.transform, city));
+            Safe("trees", () => BuildTrees(root.transform, env, city));
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
             foreach (var f in new RooftopFlagLayout(allLots, field, def, g, q).flags)
                 env.flagSpots.Add((V(f.position), f.length, f.pole, 1));
-            BuildLandmarks(root.transform, env, ci, osm != null && osm.buildings.Exists(b => b.classical == OsmCity.PalaceWing));
-            if (monumental) MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north);
-            BuildTrackside(root.transform, env, ci);
-            BuildShips(root.transform, env, def, field.land);
-            BuildGulls(root.transform, env, ci);
-            BuildAmbience(root.transform, env, ci, allLots);
+            bool realPalaces = osm != null && osm.buildings.Exists(b => b.classical == OsmCity.PalaceWing);
+            Safe("landmarks", () => BuildLandmarks(root.transform, env, ci, realPalaces));
+            if (monumental) Safe("monumental flag", () => MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north));
+            Safe("trackside", () => BuildTrackside(root.transform, env, ci));
+            Safe("ships", () => BuildShips(root.transform, env, def, field.land));
+            Safe("gulls", () => BuildGulls(root.transform, env, ci));
+            Safe("ambience", () => BuildAmbience(root.transform, env, ci, allLots));
             return env;
         }
 
         // --- Helpers ------------------------------------------------------------------------
+
+        /// <summary>
+        /// Runs one part of the environment build; an exception is logged and the rest still builds (a failing
+        /// texture or model must not leave the circuit without its city, water and landmarks).
+        /// </summary>
+        static void Safe(string part, System.Action build)
+        {
+            try { build(); }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[Apex] Environment part '{part}' failed and was skipped: {e.Message}");
+                Debug.LogException(e);
+            }
+        }
 
         internal static Mesh Combine(Dictionary<string, MeshBuilder> parts, string name, out Material[] materials)
         {
@@ -1229,10 +1245,12 @@ namespace Apex.Game
         {
             int n = (int)Mathf.Sqrt(set.albedo.Length / 4);
             var albedo = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = name + "_Albedo", wrapMode = TextureWrapMode.Repeat, anisoLevel = 8 };
-            albedo.LoadRawTextureData(set.albedo);
+            // Only mip level 0 is provided: SetPixelData + Apply(true) builds the chain (LoadRawTextureData would
+            // expect every level and throws "not enough data provided").
+            albedo.SetPixelData(set.albedo, 0);
             albedo.Apply(true);
             var normal = new Texture2D(n, n, TextureFormat.RGBA32, true, true) { name = name + "_Normal", wrapMode = TextureWrapMode.Repeat, anisoLevel = 8 };
-            normal.LoadRawTextureData(set.normal);
+            normal.SetPixelData(set.normal, 0);
             normal.Apply(true);
             var m = new Material(ApexMaterials.LitShader()) { name = name, enableInstancing = true };
             SetColour(m, ApexMaterials.Palette[paletteKey]);
@@ -1289,8 +1307,13 @@ namespace Apex.Game
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeRed), new Color(0.89f, 0.04f, 0.09f) * 1.3f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeWhite), new Color(1f, 0.97f, 0.92f) * 2.4f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.TowerGlass), new Color(0.32f, 0.33f, 0.3f));
-            ApexMaterials.Register(LandmarkGeometry.Marble, MasonryMaterial("Env_MarbleAshlar", LandmarkGeometry.Marble, MasonryTextures.Marble(512), MasonryTextures.MarbleTile, 0.42f, 0.8f));
-            ApexMaterials.Register(LandmarkGeometry.RowPlaster, MasonryMaterial("Env_LimePlaster", LandmarkGeometry.RowPlaster, MasonryTextures.Plaster(256), MasonryTextures.PlasterTile, 0.15f, 0.5f));
+            // Textured stone for the landmark models; on failure the plain palette materials stay in use.
+            try
+            {
+                ApexMaterials.Register(LandmarkGeometry.Marble, MasonryMaterial("Env_MarbleAshlar", LandmarkGeometry.Marble, MasonryTextures.Marble(512), MasonryTextures.MarbleTile, 0.42f, 0.8f));
+                ApexMaterials.Register(LandmarkGeometry.RowPlaster, MasonryMaterial("Env_LimePlaster", LandmarkGeometry.RowPlaster, MasonryTextures.Plaster(256), MasonryTextures.PlasterTile, 0.15f, 0.5f));
+            }
+            catch (System.Exception e) { Debug.LogException(e); }
             foreach (var key in new[] { LandmarkGeometry.Stone, LandmarkGeometry.Marble, LandmarkGeometry.HagiaPlaster })
                 env.AddLight(ApexMaterials.Get(key), new Color(0.32f, 0.27f, 0.2f));
             // Grey interlocking concrete pavers on the pavements (UV = world x/z per 3 m along the circuit);
