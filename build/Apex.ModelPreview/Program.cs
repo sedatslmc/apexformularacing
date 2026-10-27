@@ -173,6 +173,7 @@ if (Array.IndexOf(args, "--citylife") >= 0)
     foreach (Apex.Environment.CityLife.Prop k in Enum.GetValues(typeof(Apex.Environment.CityLife.Prop)))
         Put(k == Apex.Environment.CityLife.Prop.BusShelter ? 4.5f : 1.8f, b => EnvironmentGeometry.StreetProp(b, k), 9f);
     for (int i = 0; i < 4; i++) { int st = i & 1; Put(0.6f, b => EnvironmentGeometry.Pedestrian(b, "CityShirt" + (i / 2), "CityTrousers0", st), 9f); }
+    for (int i = 0; i < 3; i++) { int st = i; Put(0.6f, b => EnvironmentGeometry.TrafficLight(b, st), 9f); }
     var sbl = new StringBuilder();
     int vb = 1, tr = 0;
     foreach (var kv in parts)

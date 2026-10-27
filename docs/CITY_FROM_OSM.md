@@ -78,6 +78,18 @@ Straßen sind rein visuell: kein Collider, nicht befahrbar.
   - Fahrzeuge biegen dort in die verbundene Straße ab, wobei sie die Ausfahrten reihum wählen. Nur an echten Sackgassen und an der gesperrten Strecke wenden sie.
   - Abschnitte auf beiden Seiten der Rennstrecke werden nie verbunden.
   - Ergebnis: 1.575 verbundene Straßenenden, 1.877 Abbiegevorgänge in zwei Minuten bei 211 Fahrzeugen.
+- **Ampeln** (seit 2026-10-27; `CityLife.Signal`):
+  - **Wo:** an Kreuzungen mit mindestens vier Zufahrten, davon zwei auf Hauptstraßen (primary/secondary/tertiary), oder an T-Kreuzungen aus drei Hauptstraßen. Im Test sind es 334 Ampeln.
+  - **Phasen:**
+    - Je Kreuzung wechseln zwei Zufahrtsgruppen (etwa rechtwinklige Achsen): 14 s Grün, 3 s Gelb, dann Rot.
+    - Der Versatz ist je Kreuzung verschieden.
+  - **Fahrverhalten:**
+    - Fahrzeuge halten 3 m vor der Ampel bei Rot, bei Gelb nur, wenn sie noch mehr als 8 m entfernt sind.
+    - Dahinter stauen sie sich mit 9 m Abstand; im Test warten bis zu 24 gleichzeitig.
+  - **Modell:**
+    - 3,4-m-Mast mit Dreikammer-Signal und Schirmen, rechts an der Zufahrt
+    - Die aktive Lampe leuchtet tags und nachts (feste Emission).
+    - Gezeichnet per Instancing in drei Zustandsvarianten.
 - **Fahrzeuglichter:**
   - Scheinwerfer und Rücklichter leuchten nachts; sie werden über das Nachtlicht-System der Umgebung gesteuert.
   - Geparkte Autos bleiben dunkel.
@@ -89,6 +101,6 @@ Straßen sind rein visuell: kein Collider, nicht befahrbar.
 - **Modelle:** Fahrzeuge, Personen und Möbel sind einfache prozedurale Low-Poly-Platzhalter (zusammen ca. 2.000 Dreiecke). Sie sind für Entfernungen ab etwa 20 m gedacht, nicht für Nahaufnahmen.
   - Vorschau: `dotnet run -- <dir> --citylife`, dann `python3 tools/render_car_preview.py <dir>/citylife.obj <bild.png>`.
 - **Fehlt noch:**
-  - Ampeln und Vorfahrt: Fahrzeuge biegen ab, warten aber nicht an Kreuzungen und können sich dort kurz überlappen.
+  - Vorfahrt an Kreuzungen ohne Ampel: Dort können sich Fahrzeuge kurz überlappen.
   - Fußgängeranimation über die zwei Posen hinaus
 - **Kosten:** Draw-Call- und Frame-Kosten sind nicht gemessen (Phase 7).

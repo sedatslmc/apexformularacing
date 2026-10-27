@@ -55,6 +55,7 @@ namespace Apex.Game
         readonly Dictionary<string, int> kindIndex = new Dictionary<string, int>();
         readonly List<StaticBatch> statics = new List<StaticBatch>();
         int[] pedKinds;
+        int[] signalKinds;
 
         public void Setup(CityLife cityLife)
         {
@@ -92,6 +93,8 @@ namespace Apex.Game
                 b.centre = c / Mathf.Max(1, b.matrices.Length);
             }
             foreach (var v in life.vehicles) VehicleKind(v.kind, v.variant);
+            signalKinds = new int[3];
+            for (int st = 0; st < 3; st++) { int state = st; signalKinds[st] = KindFor("Signal" + st, B => EnvironmentGeometry.TrafficLight(B, state)); }
         }
 
         static Vector3 V(System.Numerics.Vector3 v) => new Vector3(v.X, v.Y, v.Z);
@@ -102,8 +105,28 @@ namespace Apex.Game
             ApexMaterials.Register(key, m);
         }
 
+        /// <summary>Signal lamps glow day and night (fixed emission); the dark lenses are near black glass.</summary>
+        static void EnsureSignal(string key, Color lens, Color glow)
+        {
+            var m = new Material(ApexMaterials.LitShader()) { name = "City_" + key, enableInstancing = true };
+            if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", lens);
+            if (m.HasProperty("_Color")) m.SetColor("_Color", lens);
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", 0.8f);
+            if (glow.maxColorComponent > 0f && m.HasProperty("_EmissionColor"))
+            {
+                m.EnableKeyword("_EMISSION");
+                m.SetColor("_EmissionColor", glow);
+                m.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+            }
+            ApexMaterials.Register(key, m);
+        }
+
         static void EnsureMaterials()
         {
+            EnsureSignal(EnvironmentGeometry.SignalOff, new Color(0.05f, 0.05f, 0.05f), Color.black);
+            EnsureSignal(EnvironmentGeometry.SignalRed, new Color(0.6f, 0.05f, 0.04f), new Color(1f, 0.08f, 0.05f) * 2.5f);
+            EnsureSignal(EnvironmentGeometry.SignalAmber, new Color(0.6f, 0.4f, 0.05f), new Color(1f, 0.6f, 0.08f) * 2.2f);
+            EnsureSignal(EnvironmentGeometry.SignalGreen, new Color(0.05f, 0.5f, 0.3f), new Color(0.1f, 1f, 0.55f) * 2.2f);
             for (int i = 0; i < CarColours.Length; i++) EnsureColour("CityCar" + i, CarColours[i]);
             EnsureColour("CityTaxi", TaxiYellow);
             EnsureColour("CityBus", BusColour);
@@ -161,6 +184,12 @@ namespace Apex.Game
                 var pos = V(v.position);
                 if ((pos - eye).sqrMagnitude > far2) continue;
                 Push(VehicleKind(v.kind, v.variant), Matrix4x4.TRS(pos, Quaternion.Euler(0f, v.yaw * Mathf.Rad2Deg, 0f), Vector3.one));
+            }
+            foreach (var sg in life.signals)
+            {
+                var pos = V(sg.position);
+                if ((pos - eye).sqrMagnitude > far2) continue;
+                Push(signalKinds[life.State(sg)], Matrix4x4.TRS(pos, Quaternion.Euler(0f, sg.yaw * Mathf.Rad2Deg, 0f), Vector3.one));
             }
             foreach (var k in kinds) Flush(k);
         }
