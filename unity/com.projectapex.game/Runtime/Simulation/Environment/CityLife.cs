@@ -21,7 +21,7 @@ namespace Apex.Environment
     /// </summary>
     public sealed class CityLife
     {
-        public enum Prop { Bench, Bin, Bollard, Planter, BusShelter }
+        public enum Prop { Bench, Bin, Bollard, Planter, BusShelter, FlagPole }
         public enum Vehicle { Car, Taxi, Van, Bus, Scooter }
 
         public struct Placed
@@ -203,8 +203,10 @@ namespace Apex.Environment
                     {
                         double r = rng.NextDouble();
                         kind = r < 0.3 ? Prop.Bench : r < 0.55 ? Prop.Bin : r < 0.85 ? Prop.Bollard : Prop.Planter;
+                        // Turkish flags on poles along the main streets (Istanbul flies many, more so on race weekends).
+                        if (main && rng.NextDouble() < 0.12) kind = Prop.FlagPole;
                     }
-                    if (Free(p, kind == Prop.BusShelter ? 2.5f : 0.8f))
+                    if (Free(p, kind == Prop.BusShelter ? 2.5f : kind == Prop.FlagPole ? 2.2f : 0.8f))
                     {
                         // Benches and shelters face the street.
                         float yaw = MathF.Atan2(-right.X * side, -right.Y * side);

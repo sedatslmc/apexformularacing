@@ -417,6 +417,45 @@ if (Array.IndexOf(args, "--environment") >= 0)
         realRadius = data.radius;
         foreach (var b in osm.buildings) EnvironmentGeometry.FootprintBuilding(B, b, true);
         Console.WriteLine($"real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees");
+        // Street-front relief for the whole city (counted), and a window around --frontage x,z written as OBJ.
+        var orn = new Dictionary<string, MeshBuilder>();
+        MeshBuilder O(string k) { if (!orn.TryGetValue(k, out var m)) orn[k] = m = new MeshBuilder(); return m; }
+        int fronts = 0;
+        foreach (var b in osm.buildings) { EnvironmentGeometry.FacadeOrnaments(O, b, 2); if (b.front != null && Array.IndexOf(b.front, true) >= 0) fronts++; }
+        int ornTris = 0; foreach (var kv in orn) ornTris += kv.Value.TriangleCount;
+        Console.WriteLine($"street fronts: {fronts} buildings, ornament triangles (level 2): {ornTris}");
+        foreach (var kv in orn) Console.WriteLine($"  ornaments {kv.Key}: {kv.Value.TriangleCount}");
+        int fi = Array.IndexOf(args, "--frontage");
+        if (fi >= 0 && fi + 1 < args.Length)
+        {
+            var xy = args[fi + 1].Split(',');
+            float fx = float.Parse(xy[0], CultureInfo.InvariantCulture), fz = float.Parse(xy[1], CultureInfo.InvariantCulture);
+            var win = new Dictionary<string, MeshBuilder>();
+            MeshBuilder Wb(string k) { if (!win.TryGetValue(k, out var m)) win[k] = m = new MeshBuilder(); m.matrix = new Matrix4x4 { offset = new Vector3(-fx, 0f, -fz) }; return m; }
+            float gy = float.MaxValue;
+            foreach (var b in osm.buildings)
+            {
+                var c0 = b.outline[0];
+                if ((c0.X - fx) * (c0.X - fx) + (c0.Y - fz) * (c0.Y - fz) > 140f * 140f) continue;
+                gy = MathF.Min(gy, b.ground);
+                EnvironmentGeometry.FootprintBuilding(Wb, b, true);
+                EnvironmentGeometry.FacadeOrnaments(Wb, b, 2);
+            }
+            var sbw = new StringBuilder();
+            int vbw = 1;
+            foreach (var kv in win)
+            {
+                sbw.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+                var mbx = kv.Value;
+                foreach (var v in mbx.Vertices) sbw.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F3} {1:F3} {2:F3}", v.x, v.y - gy, v.z));
+                foreach (var uv in mbx.UVs) sbw.AppendLine(string.Format(CultureInfo.InvariantCulture, "vt {0:F4} {1:F4}", uv.x, uv.y));
+                var ts = mbx.Triangles;
+                for (int i = 0; i < ts.Count; i += 3) sbw.AppendLine($"f {ts[i] + vbw}/{ts[i] + vbw} {ts[i + 1] + vbw}/{ts[i + 1] + vbw} {ts[i + 2] + vbw}/{ts[i + 2] + vbw}");
+                vbw += mbx.VertexCount;
+            }
+            File.WriteAllText(Path.Combine(outDir, "frontage.obj"), sbw.ToString());
+            Console.WriteLine($"frontage.obj around {fx},{fz} (ground {gy:F1} -> 0)");
+        }
     }
     var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality, realCityRadius = realRadius });
     if (osm != null) city.trees.AddRange(osm.trees);

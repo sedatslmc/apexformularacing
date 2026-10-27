@@ -382,9 +382,11 @@ namespace Apex.Game
             {
                 var detailed = new PartSet();
                 var simple = new PartSet();
+                var fronts = new PartSet();
                 foreach (var b in kv.Value)
                 {
                     EnvironmentGeometry.FootprintBuilding(detailed.B, b, true);
+                    EnvironmentGeometry.FacadeOrnaments(fronts.B, b, Mathf.Clamp(Quality, 0, 2));
                     EnvironmentGeometry.FootprintBuilding(simple.B, b, false);
                 }
                 var group = new GameObject($"Real_{kv.Key.Item1}_{kv.Key.Item2}");
@@ -392,11 +394,25 @@ namespace Apex.Game
                 var lod0 = AddMeshObject(group.transform, "LOD0", detailed.parts, true);
                 var lod1 = AddMeshObject(group.transform, "LOD1", simple.parts, true);
                 var lg = group.AddComponent<LODGroup>();
-                lg.SetLODs(new[]
+                var r0 = lod0.GetComponent<Renderer>();
+                if (fronts.Triangles > 0)
                 {
-                    new LOD(0.12f, new Renderer[] { lod0.GetComponent<Renderer>() }),
-                    new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
-                });
+                    // Street-front relief (balconies, bay windows, awnings) only on the near level: it reads up to
+                    // about 400 m; beyond, the facade texture alone carries the windows.
+                    var rel = AddMeshObject(group.transform, "Fronts", fronts.parts, true);
+                    lg.SetLODs(new[]
+                    {
+                        new LOD(0.35f, new Renderer[] { r0, rel.GetComponent<Renderer>() }),
+                        new LOD(0.12f, new Renderer[] { r0 }),
+                        new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
+                    });
+                }
+                else
+                    lg.SetLODs(new[]
+                    {
+                        new LOD(0.12f, new Renderer[] { r0 }),
+                        new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
+                    });
                 lg.RecalculateBounds();
             }
         }
@@ -1251,6 +1267,16 @@ namespace Apex.Game
                 env.AddWettable(m);
             }
             ApexMaterials.Register("EnvWater", WaterMaterial());
+            // Street fronts: plaster in the facade colours (bay windows, parapets), canvas awnings, balcony flags.
+            for (int i = 0; i < CityLayout.Styles; i++) ApexMaterials.Register(EnvironmentGeometry.FacadeSolid(i), Solid(FacadeColours[i % FacadeColours.Length] * 0.97f));
+            var awnings = new[] { new Color(0.55f, 0.1f, 0.09f), new Color(0.13f, 0.32f, 0.22f), new Color(0.12f, 0.17f, 0.3f), new Color(0.85f, 0.8f, 0.66f) };
+            for (int i = 0; i < EnvironmentGeometry.Awnings; i++)
+            {
+                var m = Solid(awnings[i]);
+                if (m.HasProperty("_Cull")) { m = new Material(m) { name = "Env_Awning" + i }; m.SetFloat("_Cull", 0f); m.doubleSidedGI = true; }
+                ApexMaterials.Register(EnvironmentGeometry.Awning(i), m);
+            }
+            ApexMaterials.Register(EnvironmentGeometry.BalconyFlag, Flag);
             var fence = TrackInfrastructureBuilder.CatchFenceMaterial("Env_CatchFence");
             ApexMaterials.Register(EnvironmentGeometry.CatchFence, fence);
             // Night lights (moderate intensities: no neon, no blown-out bloom).

@@ -123,6 +123,27 @@ namespace Apex.Tests
                 if (t.kind == 2) cypress++;
             }
             Assert.That(city.trees.Count, Is.GreaterThan(1500), "parks, woods, cemeteries and street trees");
+            // Street fronts (balconies, bay windows, awnings): most buildings have one, and none is blocked by a neighbour.
+            int withFront = 0;
+            foreach (var b in city.buildings)
+            {
+                Assert.That(b.front, Is.Not.Null);
+                Assert.That(b.front.Length, Is.EqualTo(b.outline.Count));
+                bool any = false;
+                for (int i = 0; i < b.front.Length; i++)
+                {
+                    if (!b.front[i]) continue;
+                    any = true;
+                    var a = b.outline[i]; var c = b.outline[(i + 1) % b.outline.Count];
+                    var e = c - a;
+                    var outward = new Vector2(e.Y, -e.X) / e.Length();
+                    var q = (a + c) * 0.5f + outward * 1.5f;
+                    Assert.That(city.InsideBuilding(q.X, q.Y, 0f), Is.False, "street front faces another building");
+                }
+                if (any) withFront++;
+            }
+            TestContext.WriteLine($"{withFront} buildings with a street front");
+            Assert.That(withFront, Is.GreaterThan(city.buildings.Count * 2 / 5));
             Assert.That(cypress, Is.GreaterThan(50), "cypresses in the cemeteries");
         }
 

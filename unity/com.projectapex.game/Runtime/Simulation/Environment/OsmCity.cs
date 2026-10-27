@@ -215,6 +215,8 @@ namespace Apex.Environment
             public string name;
             /// <summary>Built as an in-house landmark model, not as a generic block (see <see cref="ClassicalKind"/>).</summary>
             public int classical;
+            /// <summary>Per outline edge (edge i runs from outline[i] to outline[i + 1]): faces a street or the circuit.</summary>
+            public bool[] front;
         }
 
         public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4, Gate = 5;
@@ -298,10 +300,43 @@ namespace Apex.Environment
             DemoteStrayDependencies(data);
             IndexBuildings();
             IndexStreets(data);
+            MarkStreetFronts();
             PlantGreen(data, quality);
             PlantStreetTrees(data, quality);
             PlantOpenLand(data, def, quality);
         }
+
+        /// <summary>Edges whose face looks onto a street (or the circuit) within a few metres: these get balconies, bay windows and shop awnings.</summary>
+        void MarkStreetFronts()
+        {
+            for (int k = 0; k < buildings.Count; k++)
+            {
+                var b = buildings[k];
+                int n = b.outline.Count;
+                b.front = new bool[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var a = b.outline[i]; var c = b.outline[(i + 1) % n];
+                    var e = c - a;
+                    float len = e.Length();
+                    if (len < 3f) continue;
+                    var outward = new Vector2(e.Y, -e.X) / len;
+                    var p = (a + c) * 0.5f + outward * 3f;
+                    // Not where a neighbour stands in front of the facade (balconies would cut into its roof).
+                    bool open = true;
+                    foreach (float f in new[] { 0.25f, 0.5f, 0.75f })
+                    {
+                        var q = Vector2.Lerp(a, c, f) + outward * 1.5f;
+                        if (InsideBuilding(q.X, q.Y, 0f)) open = false;
+                    }
+                    b.front[i] = open && (StreetDistance(p.X, p.Y) < FrontReach || clearance.Margin(p.X, p.Y) < FrontReach + 3f);
+                }
+                buildings[k] = b;
+            }
+        }
+
+        /// <summary>Distance from a point 3 m in front of a facade to a street edge (or the racing envelope, plus 3 m) that makes the facade a street front.</summary>
+        public const float FrontReach = 5f;
 
         /// <summary>"Daire", "Köşk" and "Kapı" are palace service buildings only next to a palace; elsewhere (a tax office, "Vergi Dairesi") they stay generic.</summary>
         void DemoteStrayDependencies(CityData data)
