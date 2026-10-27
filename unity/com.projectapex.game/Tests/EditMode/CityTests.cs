@@ -72,6 +72,9 @@ namespace Apex.Tests
             }
             for (int i = 0; i < life.vehicles.Count; i++) moved += Vector3.Distance(start[i], life.vehicles[i].position);
             Assert.That(moved / life.vehicles.Count, Is.GreaterThan(30f), "traffic flows");
+            TestContext.WriteLine($"{life.connectedEnds} connected street ends, {life.junctionTurns} turns at junctions in two minutes");
+            Assert.That(life.connectedEnds, Is.GreaterThan(100), "street network with junctions");
+            Assert.That(life.junctionTurns, Is.GreaterThan(life.vehicles.Count / 2), "vehicles turn into other streets instead of only turning round");
             foreach (var p in life.props) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
             foreach (var p in life.parked) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
         }
@@ -120,6 +123,27 @@ namespace Apex.Tests
                 if (t.kind == 2) cypress++;
             }
             Assert.That(city.trees.Count, Is.GreaterThan(1500), "parks, woods, cemeteries and street trees");
+            // Street fronts (balconies, bay windows, awnings): most buildings have one, and none is blocked by a neighbour.
+            int withFront = 0;
+            foreach (var b in city.buildings)
+            {
+                Assert.That(b.front, Is.Not.Null);
+                Assert.That(b.front.Length, Is.EqualTo(b.outline.Count));
+                bool any = false;
+                for (int i = 0; i < b.front.Length; i++)
+                {
+                    if (!b.front[i]) continue;
+                    any = true;
+                    var a = b.outline[i]; var c = b.outline[(i + 1) % b.outline.Count];
+                    var e = c - a;
+                    var outward = new Vector2(e.Y, -e.X) / e.Length();
+                    var q = (a + c) * 0.5f + outward * 1.5f;
+                    Assert.That(city.InsideBuilding(q.X, q.Y, 0f), Is.False, "street front faces another building");
+                }
+                if (any) withFront++;
+            }
+            TestContext.WriteLine($"{withFront} buildings with a street front");
+            Assert.That(withFront, Is.GreaterThan(city.buildings.Count * 2 / 5));
             Assert.That(cypress, Is.GreaterThan(50), "cypresses in the cemeteries");
         }
 
@@ -135,6 +159,10 @@ namespace Apex.Tests
                 Assert.That(wings.Exists(b => b.name.Contains(key)), Is.True, key + " is built from its footprint");
             Assert.That(wings.Find(b => b.name.Contains("Muayede")).height, Is.EqualTo(26f));
             Assert.That(towers.Count, Is.EqualTo(1), "Dolmabahçe clock tower");
+            var gates = city.buildings.FindAll(b => b.classical == OsmCity.Gate);
+            Assert.That(gates.Count, Is.EqualTo(2), "Saltanat and Hazine gates");
+            Assert.That(gates.Exists(b => b.name.Contains("Saltanat")) && gates.Exists(b => b.name.Contains("Hazine")), Is.True);
+            Assert.That(deps.Exists(b => b.name.Contains("Koltuk Kapısı")), Is.True, "a square gate house stays a service building");
             // 18 houses in the data; the four at the southern end touch the circuit corner and give way to the barriers.
             Assert.That(city.buildings.FindAll(b => b.classical == OsmCity.RowHouse).Count, Is.EqualTo(14), "Akaretler row houses");
             Assert.That(wings.Exists(b => b.name.Contains("Kempinski")), Is.False, "the modern hotel stays generic");

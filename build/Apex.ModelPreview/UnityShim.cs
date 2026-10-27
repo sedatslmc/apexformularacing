@@ -111,6 +111,7 @@ namespace UnityEngine
         public static float Sin(float a) => MathF.Sin(a);
         public static float Atan2(float y, float x) => MathF.Atan2(y, x);
         public static float Asin(float a) => MathF.Asin(a);
+        public static float Floor(float a) => MathF.Floor(a);
         public static float Cos(float a) => MathF.Cos(a);
         public static float Sqrt(float a) => MathF.Sqrt(a);
         public static float Abs(float a) => MathF.Abs(a);

@@ -309,6 +309,13 @@ namespace Apex.Game
                     float h = b.height;
                     PlaceDetailed(palaceRoot, "osm_classical_" + s, "Akaretler row house", h, g => g.RowHouse(local, h, front, s), pos, 0f, RowLods);
                 }
+                else if (b.classical == OsmCity.Gate)
+                {
+                    // Long axis of the footprint along the model's x; width and depth from its extents.
+                    var (yaw, width, depth) = FootprintAxes(local);
+                    float h = b.height;
+                    PlaceDetailed(palaceRoot, "osm_classical_" + s, name, h, g => g.GateMonument(width, depth, h), pos, yaw, PalaceLods);
+                }
                 else if (b.classical == OsmCity.ClockTower)
                 {
                     // Faces square to the longest footprint edge.
@@ -336,6 +343,25 @@ namespace Apex.Game
             Debug.Log($"[Apex] Palaces: {count} classical buildings on their OSM footprints.");
         }
 
+        /// <summary>Yaw (deg) that turns model +x onto the footprint's longest edge, and the extents along and across it.</summary>
+        static (float yaw, float width, float depth) FootprintAxes(List<Vector2> o)
+        {
+            float best = 0f; Vector2 dir = Vector2.right;
+            for (int i = 0; i < o.Count; i++)
+            {
+                var d = o[(i + 1) % o.Count] - o[i];
+                if (d.magnitude > best) { best = d.magnitude; dir = d.normalized; }
+            }
+            float minU = float.MaxValue, maxU = float.MinValue, minV = float.MaxValue, maxV = float.MinValue;
+            foreach (var p in o)
+            {
+                float u = Vector2.Dot(p, dir), v = -p.x * dir.y + p.y * dir.x;
+                minU = Mathf.Min(minU, u); maxU = Mathf.Max(maxU, u); minV = Mathf.Min(minV, v); maxV = Mathf.Max(maxV, v);
+            }
+            // Model x maps to (cos yaw, -sin yaw) in (east, north).
+            return (Mathf.Atan2(-dir.y, dir.x) * Mathf.Rad2Deg, maxU - minU, maxV - minV);
+        }
+
         /// <summary>The OSM buildings in chunks with two LODs (detailed: cornices, parapets, roof tanks).</summary>
         static void BuildOsmCity(Transform root, OsmCity osm)
         {
@@ -356,9 +382,11 @@ namespace Apex.Game
             {
                 var detailed = new PartSet();
                 var simple = new PartSet();
+                var fronts = new PartSet();
                 foreach (var b in kv.Value)
                 {
                     EnvironmentGeometry.FootprintBuilding(detailed.B, b, true);
+                    EnvironmentGeometry.FacadeOrnaments(fronts.B, b, Mathf.Clamp(Quality, 0, 2));
                     EnvironmentGeometry.FootprintBuilding(simple.B, b, false);
                 }
                 var group = new GameObject($"Real_{kv.Key.Item1}_{kv.Key.Item2}");
@@ -366,11 +394,25 @@ namespace Apex.Game
                 var lod0 = AddMeshObject(group.transform, "LOD0", detailed.parts, true);
                 var lod1 = AddMeshObject(group.transform, "LOD1", simple.parts, true);
                 var lg = group.AddComponent<LODGroup>();
-                lg.SetLODs(new[]
+                var r0 = lod0.GetComponent<Renderer>();
+                if (fronts.Triangles > 0)
                 {
-                    new LOD(0.12f, new Renderer[] { lod0.GetComponent<Renderer>() }),
-                    new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
-                });
+                    // Street-front relief (balconies, bay windows, awnings) only on the near level: it reads up to
+                    // about 400 m; beyond, the facade texture alone carries the windows.
+                    var rel = AddMeshObject(group.transform, "Fronts", fronts.parts, true);
+                    lg.SetLODs(new[]
+                    {
+                        new LOD(0.35f, new Renderer[] { r0, rel.GetComponent<Renderer>() }),
+                        new LOD(0.12f, new Renderer[] { r0 }),
+                        new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
+                    });
+                }
+                else
+                    lg.SetLODs(new[]
+                    {
+                        new LOD(0.12f, new Renderer[] { r0 }),
+                        new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
+                    });
                 lg.RecalculateBounds();
             }
         }
@@ -441,6 +483,7 @@ namespace Apex.Game
             {
                 var lg = new LandmarkGeometry(d);
                 build(lg);
+                lg.MasonryUVs();
                 var child = AddMeshObject(go.transform, name + "_LOD" + d, lg.parts, d < 2);
                 lods[d] = new LOD(screenHeights[d], new Renderer[] { child.GetComponent<Renderer>() });
             }
@@ -1177,6 +1220,35 @@ namespace Apex.Game
             Flag.doubleSidedGI = true;
         }
 
+        /// <summary>
+        /// Lit material with a procedural masonry texture set (MasonryTextures) on the landmark models, whose meshes
+        /// carry metric UVs (1 unit = 1 m), so the texture repeats every `tile` metres. Emission stays available
+        /// for the night floodlighting (driven by EnvironmentInstance like the other night lights).
+        /// </summary>
+        static Material MasonryMaterial(string name, string paletteKey, (byte[] albedo, byte[] normal) set, float tile, float smoothness, float bump)
+        {
+            int n = (int)Mathf.Sqrt(set.albedo.Length / 4);
+            var albedo = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = name + "_Albedo", wrapMode = TextureWrapMode.Repeat, anisoLevel = 8 };
+            albedo.LoadRawTextureData(set.albedo);
+            albedo.Apply(true);
+            var normal = new Texture2D(n, n, TextureFormat.RGBA32, true, true) { name = name + "_Normal", wrapMode = TextureWrapMode.Repeat, anisoLevel = 8 };
+            normal.LoadRawTextureData(set.normal);
+            normal.Apply(true);
+            var m = new Material(ApexMaterials.LitShader()) { name = name, enableInstancing = true };
+            SetColour(m, ApexMaterials.Palette[paletteKey]);
+            SetTexture(m, "_BaseMap", "_MainTex", albedo);
+            if (m.HasProperty("_BumpMap"))
+            {
+                m.SetTexture("_BumpMap", normal);
+                m.EnableKeyword("_NORMALMAP");
+                if (m.HasProperty("_BumpScale")) m.SetFloat("_BumpScale", bump);
+            }
+            if (m.HasProperty("_Smoothness")) m.SetFloat("_Smoothness", smoothness);
+            m.mainTextureScale = Vector2.one / tile;
+            if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", Color.black); }
+            return m;
+        }
+
         public static void Ensure(EnvironmentInstance env)
         {
             if (facadeAlbedo == null) BuildFacadeTextures();
@@ -1195,15 +1267,30 @@ namespace Apex.Game
                 env.AddWettable(m);
             }
             ApexMaterials.Register("EnvWater", WaterMaterial());
+            // Street fronts: plaster in the facade colours (bay windows, parapets), canvas awnings, balcony flags.
+            for (int i = 0; i < CityLayout.Styles; i++) ApexMaterials.Register(EnvironmentGeometry.FacadeSolid(i), Solid(FacadeColours[i % FacadeColours.Length] * 0.97f));
+            var awnings = new[] { new Color(0.55f, 0.1f, 0.09f), new Color(0.13f, 0.32f, 0.22f), new Color(0.12f, 0.17f, 0.3f), new Color(0.85f, 0.8f, 0.66f) };
+            for (int i = 0; i < EnvironmentGeometry.Awnings; i++)
+            {
+                var m = Solid(awnings[i]);
+                if (m.HasProperty("_Cull")) { m = new Material(m) { name = "Env_Awning" + i }; m.SetFloat("_Cull", 0f); m.doubleSidedGI = true; }
+                ApexMaterials.Register(EnvironmentGeometry.Awning(i), m);
+            }
+            ApexMaterials.Register(EnvironmentGeometry.BalconyFlag, Flag);
             var fence = TrackInfrastructureBuilder.CatchFenceMaterial("Env_CatchFence");
             ApexMaterials.Register(EnvironmentGeometry.CatchFence, fence);
             // Night lights (moderate intensities: no neon, no blown-out bloom).
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.LampHead), new Color(1f, 0.82f, 0.58f) * 2.2f);
+            // City traffic: headlights and tail lights (the instanced vehicles share these two materials).
+            env.AddLight(ApexMaterials.Get(EnvironmentGeometry.Headlight), new Color(1f, 0.95f, 0.85f) * 3f);
+            env.AddLight(ApexMaterials.Get(EnvironmentGeometry.Taillight), new Color(0.9f, 0.05f, 0.04f) * 1.6f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeLight), new Color(0.85f, 0.9f, 1f) * 2f);
             // Turkish red (#E30A17) and white. Red stays at 1.3: brighter saturated red bleaches to pink under ACES.
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeRed), new Color(0.89f, 0.04f, 0.09f) * 1.3f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeWhite), new Color(1f, 0.97f, 0.92f) * 2.4f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.TowerGlass), new Color(0.32f, 0.33f, 0.3f));
+            ApexMaterials.Register(LandmarkGeometry.Marble, MasonryMaterial("Env_MarbleAshlar", LandmarkGeometry.Marble, MasonryTextures.Marble(512), MasonryTextures.MarbleTile, 0.42f, 0.8f));
+            ApexMaterials.Register(LandmarkGeometry.RowPlaster, MasonryMaterial("Env_LimePlaster", LandmarkGeometry.RowPlaster, MasonryTextures.Plaster(256), MasonryTextures.PlasterTile, 0.15f, 0.5f));
             foreach (var key in new[] { LandmarkGeometry.Stone, LandmarkGeometry.Marble, LandmarkGeometry.HagiaPlaster })
                 env.AddLight(ApexMaterials.Get(key), new Color(0.32f, 0.27f, 0.2f));
             // Grey interlocking concrete pavers on the pavements (UV = world x/z per 3 m along the circuit);

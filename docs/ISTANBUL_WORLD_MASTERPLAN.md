@@ -118,6 +118,11 @@
   - Fußgänger und Stadtverkehr (instanziert, ein Drittel Taxis)
   - **Status:** implementiert und getestet (Simulation); Low-Poly-Platzhalter-Modelle, in Unity nicht gesehen
 
+- **Umgesetzt (2026-10-27, `CITY_FROM_OSM.md` 3a):**
+  - Straßenfronten der echten Stadt mit Balkonen, Erkern, Markisen und Klimageräten
+  - Türkei-Fahnen an Balkonen und auf Masten an den Hauptstraßen
+  - **Status:** implementiert und getestet; in Unity nicht gesehen
+
 ### Phase 5 – Türkische Identität & Event
 - **Flaggen:** Monumentalflagge, Dachflaggen und Tribünenflaggen sind da. Ergänzen:
   - Balkonflaggen (schräge Wandhalter)

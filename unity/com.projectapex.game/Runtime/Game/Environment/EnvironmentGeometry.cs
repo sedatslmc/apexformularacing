@@ -186,6 +186,120 @@ namespace Apex.Game
             }
         }
 
+        // --- Street fronts of the real city: balconies, bay windows (cumba), shop awnings, AC units, flags ---
+
+        public static string FacadeSolid(int style) => "FacadeSolid" + style;
+        public static string Awning(int i) => "Awning" + i;
+        public const int Awnings = 4;
+        public const string BalconyFlag = "BalconyFlag";
+
+        static int Hash(int a, int b)
+        {
+            uint q = (uint)(a * 73856093 ^ b * 19349663);
+            q = (q ^ (q >> 13)) * 1274126177u;
+            return (int)((q ^ (q >> 16)) & 0x7fffffff);
+        }
+
+        static float Mod(float a, float m) => a - m * Mathf.Floor(a / m);
+
+        /// <summary>
+        /// Modelled relief on the street fronts of an OSM building (<see cref="OsmCity.Building.front"/>), aligned with
+        /// the window bays of the facade texture (3.5 m bays, <see cref="CityLayout.FloorHeight"/> storeys):
+        /// balconies with metal railings or solid parapets on apartment blocks, a corbelled bay window (cumba) on
+        /// older low-rise houses, canvas awnings over the shops. level 2 adds air-conditioning units beside some
+        /// windows and a Turkish flag on a short pole at some balconies. level 0: nothing (mobile).
+        /// </summary>
+        public static void FacadeOrnaments(Parts B, OsmCity.Building b, int level)
+        {
+            if (level <= 0 || b.front == null || b.classical != OsmCity.NotClassical) return;
+            var o = b.outline;
+            int n = o.Count;
+            float y0 = b.ground + 0.6f, fh = CityLayout.FloorHeight, tileW = BayWidth * TileBays;
+            int floors = Mathf.FloorToInt((b.height - 0.6f) / fh);
+            if (floors < 2) return;
+            int seed = Hash((int)(o[0].X * 7.1f), (int)(o[0].Y * 3.3f));
+            int kind = seed % 10;                     // 0-2 balconies, 4-5 cumba (older low-rise), else plain
+            bool balconies = kind < 3 && !b.historic;
+            bool cumba = (kind == 4 || kind == 5 || b.historic) && b.height <= 16f;
+            bool metalRail = (seed >> 5) % 2 == 0;
+            int awning = (seed >> 7) % Awnings;
+            string solid = FacadeSolid(b.style);
+            float u = (o[0].X * 0.37f + o[0].Y * 0.11f) % tileW;   // same running u as FootprintBuilding
+            for (int i = 0; i < n; i++)
+            {
+                var a = new Vector3(o[i].X, 0f, o[i].Y);
+                var c = new Vector3(o[(i + 1) % n].X, 0f, o[(i + 1) % n].Y);
+                var edge = c - a;
+                float len = edge.magnitude;
+                if (len < 0.05f) continue;
+                float uEdge = u;
+                u += len;
+                if (!b.front[i] || len < 6f) continue;
+                var dir = edge / len;
+                var outward = new Vector3(edge.z, 0f, -edge.x) / len;
+                var q = Quaternion.LookRotation(outward);
+                Vector3 P(float along, float y, float outOff) => a + dir * along + outward * outOff + Vector3.up * y;
+                // Bay centres: where the facade texture has its windows (u mod 3.5 = 1.75).
+                var bays = new List<float>();
+                for (float t = Mod(BayWidth * 0.5f - uEdge, BayWidth); t <= len - 1.6f; t += BayWidth)
+                    if (t >= 1.6f) bays.Add(t);
+                if (bays.Count == 0) continue;
+                int mid = bays.Count / 2;
+                for (int k = 0; k < bays.Count; k++)
+                {
+                    float t = bays[k];
+                    int h = Hash(seed + i * 131, k);
+                    // Shops: an awning over each ground-floor bay of a shop building, sometimes on other street fronts too.
+                    if (b.shop || h % 5 == 0)
+                        B(Awning(awning)).Box(P(t, y0 + 2.6f, 0.62f), new Vector3(3f, 0.06f, 1.35f), q * Quaternion.Euler(18f, 0f, 0f));
+                    if (cumba && k == mid && bays.Count >= 2)
+                    {
+                        float top = y0 + floors * fh - 0.3f, bottom = y0 + fh;
+                        B(solid).Box(P(t, (top + bottom) * 0.5f, 0.45f), new Vector3(3.2f, top - bottom, 0.9f), q);
+                        B(solid).Box(P(t, bottom - 0.2f, 0.3f), new Vector3(2.8f, 0.4f, 0.6f), q);           // corbel
+                        B(LandmarkGeometry.Lead).Box(P(t, top + 0.08f, 0.5f), new Vector3(3.4f, 0.16f, 1.05f), q);
+                        for (int f = 1; f < floors; f++)
+                        {
+                            float fb = y0 + f * fh;
+                            B(Glass).Box(P(t, fb + 1.65f, 0.91f), new Vector3(2.3f, 1.5f, 0.04f), q);
+                            foreach (float sx in new[] { -1.61f, 1.61f })
+                                B(Glass).Box(P(t + sx, fb + 1.65f, 0.45f), new Vector3(0.04f, 1.4f, 0.5f), q);
+                        }
+                        continue;
+                    }
+                    for (int f = 1; f < floors; f++)
+                    {
+                        if (f % TileBays == 0) continue;   // the texture repeats its shop row every 8 storeys
+                        float fb = y0 + f * fh;
+                        int hf = Hash(h, f);
+                        bool balcony = balconies && hf % 10 < 5;
+                        if (balcony)
+                        {
+                            B(Concrete).Box(P(t, fb + 0.02f, 0.55f), new Vector3(2.7f, 0.16f, 1.1f), q);
+                            string rail = metalRail ? LandmarkGeometry.Lead : solid;
+                            B(rail).Box(P(t, fb + 0.6f, 1.08f), new Vector3(2.7f, 1f, metalRail ? 0.04f : 0.1f), q);
+                            // Side railings as single outward-facing quads (seen from the street only).
+                            foreach (float sx in new[] { -1.35f, 1.35f })
+                                B(rail).QuadFacing(P(t + sx, fb + 0.1f, 0f), P(t + sx, fb + 0.1f, 1.08f), P(t + sx, fb + 1.1f, 1.08f), P(t + sx, fb + 1.1f, 0f),
+                                    Vector2.zero, Vector2.right, Vector2.one, Vector2.up, dir * sx);
+                            if (level >= 2 && hf % 23 == 0)
+                            {
+                                // Turkish flag on a short pole from the railing.
+                                var p0 = P(t + 1.15f, fb + 1.1f, 1.08f);
+                                var p1 = p0 + outward * 0.85f + Vector3.up * 0.85f;
+                                B(LandmarkGeometry.Lead).Tube(p0, p1, 0.02f, 4, true);
+                                var fa = Vector3.Lerp(p0, p1, 0.15f);
+                                B(BalconyFlag).QuadFacing(fa, p1, p1 - Vector3.up * 0.75f, fa - Vector3.up * 0.75f,
+                                    new Vector2(0f, 1f), Vector2.one, Vector2.right, Vector2.zero, dir);
+                            }
+                        }
+                        if (level >= 2 && hf % 20 == 1)
+                            B(Tank).Box(P(t + 1.25f, fb + (balcony ? 1.6f : 0.55f), balcony ? 0.2f : 0.22f), new Vector3(0.8f, 0.55f, 0.32f), q);
+                    }
+                }
+            }
+        }
+
         /// <summary>Tiled hip roof over a four-cornered footprint (ridge along the longer pair of sides).</summary>
         static void HipRoof(Parts B, List<System.Numerics.Vector2> o, float y1)
         {
@@ -306,6 +420,8 @@ namespace Apex.Game
         // --- City life: street furniture, vehicles, pedestrians (local frame: +z forward, y up, base at 0) ---
 
         public const string Wood = "Bark", DarkSteel = "KitDark", Glass = "Glass", Tyre = "Tire";
+        /// <summary>Vehicle lamps: emissive at night (EnvironmentMaterials registers them as night lights).</summary>
+        public const string Headlight = "CarHeadlight", Taillight = "CarTaillight";
 
         /// <summary>Street furniture by <see cref="CityLife.Prop"/>; +z faces the street.</summary>
         public static void StreetProp(Parts B, CityLife.Prop kind)
@@ -341,6 +457,22 @@ namespace Apex.Game
                     for (int k = 0; k < 3; k++) B(Wood).Box(new Vector3(-0.6f + k * 0.12f, 0.46f, -0.5f + k * 0.12f), new Vector3(2.2f, 0.04f, 0.1f));
                     B(Seat).Box(new Vector3(1.4f, 1.6f, -0.76f), new Vector3(1.0f, 1.4f, 0.04f));   // timetable / city map panel
                     break;
+                case CityLife.Prop.FlagPole:
+                {
+                    // 7 m pole with a 1.8 x 1.2 m Turkish flag, frozen mid-flutter (three gently waved strips).
+                    B(LandmarkGeometry.Lead).Tube(Vector3.zero, new Vector3(0f, 7f, 0f), 0.05f, 6, true);
+                    B(LandmarkGeometry.Gilt).Box(new Vector3(0f, 7.05f, 0f), new Vector3(0.12f, 0.1f, 0.12f));
+                    const int strips = 3;
+                    for (int k = 0; k < strips; k++)
+                    {
+                        float u0 = k / (float)strips, u1 = (k + 1) / (float)strips;
+                        float x0 = 0.06f + u0 * 1.8f, x1 = 0.06f + u1 * 1.8f;
+                        float z0 = 0.12f * Mathf.Sin(u0 * 5f), z1 = 0.12f * Mathf.Sin(u1 * 5f);
+                        B(BalconyFlag).QuadFacing(new Vector3(x0, 6.9f, z0), new Vector3(x1, 6.85f, z1), new Vector3(x1, 5.65f, z1), new Vector3(x0, 5.7f, z0),
+                            new Vector2(u0, 1f), new Vector2(u1, 1f), new Vector2(u1, 0f), new Vector2(u0, 0f), Vector3.forward);
+                    }
+                    break;
+                }
             }
         }
 
@@ -350,6 +482,14 @@ namespace Apex.Game
         /// </summary>
         public static void CityVehicle(Parts B, CityLife.Vehicle kind, string body)
         {
+            void Lamps(float halfX, float front, float rear, float y, float size)
+            {
+                foreach (float x in new[] { -halfX, halfX })
+                {
+                    B(Headlight).Box(new Vector3(x, y, front), new Vector3(size * 1.6f, size, 0.06f));
+                    B(Taillight).Box(new Vector3(x, y + 0.05f, rear), new Vector3(size * 1.4f, size * 0.8f, 0.06f));
+                }
+            }
             void Wheels(float track, float[] zs, float r)
             {
                 foreach (float z in zs)
@@ -363,12 +503,14 @@ namespace Apex.Game
                     B(Glass).Box(new Vector3(0f, 2.1f, 0f), new Vector3(2.52f, 0.9f, 11.6f));
                     B(body).Box(new Vector3(0f, 2.75f, 0f), new Vector3(2.5f, 0.4f, 12f));
                     Wheels(1.05f, new[] { -3.8f, 3.6f }, 0.5f);
+                    Lamps(0.95f, 6.01f, -6.01f, 0.75f, 0.22f);
                     break;
                 case CityLife.Vehicle.Van:
                     B(body).Box(new Vector3(0f, 0.95f, -0.3f), new Vector3(1.95f, 1.5f, 4.2f));
                     B(body).Box(new Vector3(0f, 0.75f, 2.0f), new Vector3(1.9f, 1.0f, 0.9f));
                     B(Glass).Box(new Vector3(0f, 1.4f, 1.62f), new Vector3(1.8f, 0.6f, 0.4f), Quaternion.Euler(-25f, 0f, 0f));
                     Wheels(0.85f, new[] { -1.5f, 1.7f }, 0.36f);
+                    Lamps(0.75f, 2.46f, -2.41f, 0.8f, 0.18f);
                     break;
                 case CityLife.Vehicle.Scooter:
                     B(body).Box(new Vector3(0f, 0.55f, 0f), new Vector3(0.45f, 0.5f, 1.3f));
@@ -376,6 +518,8 @@ namespace Apex.Game
                     B(Skin).Box(new Vector3(0f, 1.15f, -0.1f), new Vector3(0.36f, 0.6f, 0.3f));   // rider
                     B(DarkSteel).Box(new Vector3(0f, 1.55f, -0.1f), new Vector3(0.24f, 0.26f, 0.26f));   // helmet
                     foreach (float z in new[] { -0.65f, 0.65f }) B(Tyre).Tube(new Vector3(-0.05f, 0.25f, z), new Vector3(0.05f, 0.25f, z), 0.25f, 10, true);
+                    B(Headlight).Box(new Vector3(0f, 0.95f, 0.62f), new Vector3(0.16f, 0.12f, 0.06f));
+                    B(Taillight).Box(new Vector3(0f, 0.7f, -0.66f), new Vector3(0.14f, 0.08f, 0.04f));
                     break;
                 default:   // sedan (cars and taxis)
                     B(body).Box(new Vector3(0f, 0.6f, 0f), new Vector3(1.8f, 0.6f, 4.5f));
@@ -385,6 +529,7 @@ namespace Apex.Game
                     B(Glass).Box(new Vector3(0f, 1.12f, -0.2f), new Vector3(1.62f, 0.34f, 1.8f));
                     if (body == "CityTaxi") B(DarkSteel).Box(new Vector3(0f, 1.42f, -0.2f), new Vector3(0.5f, 0.14f, 0.2f));   // TAKSİ roof sign
                     Wheels(0.82f, new[] { -1.4f, 1.4f }, 0.32f);
+                    Lamps(0.66f, 2.26f, -2.26f, 0.68f, 0.16f);
                     break;
             }
         }

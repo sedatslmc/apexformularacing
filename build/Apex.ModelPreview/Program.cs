@@ -53,6 +53,7 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     {
         var lg = new LandmarkGeometry(detail);
         build(lg);
+        lg.MasonryUVs();
         var sbl = new StringBuilder();
         int vb = 1, tr = 0;
         foreach (var kv in lg.parts)
@@ -62,8 +63,9 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
             var ns = mbx.ComputeNormals();
             foreach (var v in mbx.Vertices) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F3} {1:F3} {2:F3}", v.x, v.y, v.z));
             foreach (var nn in ns) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "vn {0:F3} {1:F3} {2:F3}", nn.x, nn.y, nn.z));
+            foreach (var uv in mbx.UVs) sbl.AppendLine(string.Format(CultureInfo.InvariantCulture, "vt {0:F3} {1:F3}", uv.x, uv.y));
             var ts = mbx.Triangles;
-            for (int i = 0; i < ts.Count; i += 3) sbl.AppendLine($"f {ts[i] + vb}//{ts[i] + vb} {ts[i + 1] + vb}//{ts[i + 1] + vb} {ts[i + 2] + vb}//{ts[i + 2] + vb}");
+            for (int i = 0; i < ts.Count; i += 3) sbl.AppendLine($"f {ts[i] + vb}/{ts[i] + vb}/{ts[i] + vb} {ts[i + 1] + vb}/{ts[i + 1] + vb}/{ts[i + 1] + vb} {ts[i + 2] + vb}/{ts[i + 2] + vb}/{ts[i + 2] + vb}");
             vb += mbx.VertexCount;
             tr += ts.Count / 3;
             float vol = SignedVolumeOf(mbx.ToMesh(kv.Key));
@@ -82,6 +84,7 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     for (int d = 0; d < 3; d++) { int dd = d; ExportD("ortakoy_lod" + d, dd, l => l.OrtakoyMosqueDetailed()); }
     Export("dolmabahce", l => { l.Palace(284f, 48f, 18f, true); });
     for (int d = 0; d < 3; d++) { int dd = d; ExportD("clocktower_lod" + d, dd, l => l.ClockTowerDetailed()); }
+    for (int d = 0; d < 3; d++) { int dd = d; ExportD("gate_lod" + d, dd, l => l.GateMonument(19.4f, 8.7f, 14f)); }
     {
         // Palace ensembles from the OSM footprints (ground at 0; around Dolmabahçe and Çırağan).
         string cityFile = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/City/bosphorus_a.json");
@@ -184,6 +187,23 @@ if (Array.IndexOf(args, "--citylife") >= 0)
     }
     File.WriteAllText(Path.Combine(outDir, "citylife.obj"), sbl.ToString());
     Console.WriteLine($"citylife: {tr} triangles");
+    return;
+}
+if (Array.IndexOf(args, "--masonry") >= 0)
+{
+    // Procedural masonry textures as binary PPMs (albedo and normal) for the offline renders.
+    void Ppm(string name, byte[] rgba)
+    {
+        int n = (int)Math.Sqrt(rgba.Length / 4);
+        using var fs = File.Create(Path.Combine(outDir, name));
+        var header = Encoding.ASCII.GetBytes($"P6 {n} {n} 255\n");
+        fs.Write(header, 0, header.Length);
+        for (int j = n - 1; j >= 0; j--)
+            for (int i = 0; i < n; i++) { int k = (j * n + i) * 4; fs.WriteByte(rgba[k]); fs.WriteByte(rgba[k + 1]); fs.WriteByte(rgba[k + 2]); }
+    }
+    var (ma, mn) = Apex.Environment.MasonryTextures.Marble(512);
+    var (pa, pn) = Apex.Environment.MasonryTextures.Plaster(256);
+    Ppm("marble_albedo.ppm", ma); Ppm("marble_normal.ppm", mn); Ppm("plaster_albedo.ppm", pa); Ppm("plaster_normal.ppm", pn);
     return;
 }
 if (Array.IndexOf(args, "--monument") >= 0)
@@ -397,6 +417,45 @@ if (Array.IndexOf(args, "--environment") >= 0)
         realRadius = data.radius;
         foreach (var b in osm.buildings) EnvironmentGeometry.FootprintBuilding(B, b, true);
         Console.WriteLine($"real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees");
+        // Street-front relief for the whole city (counted), and a window around --frontage x,z written as OBJ.
+        var orn = new Dictionary<string, MeshBuilder>();
+        MeshBuilder O(string k) { if (!orn.TryGetValue(k, out var m)) orn[k] = m = new MeshBuilder(); return m; }
+        int fronts = 0;
+        foreach (var b in osm.buildings) { EnvironmentGeometry.FacadeOrnaments(O, b, 2); if (b.front != null && Array.IndexOf(b.front, true) >= 0) fronts++; }
+        int ornTris = 0; foreach (var kv in orn) ornTris += kv.Value.TriangleCount;
+        Console.WriteLine($"street fronts: {fronts} buildings, ornament triangles (level 2): {ornTris}");
+        foreach (var kv in orn) Console.WriteLine($"  ornaments {kv.Key}: {kv.Value.TriangleCount}");
+        int fi = Array.IndexOf(args, "--frontage");
+        if (fi >= 0 && fi + 1 < args.Length)
+        {
+            var xy = args[fi + 1].Split(',');
+            float fx = float.Parse(xy[0], CultureInfo.InvariantCulture), fz = float.Parse(xy[1], CultureInfo.InvariantCulture);
+            var win = new Dictionary<string, MeshBuilder>();
+            MeshBuilder Wb(string k) { if (!win.TryGetValue(k, out var m)) win[k] = m = new MeshBuilder(); m.matrix = new Matrix4x4 { offset = new Vector3(-fx, 0f, -fz) }; return m; }
+            float gy = float.MaxValue;
+            foreach (var b in osm.buildings)
+            {
+                var c0 = b.outline[0];
+                if ((c0.X - fx) * (c0.X - fx) + (c0.Y - fz) * (c0.Y - fz) > 140f * 140f) continue;
+                gy = MathF.Min(gy, b.ground);
+                EnvironmentGeometry.FootprintBuilding(Wb, b, true);
+                EnvironmentGeometry.FacadeOrnaments(Wb, b, 2);
+            }
+            var sbw = new StringBuilder();
+            int vbw = 1;
+            foreach (var kv in win)
+            {
+                sbw.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+                var mbx = kv.Value;
+                foreach (var v in mbx.Vertices) sbw.AppendLine(string.Format(CultureInfo.InvariantCulture, "v {0:F3} {1:F3} {2:F3}", v.x, v.y - gy, v.z));
+                foreach (var uv in mbx.UVs) sbw.AppendLine(string.Format(CultureInfo.InvariantCulture, "vt {0:F4} {1:F4}", uv.x, uv.y));
+                var ts = mbx.Triangles;
+                for (int i = 0; i < ts.Count; i += 3) sbw.AppendLine($"f {ts[i] + vbw}/{ts[i] + vbw} {ts[i + 1] + vbw}/{ts[i + 1] + vbw} {ts[i + 2] + vbw}/{ts[i + 2] + vbw}");
+                vbw += mbx.VertexCount;
+            }
+            File.WriteAllText(Path.Combine(outDir, "frontage.obj"), sbw.ToString());
+            Console.WriteLine($"frontage.obj around {fx},{fz} (ground {gy:F1} -> 0)");
+        }
     }
     var city = new Apex.Environment.CityLayout(field, def, new Apex.Environment.CityLayout.Options { quality = quality, realCityRadius = realRadius });
     if (osm != null) city.trees.AddRange(osm.trees);

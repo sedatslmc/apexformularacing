@@ -215,9 +215,11 @@ namespace Apex.Environment
             public string name;
             /// <summary>Built as an in-house landmark model, not as a generic block (see <see cref="ClassicalKind"/>).</summary>
             public int classical;
+            /// <summary>Per outline edge (edge i runs from outline[i] to outline[i + 1]): faces a street or the circuit.</summary>
+            public bool[] front;
         }
 
-        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4;
+        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4, Gate = 5;
 
         /// <summary>
         /// Historic palace buildings from their OSM names, built with modelled classical facades instead of the
@@ -232,9 +234,29 @@ namespace Apex.Environment
             if (n.Length == 0) return b.type == "palace" ? PalaceWing : NotClassical;
             if (n.Contains("Kempinski") || n.Contains("Geçidi")) return NotClassical;
             if (n.Contains("Saat Kulesi")) return ClockTower;
+            // Monumental gates: a "Kapı" whose footprint is a slender block (the show gates of Dolmabahçe).
+            if ((n.EndsWith("Kapı") || n.EndsWith("Kapısı")) && Slenderness(b.outline) >= 2f) return Gate;
             if (n.Contains("Saray") || b.type == "palace") return PalaceWing;
             if (n.EndsWith("Dairesi") || n.EndsWith("Daire") || n.Contains("Köşkü") || n.EndsWith("Kapı") || n.EndsWith("Kapısı")) return PalaceDependency;
             return NotClassical;
+        }
+
+        /// <summary>Length of the longest edge over the footprint's extent across it (1 = square, 5 = a slender block).</summary>
+        public static float Slenderness(List<Vector2> o)
+        {
+            float best = 0f; Vector2 dir = Vector2.UnitX;
+            for (int i = 0; i < o.Count; i++)
+            {
+                var d = o[(i + 1) % o.Count] - o[i];
+                if (d.Length() > best) { best = d.Length(); dir = Vector2.Normalize(d); }
+            }
+            float minU = float.MaxValue, maxU = float.MinValue, minV = float.MaxValue, maxV = float.MinValue;
+            foreach (var p in o)
+            {
+                float u = Vector2.Dot(p, dir), v = p.X * -dir.Y + p.Y * dir.X;
+                minU = MathF.Min(minU, u); maxU = MathF.Max(maxU, u); minV = MathF.Min(minV, v); maxV = MathF.Max(maxV, v);
+            }
+            return (maxU - minU) / MathF.Max(0.1f, maxV - minV);
         }
 
         /// <summary>
@@ -247,6 +269,7 @@ namespace Apex.Environment
         {
             string n = b.name;
             if (kind == ClockTower) return 27f;
+            if (kind == Gate) return 14f;
             if (n.Contains("Muayede")) return 26f;
             if (n.Contains("Selamlık")) return 21f;
             if (n.Contains("Harem")) return 17f;
@@ -277,16 +300,49 @@ namespace Apex.Environment
             DemoteStrayDependencies(data);
             IndexBuildings();
             IndexStreets(data);
+            MarkStreetFronts();
             PlantGreen(data, quality);
             PlantStreetTrees(data, quality);
             PlantOpenLand(data, def, quality);
         }
 
+        /// <summary>Edges whose face looks onto a street (or the circuit) within a few metres: these get balconies, bay windows and shop awnings.</summary>
+        void MarkStreetFronts()
+        {
+            for (int k = 0; k < buildings.Count; k++)
+            {
+                var b = buildings[k];
+                int n = b.outline.Count;
+                b.front = new bool[n];
+                for (int i = 0; i < n; i++)
+                {
+                    var a = b.outline[i]; var c = b.outline[(i + 1) % n];
+                    var e = c - a;
+                    float len = e.Length();
+                    if (len < 3f) continue;
+                    var outward = new Vector2(e.Y, -e.X) / len;
+                    var p = (a + c) * 0.5f + outward * 3f;
+                    // Not where a neighbour stands in front of the facade (balconies would cut into its roof).
+                    bool open = true;
+                    foreach (float f in new[] { 0.25f, 0.5f, 0.75f })
+                    {
+                        var q = Vector2.Lerp(a, c, f) + outward * 1.5f;
+                        if (InsideBuilding(q.X, q.Y, 0f)) open = false;
+                    }
+                    b.front[i] = open && (StreetDistance(p.X, p.Y) < FrontReach || clearance.Margin(p.X, p.Y) < FrontReach + 3f);
+                }
+                buildings[k] = b;
+            }
+        }
+
+        /// <summary>Distance from a point 3 m in front of a facade to a street edge (or the racing envelope, plus 3 m) that makes the facade a street front.</summary>
+        public const float FrontReach = 5f;
+
         /// <summary>"Daire", "Köşk" and "Kapı" are palace service buildings only next to a palace; elsewhere (a tax office, "Vergi Dairesi") they stay generic.</summary>
         void DemoteStrayDependencies(CityData data)
         {
             var palaces = new List<Vector2>();
-            foreach (var b in buildings) if (b.classical == PalaceWing || b.classical == ClockTower) palaces.Add(Centre(b.outline));
+            foreach (var b in buildings) if (b.classical == PalaceWing || b.classical == ClockTower || b.classical == Gate) palaces.Add(Centre(b.outline));
             for (int i = 0; i < buildings.Count; i++)
             {
                 var b = buildings[i];
