@@ -24,7 +24,7 @@ COLORS = {
     "CityTaxi": (0.95, 0.75, 0.05), "CityBus": (0.82, 0.84, 0.86), "Glass": (0.18, 0.24, 0.29),
     "KitDark": (0.16, 0.17, 0.18), "Bark": (0.42, 0.3, 0.2), "Concrete": (0.64, 0.64, 0.62),
     "Foliage": (0.27, 0.39, 0.18), "Seat": (0.06, 0.42, 0.62), "Skin": (0.74, 0.57, 0.45),
-    "BalconyFlag": (0.89, 0.04, 0.09), "CityShirt0": (0.85, 0.85, 0.84), "CityShirt1": (0.12, 0.16, 0.28), "CityTrousers0": (0.12, 0.14, 0.2),
+    "BalconyFlag": (0.89, 0.04, 0.09), "SignalOff": (0.05, 0.05, 0.05), "SignalRed": (1, 0.1, 0.05), "SignalAmber": (1, 0.6, 0.1), "SignalGreen": (0.1, 1, 0.55), "CarHeadlight": (0.95, 0.95, 0.9), "CarTaillight": (0.7, 0.05, 0.05), "CityShirt0": (0.85, 0.85, 0.84), "CityShirt1": (0.12, 0.16, 0.28), "CityTrousers0": (0.12, 0.14, 0.2),
 }
 
 

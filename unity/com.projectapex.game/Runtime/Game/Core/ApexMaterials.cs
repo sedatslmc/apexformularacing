@@ -34,6 +34,7 @@ namespace Apex.Game
             ["CarbonSatin"] = new Color(0.42f, 0.42f, 0.44f),
             ["Exhaust"] = new Color(0.36f, 0.37f, 0.39f),
             ["Tire"] = new Color(0.04f, 0.04f, 0.04f),
+            ["KitDark"] = new Color(0.14f, 0.14f, 0.15f),
             ["Rim"] = new Color(0.55f, 0.56f, 0.6f),
             ["Helmet"] = new Color(0.92f, 0.92f, 0.95f),
             ["Steel"] = new Color(0.2f, 0.22f, 0.25f),

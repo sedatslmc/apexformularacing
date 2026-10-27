@@ -534,6 +534,28 @@ namespace Apex.Game
             }
         }
 
+        public const string SignalOff = "SignalOff", SignalRed = "SignalRed", SignalAmber = "SignalAmber", SignalGreen = "SignalGreen";
+
+        /// <summary>
+        /// Traffic light on a 3.4 m pole with a three-lamp head facing +z; state as CityLife (0 red, 1 amber,
+        /// 2 green) lights one lamp (emissive material), the others stay dark.
+        /// </summary>
+        public static void TrafficLight(Parts B, int state)
+        {
+            B(DarkSteel).Tube(Vector3.zero, new Vector3(0f, 3.4f, 0f), 0.06f, 6, true);
+            B(DarkSteel).Box(new Vector3(0f, 3.0f, 0.12f), new Vector3(0.34f, 1.0f, 0.24f));
+            B(DarkSteel).Box(new Vector3(0f, 3.0f, 0.03f), new Vector3(0.46f, 1.14f, 0.04f));   // backplate
+            for (int k = 0; k < 3; k++)
+            {
+                // Top red, middle amber, bottom green.
+                int lamp = 2 - k;
+                string m = lamp == 0 ? (state == 0 ? SignalRed : SignalOff) : lamp == 1 ? (state == 1 ? SignalAmber : SignalOff) : (state == 2 ? SignalGreen : SignalOff);
+                float y = 2.68f + k * 0.32f;
+                B(m).Tube(new Vector3(0f, y, 0.24f), new Vector3(0f, y, 0.27f), 0.11f, 10, true);
+                B(DarkSteel).Box(new Vector3(0f, y + 0.13f, 0.31f), new Vector3(0.26f, 0.03f, 0.12f));   // visor
+            }
+        }
+
         /// <summary>Pedestrian, 1.72 m, two walking poses (stride 0/1) so instanced crowds can alternate them; shirt material `shirt`.</summary>
         public static void Pedestrian(Parts B, string shirt, string trousers, int stride)
         {

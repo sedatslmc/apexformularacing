@@ -56,6 +56,37 @@ namespace Apex.Environment
             public float lateral;
             public readonly List<(Road road, float s)>[] exits = { new List<(Road, float)>(), new List<(Road, float)>() };
             public readonly List<Mover> movers = new List<Mover>();
+            /// <summary>Traffic light controlling each end (null: none).</summary>
+            public readonly Signal[] signal = new Signal[2];
+        }
+
+        /// <summary>
+        /// A traffic light at one approach of a signalised junction. The junction alternates its two approach groups
+        /// (roughly perpendicular axes): green <see cref="GreenTime"/>, amber <see cref="AmberTime"/>, then red while
+        /// the other group runs; offsets differ per junction so the city does not switch in step.
+        /// </summary>
+        public sealed class Signal
+        {
+            /// <summary>Pole position at the kerb, right of the approaching lane, and the yaw the lamps face (towards the traffic).</summary>
+            public Vector3 position;
+            public float yaw;
+            public int group;
+            public float offset;
+        }
+
+        public const float GreenTime = 14f, AmberTime = 3f, Cycle = 2f * (GreenTime + AmberTime);
+        public const int Red = 0, Amber = 1, Green = 2;
+        public readonly List<Signal> signals = new List<Signal>();
+        /// <summary>Simulated seconds (drives the signal phases).</summary>
+        public float time;
+        /// <summary>Most vehicles seen waiting at a red light in one step (for tests).</summary>
+        public int maxWaiting;
+
+        public int State(Signal sg)
+        {
+            float t = (time + sg.offset) % Cycle;
+            if (sg.group == 1) t = (t + GreenTime + AmberTime) % Cycle;
+            return t < GreenTime ? Green : t < GreenTime + AmberTime ? Amber : Red;
         }
 
         readonly List<Road> roads = new List<Road>();
@@ -87,6 +118,8 @@ namespace Apex.Environment
             var walkPaths = new List<List<Vector3>>();
             var drivePaths = new List<List<Vector3>>();
             var driveLanes = new List<float>();
+            var driveMain = new List<bool>();
+            var driveHalf = new List<float>();
             foreach (var s in data.streets)
             {
                 if (s.bridge) continue;
@@ -106,6 +139,8 @@ namespace Apex.Environment
                             // Centreline path; the lane offset (right of the travel direction) is per vehicle.
                             drivePaths.Add(Lift(run, StreetNetwork.Lift));
                             driveLanes.Add(s.oneway ? 0f : width * 0.25f);
+                            driveMain.Add(s.highway.StartsWith("primary") || s.highway.StartsWith("secondary") || s.highway.StartsWith("tertiary"));
+                            driveHalf.Add(width * 0.5f);
                         }
                         // Pavement walkers on both sides.
                         if (s.highway != "service")
@@ -120,6 +155,7 @@ namespace Apex.Environment
             Populate(walkPaths, null, pedestrians, pedestrianBudget, 1.1f, 1.6f, 6, rng);
             Populate(drivePaths, driveLanes, vehicles, vehicleBudget, 8f, 14f, 0, rng);
             BuildRoads(drivePaths, driveLanes);
+            BuildSignals(driveMain, driveHalf);
             foreach (var v in vehicles)
             {
                 // Istanbul mix: a third yellow taxis, some vans, scooters and buses on the bigger roads.
@@ -326,6 +362,59 @@ namespace Apex.Environment
             }
         }
 
+        /// <summary>
+        /// Signalised junctions: clusters of connected road ends (within 8 m) that form a crossroads with at least two
+        /// main-street approaches (primary, secondary, tertiary), or a T-junction of three main-street approaches. Each approach gets a light at its kerb; approaches along the first one's axis form
+        /// group 0, the crossing ones group 1.
+        /// </summary>
+        void BuildSignals(List<bool> main, List<float> half)
+        {
+            var ends = new List<(Road road, int end, Vector3 p, Vector3 dir, bool main, float half)>();
+            for (int k = 0; k < roads.Count; k++)
+            {
+                var r = roads[k];
+                for (int end = 0; end < 2; end++)
+                {
+                    if (r.exits[end].Count == 0 || r.path.Count < 2) continue;
+                    int i = end == 0 ? 0 : r.path.Count - 1, j = end == 0 ? 1 : r.path.Count - 2;
+                    // Direction of travel into the junction.
+                    var d = r.path[i] - r.path[j];
+                    d.Y = 0f;
+                    if (d.LengthSquared() < 1e-6f) continue;
+                    ends.Add((r, end, r.path[i], Vector3.Normalize(d), main[k], half[k]));
+                }
+            }
+            var used = new bool[ends.Count];
+            int junction = 0;
+            for (int a = 0; a < ends.Count; a++)
+            {
+                if (used[a]) continue;
+                var cluster = new List<int> { a };
+                used[a] = true;
+                for (int b = a + 1; b < ends.Count; b++)
+                    if (!used[b] && Vector3.Distance(ends[a].p, ends[b].p) < 8f) { cluster.Add(b); used[b] = true; }
+                int mains = cluster.FindAll(c => ends[c].main).Count;
+                if (!(cluster.Count >= 4 && mains >= 2) && !(cluster.Count == 3 && mains == 3)) continue;
+                var axis = ends[cluster[0]].dir;
+                float offset = (junction++ * 7.3f) % Cycle;
+                foreach (int c in cluster)
+                {
+                    var e = ends[c];
+                    var right = new Vector3(e.dir.Z, 0f, -e.dir.X);
+                    var sg = new Signal
+                    {
+                        position = e.p - e.dir * 2.5f + right * (e.half + 0.4f),
+                        yaw = MathF.Atan2(-e.dir.X, -e.dir.Z),
+                        group = MathF.Abs(Vector3.Dot(e.dir, axis)) > 0.7f ? 0 : 1,
+                        offset = offset,
+                    };
+                    if (clearance.Margin(sg.position.X, sg.position.Z) < TrackGap + 0.5f) continue;
+                    e.road.signal[e.end] = sg;
+                    signals.Add(sg);
+                }
+            }
+        }
+
         readonly List<(Mover, Road)> transfers = new List<(Mover, Road)>();
 
         /// <summary>
@@ -334,6 +423,8 @@ namespace Apex.Environment
         /// </summary>
         public void Advance(float dt)
         {
+            time += dt;
+            int waiting = 0;
             foreach (var p in pedestrians) Step(p, p.speed * dt);
             foreach (var r in roads)
             {
@@ -352,9 +443,22 @@ namespace Apex.Environment
                         if (ahead > 0f && ahead < gap) gap = ahead;
                     }
                     if (gap < float.MaxValue) move = MathF.Max(0f, MathF.Min(move, gap - 9f));
+                    // Stop line 3 m before a red (or amber, if still far enough to stop) light at the end ahead.
+                    var sg = r.signal[v.dir > 0 ? 1 : 0];
+                    if (sg != null)
+                    {
+                        int st = State(sg);
+                        float toEnd = v.dir > 0 ? r.along[r.along.Length - 1] - v.s : v.s;
+                        if (st == Red || (st == Amber && toEnd > 8f))
+                        {
+                            float allowed = MathF.Max(0f, toEnd - 3f);
+                            if (toEnd > 2.5f && move > allowed) { move = allowed; if (allowed < 0.5f) waiting++; }
+                        }
+                    }
                     Drive(v, move);
                 }
             }
+            maxWaiting = Math.Max(maxWaiting, waiting);
             foreach (var (v, from) in transfers)
             {
                 from.movers.Remove(v);

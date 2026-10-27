@@ -75,6 +75,11 @@ namespace Apex.Tests
             TestContext.WriteLine($"{life.connectedEnds} connected street ends, {life.junctionTurns} turns at junctions in two minutes");
             Assert.That(life.connectedEnds, Is.GreaterThan(100), "street network with junctions");
             Assert.That(life.junctionTurns, Is.GreaterThan(life.vehicles.Count / 2), "vehicles turn into other streets instead of only turning round");
+            TestContext.WriteLine($"{life.signals.Count} traffic lights, up to {life.maxWaiting} vehicles waiting at red");
+            Assert.That(life.signals.Count, Is.GreaterThan(20), "signalised junctions on the main streets");
+            Assert.That(life.maxWaiting, Is.GreaterThan(0), "traffic stops at red lights");
+            foreach (var sg in life.signals)
+                Assert.That(clear.Margin(sg.position.X, sg.position.Z), Is.GreaterThan(CityLife.TrackGap), "traffic light on the track");
             foreach (var p in life.props) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
             foreach (var p in life.parked) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
         }
