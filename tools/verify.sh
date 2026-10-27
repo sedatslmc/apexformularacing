@@ -10,6 +10,12 @@
 set -e
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 "$ROOT/tools/fetch_unity_refs.sh"
+# Runtime textures are created with mipmaps: LoadRawTextureData then expects the whole mip chain and throws at
+# runtime ("not enough data provided"), which the offline compile checks cannot see. Use SetPixelData(data, 0).
+if grep -rn "\.LoadRawTextureData(" "$ROOT/unity/com.projectapex.game/Runtime" --include=*.cs; then
+  echo "verify: use Texture2D.SetPixelData(data, 0) + Apply(true) instead of LoadRawTextureData" >&2
+  exit 1
+fi
 cd "$ROOT/build"
 dotnet build Apex.Simulation/Apex.Simulation.csproj -nologo -v q
 dotnet test Apex.Simulation.Tests/Apex.Simulation.Tests.csproj -nologo -v q
