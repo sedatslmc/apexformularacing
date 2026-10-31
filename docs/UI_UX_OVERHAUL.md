@@ -199,7 +199,7 @@ Rennen: Grid → Fahrt ⇄ Boxenfunk/Strategie ⇄ Pause → Ergebnisse → (Pod
   - Gute Text-Darstellung.
   - Kein zusätzliches Paket nötig.
 - **Aufbau:** komplett im Code (keine UXML-Dateien nötig), `PanelSettings` zur Laufzeit, 1920×1080 skaliert.
-- **Übergang:** Ein Bildschirm nach dem anderen wechselt von IMGUI auf UI Toolkit. Der jeweils alte IMGUI-Bildschirm wird dabei entfernt; es gibt keine Parallelversionen.
+- **Übergang:** Ein Bildschirm nach dem anderen wechselt von IMGUI auf UI Toolkit. Der jeweils alte IMGUI-Bildschirm bleibt nur als Rückfall (wenn UI Toolkit nicht startet) und nutzt dieselben Modelle; nach der Prüfung in Unity wird er entfernt.
 
 **Schichten:**
 - **Simulation (getestet):**
@@ -226,7 +226,7 @@ Rennen: Grid → Fahrt ⇄ Boxenfunk/Strategie ⇄ Pause → Ergebnisse → (Pod
    - UI-Toolkit-Grundlage, Tokens, Navigation, UI-Sounds, neues Hauptmenü.
    - Bühne mit Lichtring; Istanbul-Kulisse aus dem Spiel ab Stufe Mittel.
    - Erledigt, siehe Abschnitt 8.
-3. **Spielmodi:** Schnellstart-Setup, Grand-Prix-Hub, Zeitfahren, Meisterschaftsübersicht, Streckenauswahl (Istanbul-Auftritt).
+3. **Spielmodi:** Rennvorbereitung (Grand Prix, Zeitfahren, Training), Meisterschaftsübersicht, Streckenauswahl (Istanbul-Auftritt). Implementiert, siehe Abschnitt 9; der Grand-Prix-Hub zwischen Qualifying und Rennen folgt mit dem Ergebnisbildschirm (Phase 5).
 4. **Renn-HUD:** Turm, Dash mit Shift-LEDs, Timing, Reifen, Ereignis-Feed, Presets, HUD-Editor, Startsequenz mit Kamerafahrt, mobile Anpassung.
 5. **Weitere Oberflächen:** Garage (Kameraperspektiven, Drehen/Zoom), Boxenstrategie, Pause, Ergebnisse/Podium, Fahrerprofil, Einstellungen mit Kategorien.
 6. **Feinschliff:** Übergänge, Musik, Lokalisierung (Deutsch/Englisch), Leistung, Barrierefreiheit (Textgröße, Kontrast, Farbenblind-Modi, Untertitel für Boxenfunk).
@@ -282,6 +282,34 @@ Meisterschaft, Mobile ohne „Beenden“, Navigator merkt Fokus und geht zurück
 5. Bühnenposition (2075 / 815) wirklich auf dem Wasser, Blick auf Moschee und Brücke; Licht von `WeatherVisuals` im Menü.
 6. Lautstärke und Klang der synthetisierten UI-Sounds.
 
-## 9. Nächste Phasen
-3 Modi und Streckenwahl (Istanbul-Präsentation) · 4 HUD (Presets, Editor, Ereignisse, Startampel) ·
+## 9. Umsetzung Phase 3: Rennvorbereitung, Streckenauswahl, Meisterschaft
+
+**Status: implementiert, Simulationsteil getestet; in Unity nicht geprüft.** `tools/verify.sh` läuft durch
+(199 NUnit-Tests grün; Runtime, URP-Pfad, Editor und Tests kompilieren ohne Fehler und Warnungen).
+
+### 9.1 Was gebaut ist
+| Teil | Datei | Inhalt |
+|---|---|---|
+| Einstellungsmodell | `Runtime/Simulation/UI/SetupModel.cs` | Optionen je Modus in Gruppen (Strecke & Bedingungen, Rennformat, Feld, Regeln); jede Option ändert ein bestehendes Feld von `SessionConfig`; Zeitfahren ohne Wetter/Reifen/Feld, Qualifying-Dauer nur mit Qualifying; Startzusammenfassung; erste Session; Punkteschema aus `RaceRules.Points` |
+| Streckendaten | `Runtime/Simulation/UI/TrackPresentation.cs` | `TrackFacts` (Länge, Kurven, Richtung aus der Flächenorientierung, Höhenunterschied, Sektoren, Bestzeit, Kurvennamen in Rundenreihenfolge), `TrackMap.Fit` (Karte genordet, eingepasst, Sektor je Punkt, Startlinie, Kurvennummern) |
+| Meisterschaft | ebenda, `ChampionshipModel` | Kalender mit Status (gefahren / nächste / ausstehend), Fahrerwertung (Spieler immer sichtbar, bei Gleichstand vorn wie im Hauptmenü) |
+| Karte | `Runtime/Game/UI/TrackMapElement.cs` | Strecke als UI-Toolkit-Mesh (Kontur, Sektorfarben Rot/Cyan/Amber, Startlinie, Kurvennummern), wird beim Öffnen „gezeichnet“ |
+| Ansicht | `Runtime/Game/UI/SetupView.cs` | links Optionen (scrollbar, ‹ › mit Maus, ←→ mit Tastatur/Gamepad), unten „Start“ mit Zusammenfassung und „Zurück“; rechts Streckenauftritt: beim Bosphorus GP „WELCOME TO ISTANBUL“, Band in Rot-Weiß-Rot, Slogan; Karte, fünf Kennzahlen, Streckenkarten zum Anklicken. Meisterschaft: Kalender, Wertung, „Nächste Runde“, „Aufgeben“ mit zweiter Bestätigung; ohne Saison: Einstellungen, Kalendervorschau mit Karten, Punkteschema |
+| Anbindung | `ApexGame.ShowSetupView`, `OnSetupStart` | startet dieselben Sessions wie bisher; Änderungen werden validiert und sofort gespeichert. Die IMGUI-Bildschirme nutzen jetzt ebenfalls `SetupModel` (keine doppelte Logik) und bleiben nur als Rückfall |
+
+Nicht gezeigt, weil nicht vorhanden: Schwierigkeitsangabe der Strecke, eigene Meisterschaften, Spezialevents.
+
+### 9.2 Tests
+`UiModelTests`: sichtbare Optionen je Modus, Optionen ändern die echte Konfiguration (Strecke rundum, Format, Runden,
+Verschleiß-Grenze), Startzusammenfassung und erste Session, Streckenfakten des Bosphorus GP (8,0–8,3 km, 16 Kurven,
+gegen den Uhrzeigersinn), Karte genordet und eingepasst mit allen Sektoren, Kalenderstatus und Wertung mit Spieler.
+
+### 9.3 In Unity zu prüfen (offen)
+1. Mesh-Zeichnung der Karte (`generateVisualContent`, Dreiecksorientierung im Uhrzeigersinn) in Unity 6.
+2. Scrollen der Optionsliste (Mausrad über `Mouse.current.scroll`, Fokus bleibt sichtbar).
+3. Lesbarkeit der rechten Seite über der Showroom-Kamera (Abdunklung 55 %).
+4. Zeilenumbruch der Kurvennamen unter der Karte.
+
+## 10. Nächste Phasen
+4 HUD (Presets, Editor, Ereignisse, Startampel) ·
 5 Garage, Pause, Ergebnis, Podium, Einstellungskategorien · 6 Feinschliff, Musik, Lokalisierung.

@@ -12,6 +12,8 @@ using UnityEngine.Rendering;
 
 namespace Apex.Game
 {
+    using SetupMode = Apex.UI.SetupMode;
+
     public enum SessionKind
     {
         Practice,
@@ -52,6 +54,7 @@ namespace Apex.Game
         WeatherVisuals weatherVisuals;
         // APEX // RACE CONTROL main menu (UI Toolkit) and its 3D backdrop (docs/UI_UX_OVERHAUL.md).
         MainMenuView menuView;
+        SetupView setupView;
         UiSounds uiSounds;
         GameObject menuWorld;
         bool backdropLoading, menuOverlayLast;
@@ -112,12 +115,88 @@ namespace Apex.Game
                 menuView.Activated += OnMenuAction;
                 menuView.SettingsRequested += () => { settingsOpen = true; focus = 0; };
                 menuView.ShowBoot("");
+                setupView = new SetupView(uiSounds);
+                setupView.StartRequested += OnSetupStart;
+                setupView.BackRequested += () => sm.TryTransition(GameState.MainMenu);
+                setupView.OptionChanged += OnRowChanged;
+                setupView.AbandonRequested += () => { Career.calendar = new string[0]; SaveCareer(); ShowSetupView(); };
             }
             catch (Exception e)
             {
                 // Without UI Toolkit the interim IMGUI menu stays available.
                 Debug.LogException(e);
                 menuView = null;
+                setupView = null;
+            }
+        }
+
+        /// <summary>Race preparation / championship screen (SetupView) for the current setup mode.</summary>
+        void ShowSetupView()
+        {
+            if (setupView == null) return;
+            var mode = setupMode;
+            var d = new SetupView.Data
+            {
+                mode = mode,
+                options = () => Apex.UI.SetupModel.Options(mode, Config, TrackIds, id => Definition(id)?.name ?? id),
+                summary = () => Apex.UI.SetupModel.Summary(mode, Config),
+                selectedTrack = () => Config.trackId,
+                selectTrack = id => Config.trackId = id,
+                trackIds = TrackIds,
+                track = SetupTrack,
+                mobile = Application.isMobilePlatform,
+                championshipActive = mode == Apex.UI.SetupMode.Championship && Career.ChampionshipActive,
+            };
+            if (mode == Apex.UI.SetupMode.Championship)
+            {
+                Func<string, string> name = id => Definition(id)?.name ?? id;
+                if (Career.ChampionshipActive)
+                {
+                    d.calendar = Apex.UI.ChampionshipModel.Calendar(Career.calendar, Career.nextRound, name);
+                    d.standings = Apex.UI.ChampionshipModel.Standings(Career.points, 12, Config.playerTeam);
+                    d.nextRound = $"Runde {Career.nextRound + 1}: {name(Career.calendar[Career.nextRound])}";
+                    d.seasonLine = $"Runde {Career.nextRound + 1} von {Career.calendar.Length} · {Career.championshipLaps} Runden · {Career.championshipAi} KI-Gegner";
+                }
+                else d.calendar = Apex.UI.ChampionshipModel.Calendar(Apex.UI.SetupModel.ChampionshipCalendar, 0, name);
+            }
+            setupView.ReducedMotion = Settings.reducedMotion;
+            setupView.Show(d);
+        }
+
+        readonly Dictionary<string, SetupView.TrackInfo> setupTracks = new Dictionary<string, SetupView.TrackInfo>();
+
+        SetupView.TrackInfo SetupTrack(string id)
+        {
+            var def = Definition(id);
+            if (def == null) return null;
+            if (!setupTracks.TryGetValue(id, out var t))
+                setupTracks[id] = t = new SetupView.TrackInfo { def = def, geometry = Geometry(id) };
+            // Facts carry the personal best, which changes between visits.
+            t.facts = Apex.UI.TrackFacts.From(def, t.geometry, SaveService.BestLap(Settings, id));
+            return t;
+        }
+
+        /// <summary>"Start" on the setup screen: the same sessions the IMGUI setup started.</summary>
+        void OnSetupStart()
+        {
+            swallowClickFrame = Time.frameCount;
+            Config.Validate();
+            SaveConfig();
+            switch (setupMode)
+            {
+                case Apex.UI.SetupMode.GrandPrix:
+                    StartSession(SessionKind.GrandPrix, Apex.UI.SetupModel.FirstSession(setupMode, Config));
+                    break;
+                case Apex.UI.SetupMode.TimeTrial: StartSession(SessionKind.TimeTrial, SessionType.Practice); break;
+                case Apex.UI.SetupMode.Practice: StartSession(SessionKind.Practice, SessionType.Practice); break;
+                default:
+                    if (!Career.ChampionshipActive)
+                    {
+                        Career.StartChampionship(Apex.UI.SetupModel.ChampionshipCalendar, Config.laps, Config.aiCount, Config.difficulty);
+                        SaveCareer();
+                    }
+                    StartSession(SessionKind.Championship, SessionType.Race);
+                    break;
             }
         }
 
@@ -631,6 +710,8 @@ namespace Apex.Game
             if (to == GameState.Garage) RebuildShowroomCar();
             if (to == GameState.MainMenu) RefreshMenu();
             menuView?.SetVisible(to == GameState.MainMenu);
+            if (to == GameState.TrackSelect) ShowSetupView();
+            setupView?.SetVisible(to == GameState.TrackSelect);
         }
 
         // --- Timing events ----------------------------------------------------------------
@@ -820,6 +901,12 @@ namespace Apex.Game
                             RefreshMenu();
                             break;
                         }
+                        break;
+                    }
+                    if (sm.Current == GameState.TrackSelect && setupView != null && !helpOpen)
+                    {
+                        setupView.Tick(Time.unscaledDeltaTime, navUp, navDown, navLeft, navRight, navConfirm);
+                        if (input.PausePressed && sm.Current == GameState.TrackSelect) setupView.Back();
                         break;
                     }
                     if (input.PausePressed) MenuBack();

@@ -11,11 +11,11 @@ using UnityEngine.InputSystem;
 
 namespace Apex.Game
 {
+    using SetupMode = Apex.UI.SetupMode;
+
     /// <summary>Menus, setup screens, results, pause and settings (interim IMGUI layer).</summary>
     public sealed partial class ApexGame
     {
-        enum SetupMode { GrandPrix, Practice, TimeTrial, Championship }
-
         int focus;
         bool settingsOpen;
         bool helpOpen;
@@ -57,6 +57,8 @@ namespace Apex.Game
                     else if (menuView == null) DrawMainMenu();
                     break;
                 case GameState.TrackSelect:
+                    // The setup screens are the UI Toolkit SetupView; the IMGUI ones are only the fallback.
+                    if (setupView != null) break;
                     if (setupMode == SetupMode.Championship) DrawChampionship();
                     else DrawSetup();
                     break;
@@ -192,54 +194,13 @@ namespace Apex.Game
 
         List<Row> SetupRows()
         {
-            var c = Config;
-            var rows = new List<Row>
-            {
-                new Row { label = "Strecke", value = () => Definition(c.trackId)?.name ?? c.trackId,
-                    change = d => c.trackId = TrackIds[Wrap(Array.IndexOf(TrackIds, c.trackId) + (d < 0 ? -1 : 1), TrackIds.Length)] },
-            };
-            if (setupMode == SetupMode.GrandPrix)
-            {
-                rows.Add(new Row { label = "Format", value = () => c.format == WeekendFormat.RaceOnly ? "Nur Rennen" : "Qualifying + Rennen", change = d => c.format = c.format == WeekendFormat.RaceOnly ? WeekendFormat.QualifyingAndRace : WeekendFormat.RaceOnly });
-                rows.Add(new Row { label = "Runden", value = () => c.laps.ToString(), change = d => c.laps += d == 0 ? 1 : d });
-                rows.Add(new Row { label = "Qualifying-Dauer", value = () => $"{c.qualifyingMinutes:0} min", change = d => c.qualifyingMinutes += d == 0 ? 1 : d });
-                rows.Add(new Row { label = "KI-Gegner", value = () => c.aiCount.ToString(), change = d => c.aiCount += d == 0 ? 1 : d });
-                rows.Add(new Row { label = "KI-Stärke", value = () => $"{c.difficulty * 100f:0} %", change = d => c.difficulty += (d == 0 ? 1 : d) * 0.1f });
-            }
-            if (setupMode != SetupMode.TimeTrial)
-            {
-                rows.Add(new Row { label = "Wetter", value = () => WeatherModel.Name(c.weather), change = d => c.weather = (WeatherState)Wrap((int)c.weather + (d < 0 ? -1 : 1), 4) });
-                if (setupMode == SetupMode.GrandPrix)
-                    rows.Add(new Row { label = "Wetterwechsel", value = () => OnOff(c.dynamicWeather), change = d => c.dynamicWeather = !c.dynamicWeather });
-                rows.Add(new Row { label = "Reifenverschleiß", value = () => c.tireWear <= 0f ? "Aus" : $"{c.tireWear:0}×", change = d => c.tireWear = Mathf.Clamp(c.tireWear + (d < 0 ? -1 : 1), 0f, 10f) });
-                rows.Add(new Row { label = "Startreifen", value = () => CompoundSpec.For(c.startCompound).name, change = d => c.startCompound = (TireCompound)Wrap((int)c.startCompound + (d < 0 ? -1 : 1), 3) });
-            }
-            rows.Add(new Row { label = "Tageszeit", value = () => TimeName(c.timeOfDay), change = d => c.timeOfDay = (TimeOfDay)Wrap((int)c.timeOfDay + (d < 0 ? -1 : 1), 5) });
-            if (setupMode == SetupMode.GrandPrix)
-            {
-                rows.Add(new Row { label = "Frühstart-Strafe", value = () => OnOff(c.falseStarts), change = d => c.falseStarts = !c.falseStarts });
-                rows.Add(new Row { label = "Tracklimit-Strafen", value = () => OnOff(c.trackLimitPenalties), change = d => c.trackLimitPenalties = !c.trackLimitPenalties });
-                rows.Add(new Row { label = "Pflicht-Boxenstopp", value = () => OnOff(c.mandatoryPitStop), change = d => c.mandatoryPitStop = !c.mandatoryPitStop });
-                rows.Add(new Row { label = "Safety Car / VSC", value = () => OnOff(c.safetyCar), change = d => c.safetyCar = !c.safetyCar });
-                rows.Add(new Row { label = "Schäden", value = () => OnOff(c.damage), change = d => c.damage = !c.damage });
-                rows.Add(new Row { label = "Technische Defekte (KI)", value = () => c.failures == 0 ? "Aus" : c.failures == 1 ? "Selten" : "Häufig",
-                    change = d => c.failures = Wrap(c.failures + (d < 0 ? -1 : 1), 3) });
-            }
-            rows.Add(new Row { label = "Team", value = () => Roster.Teams[c.playerTeam].name, change = d => c.playerTeam = Wrap(c.playerTeam + (d < 0 ? -1 : 1), Roster.Teams.Length) });
+            var rows = new List<Row>();
+            foreach (var o in Apex.UI.SetupModel.Options(setupMode, Config, TrackIds, id => Definition(id)?.name ?? id))
+                rows.Add(new Row { label = o.label, value = o.value, change = o.change });
             return rows;
         }
 
-        static string TimeName(TimeOfDay t)
-        {
-            switch (t)
-            {
-                case TimeOfDay.Morning: return "Morgen";
-                case TimeOfDay.Day: return "Mittag";
-                case TimeOfDay.Dusk: return "Sonnenuntergang";
-                case TimeOfDay.Night: return "Nacht";
-                default: return "Goldene Stunde";
-            }
-        }
+        static string TimeName(TimeOfDay t) => Apex.UI.SetupModel.TimeName(t);
 
         void DrawSetup()
         {
@@ -259,7 +220,7 @@ namespace Apex.Game
                 navConfirm = false;
                 SaveConfig();
                 if (setupMode == SetupMode.GrandPrix)
-                    StartSession(SessionKind.GrandPrix, Config.format == WeekendFormat.QualifyingAndRace ? SessionType.Qualifying : SessionType.Race);
+                    StartSession(SessionKind.GrandPrix, Apex.UI.SetupModel.FirstSession(setupMode, Config));
                 else
                     StartSession(setupMode == SetupMode.TimeTrial ? SessionKind.TimeTrial : SessionKind.Practice, SessionType.Practice);
                 return;
@@ -427,7 +388,7 @@ namespace Apex.Game
                 if (ApexStyle.Button(new Rect(x, by, 460f, 64f), "Meisterschaft starten", focus == rows.Count, 28) || (navConfirm && focus == rows.Count))
                 {
                     navConfirm = false;
-                    Career.StartChampionship(new[] { "bosphorus_a", "test_loop" }, Config.laps, Config.aiCount, Config.difficulty);
+                    Career.StartChampionship(Apex.UI.SetupModel.ChampionshipCalendar, Config.laps, Config.aiCount, Config.difficulty);
                     SaveCareer();
                     SaveConfig();
                     StartSession(SessionKind.Championship, SessionType.Race);

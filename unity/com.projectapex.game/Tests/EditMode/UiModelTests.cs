@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+using Apex.Core;
+using Apex.Race;
+using Apex.Tracks;
 using Apex.UI;
 using NUnit.Framework;
 
@@ -104,6 +107,128 @@ namespace Apex.Tests
             nav.Push(UiScreen.MainMenu);
             Assert.That(nav.Depth, Is.EqualTo(1), "pushing the current screen does nothing");
             Assert.That(changes, Is.EqualTo(new List<(UiScreen, UiScreen)> { (UiScreen.Boot, UiScreen.MainMenu), (UiScreen.MainMenu, UiScreen.Profile), (UiScreen.Profile, UiScreen.MainMenu) }));
+        }
+        static readonly string[] Tracks = { "bosphorus_a", "bosphorus_a_classic", "test_loop" };
+
+        static List<string> Keys(List<SetupOption> o) => o.ConvertAll(x => x.key);
+
+        [Test]
+        public void SetupShowsOnlyTheOptionsThatMatterForTheMode()
+        {
+            var c = new SessionConfig();
+            var gp = Keys(SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id));
+            foreach (var k in new[] { "track", "time", "weather", "dynamicWeather", "format", "laps", "qualifying", "compound", "wear", "ai", "difficulty", "team", "falseStarts", "trackLimits", "pitStop", "safetyCar", "damage", "failures" })
+                Assert.That(gp.Contains(k), Is.True, k);
+            Assert.That(gp[0], Is.EqualTo("track"));
+            // Race only: no qualifying length.
+            c.format = WeekendFormat.RaceOnly;
+            Assert.That(Keys(SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id)).Contains("qualifying"), Is.False);
+            // Time trial: alone on track, no weather, tyres, field or rules.
+            var tt = Keys(SetupModel.Options(SetupMode.TimeTrial, c, Tracks, id => id));
+            Assert.That(tt, Is.EqualTo(new List<string> { "track", "time", "team" }));
+            var pr = Keys(SetupModel.Options(SetupMode.Practice, c, Tracks, id => id));
+            Assert.That(pr.Contains("weather") && pr.Contains("compound") && !pr.Contains("ai") && !pr.Contains("format"), Is.True);
+            var ch = Keys(SetupModel.Options(SetupMode.Championship, c, Tracks, id => id));
+            Assert.That(ch, Is.EqualTo(new List<string> { "laps", "ai", "difficulty", "team" }));
+            // Every option belongs to a group and has a value.
+            foreach (var o in SetupModel.Options(SetupMode.GrandPrix, new SessionConfig(), Tracks, id => id))
+                Assert.That(!string.IsNullOrEmpty(o.group) && !string.IsNullOrEmpty(o.value()), Is.True, o.key);
+        }
+
+        [Test]
+        public void SetupOptionsChangeTheRealConfig()
+        {
+            var c = new SessionConfig { trackId = "test_loop", laps = 5, format = WeekendFormat.QualifyingAndRace };
+            var o = SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id.ToUpperInvariant());
+            SetupOption Get(string k) => o.Find(x => x.key == k);
+            Get("track").change(1);
+            Assert.That(c.trackId, Is.EqualTo("bosphorus_a"), "wraps to the first track");
+            Assert.That(Get("track").value(), Is.EqualTo("BOSPHORUS_A"));
+            Get("track").change(-1);
+            Assert.That(c.trackId, Is.EqualTo("test_loop"));
+            Get("laps").change(1); Get("laps").change(1);
+            Assert.That(c.laps, Is.EqualTo(7));
+            Get("format").change(1);
+            Assert.That(c.format, Is.EqualTo(WeekendFormat.RaceOnly));
+            Assert.That(SetupModel.FirstSession(SetupMode.GrandPrix, c), Is.EqualTo(SessionType.Race));
+            Assert.That(SetupModel.Summary(SetupMode.GrandPrix, c), Is.EqualTo("Rennen 7 Runden · 11 KI-Gegner"));
+            c.format = WeekendFormat.QualifyingAndRace;
+            Assert.That(SetupModel.FirstSession(SetupMode.GrandPrix, c), Is.EqualTo(SessionType.Qualifying));
+            Assert.That(SetupModel.Summary(SetupMode.GrandPrix, c), Does.StartWith("Qualifying 8 min + Rennen 7 Runden"));
+            Get("safetyCar").change(1);
+            Assert.That(c.safetyCar, Is.False);
+            Get("wear").change(-1); Get("wear").change(-1); Get("wear").change(-1); Get("wear").change(-1);
+            Assert.That(c.tireWear, Is.EqualTo(0f));
+            Assert.That(Get("wear").value(), Is.EqualTo("Aus"));
+            Assert.That(SetupModel.FirstSession(SetupMode.TimeTrial, c), Is.EqualTo(SessionType.Practice));
+            Assert.That(SetupModel.PointsScheme(), Does.StartWith("25-18-15-12-10-8-6-4-2-1"));
+        }
+
+        [Test]
+        public void TrackFactsComeFromTheTrackData()
+        {
+            var def = TestData.Circuit("bosphorus_a");
+            var g = TrackGeometry.FromDefinition(def);
+            var f = TrackFacts.From(def, g, 0);
+            Assert.That(f.istanbul, Is.True);
+            Assert.That(f.lengthKm, Is.InRange(8.0f, 8.3f));
+            Assert.That(f.corners, Is.EqualTo(16));
+            Assert.That(f.clockwise, Is.False, "the Bosphorus GP runs counter-clockwise");
+            Assert.That(f.cornerNames.Count, Is.EqualTo(def.corners.Count));
+            Assert.That(f.elevationRange, Is.GreaterThan(1f));
+            Assert.That(TrackFacts.From(TestData.Circuit("test_loop"), TestData.Geometry("test_loop"), 0).istanbul, Is.False);
+        }
+
+        [Test]
+        public void TrackMapFitsNorthUpWithSectors()
+        {
+            var def = TestData.Circuit("bosphorus_a");
+            var g = TrackGeometry.FromDefinition(def);
+            var m = TrackMap.Fit(def, g, 800f, 500f, 20f, 300);
+            Assert.That(m.Count, Is.InRange(150, 300));
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            int northmost = 0;
+            for (int i = 0; i < m.Count; i++)
+            {
+                minX = System.Math.Min(minX, m.x[i]); maxX = System.Math.Max(maxX, m.x[i]);
+                minY = System.Math.Min(minY, m.y[i]); maxY = System.Math.Max(maxY, m.y[i]);
+                if (m.y[i] < m.y[northmost]) northmost = i;
+            }
+            Assert.That(minX, Is.GreaterThanOrEqualTo(19.9f)); Assert.That(maxX, Is.LessThanOrEqualTo(780.1f));
+            Assert.That(minY, Is.GreaterThanOrEqualTo(19.9f)); Assert.That(maxY, Is.LessThanOrEqualTo(480.1f));
+            Assert.That(System.Math.Max(maxX - minX - 760f, maxY - minY - 460f), Is.GreaterThan(-0.5f), "fills one dimension");
+            // North up: the top-most map point is the northernmost track point.
+            float north = float.MinValue;
+            foreach (var p in g.Positions) north = System.Math.Max(north, p.Z);
+            int step = (g.Count + 299) / 300;
+            Assert.That(g.Positions[northmost * step].Z, Is.EqualTo(north).Within(2f * step + 1f));
+            var sectors = new HashSet<int>(m.sector);
+            Assert.That(sectors.Count, Is.EqualTo(def.sectorFractions.Length));
+            Assert.That(m.cornerX.Length, Is.EqualTo(def.corners.Count));
+            Assert.That(TrackMap.SectorAt(0.1f, new[] { 0f, 1f / 3f, 2f / 3f }), Is.EqualTo(0));
+            Assert.That(TrackMap.SectorAt(0.5f, new[] { 0f, 1f / 3f, 2f / 3f }), Is.EqualTo(1));
+            Assert.That(TrackMap.SectorAt(0.9f, new[] { 0f, 1f / 3f, 2f / 3f }), Is.EqualTo(2));
+        }
+
+        [Test]
+        public void ChampionshipShowsCalendarAndStandingsWithThePlayer()
+        {
+            var cal = ChampionshipModel.Calendar(new[] { "a", "b", "c" }, 1, id => id.ToUpperInvariant());
+            Assert.That(cal.ConvertAll(r => r.state), Is.EqualTo(new List<RoundState> { RoundState.Done, RoundState.Next, RoundState.Upcoming }));
+            Assert.That(cal[2].number, Is.EqualTo(3));
+            Assert.That(cal[2].name, Is.EqualTo("C"));
+            var points = new int[Roster.Drivers.Length + 1];
+            for (int i = 1; i < points.Length; i++) points[i] = 100 - i;   // every AI driver ahead of the player
+            var rows = ChampionshipModel.Standings(points, 10, 2);
+            Assert.That(rows.Count, Is.EqualTo(10));
+            Assert.That(rows[0].points, Is.EqualTo(99));
+            Assert.That(rows[9].player, Is.True, "the player is always listed");
+            Assert.That(rows[9].position, Is.EqualTo(points.Length));
+            Assert.That(rows[9].team, Is.EqualTo(2));
+            Assert.That(ChampionshipModel.PlayerPosition(points), Is.EqualTo(points.Length));
+            points[0] = 99;   // tie with the leader: the player ranks first
+            Assert.That(ChampionshipModel.PlayerPosition(points), Is.EqualTo(1));
+            Assert.That(ChampionshipModel.Standings(points, 10, 0)[0].player, Is.True);
         }
     }
 }
