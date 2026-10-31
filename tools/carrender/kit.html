@@ -101,8 +101,10 @@ const mats = {
   Lead: M({ color: 0x737a80, metalness: 0.6, roughness: 0.65 }),
   Gilt: M({ color: 0xd4a84d, metalness: 1.0, roughness: 0.4 }),
   Glass: M({ color: 0x2e3d4a, metalness: 0.2, roughness: 0.08 }),
+  MosqueGlass: M({ color: 0x29333d, metalness: 0.2, roughness: 0.1 }),
   ClockFace: M({ color: 0xf2efe6, roughness: 0.4 }),
   RowPlaster: M({ map: concrete, color: 0xe6d6bc, roughness: 0.8 }),
+  Brick: M({ map: concrete, color: 0x8f452f, roughness: 0.9 }),
   TurkishFlag: M({ map: new THREE.TextureLoader().load('/flag_tex.png', (t) => { t.colorSpace = THREE.SRGBColorSpace; }), side: THREE.DoubleSide, roughness: 0.75 }),
 };
 // Optional scanned CC0 sets (&cc0=1): files prepared in ./cc0/ from Resources/Textures/CC0 (gitignored);
@@ -218,6 +220,7 @@ if (params.get('masonry')) {
   const L = new THREE.TextureLoader();
   const tex = (f, tile, srgb) => { const t = L.load('/masonry/' + f); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1 / tile, 1 / tile); t.anisotropy = 16; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
   mats.Marble = M({ map: tex('marble_albedo.png', 2.4, true), normalMap: tex('marble_normal.png', 2.4, false), normalScale: new THREE.Vector2(0.8, 0.8), color: 0xefede4, roughness: 0.58 });
+  mats.Brick = M({ map: tex('brick_albedo.png', 0.9, true), normalMap: tex('brick_normal.png', 0.9, false), normalScale: new THREE.Vector2(1, 1), color: 0xffffff, roughness: 0.9 });
   mats.RowPlaster = M({ map: tex('plaster_albedo.png', 2.0, true), normalMap: tex('plaster_normal.png', 2.0, false), normalScale: new THREE.Vector2(0.5, 0.5), color: 0xeedcc0, roughness: 0.85 });
 }
 // City facades (ModelPreview --frontage): the game's procedural window texture (8 bays x 8 storeys, shop row at the

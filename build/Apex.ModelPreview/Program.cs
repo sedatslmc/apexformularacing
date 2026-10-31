@@ -97,6 +97,21 @@ if (Array.IndexOf(args, "--landmarks") >= 0)
     for (int d = 0; d < 3; d++) { int dd = d; ExportD("ortakoy_lod" + d, dd, l => l.OrtakoyMosqueDetailed()); }
     Export("dolmabahce", l => { l.Palace(284f, 48f, 18f, true); });
     for (int d = 0; d < 3; d++) { int dd = d; ExportD("clocktower_lod" + d, dd, l => l.ClockTowerDetailed()); }
+    {
+        // Esma Sultan Yalısı on its OSM footprint (centroid at the origin).
+        string cityFile0 = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/City/bosphorus_a.json");
+        var esma = Apex.Environment.CityData.FromJson(File.ReadAllText(cityFile0)).buildings.Find(b => b.name.Contains("Esma Sultan"));
+        var o = new List<Vector2>();
+        foreach (var p in esma.outline) o.Add(new Vector2(p.X, p.Y));
+        float sa = 0f;
+        for (int i = 0; i < o.Count; i++) sa += o[i].x * o[(i + 1) % o.Count].y - o[(i + 1) % o.Count].x * o[i].y;
+        if (sa < 0f) o.Reverse();
+        var cen = Vector2.zero;
+        foreach (var p in o) cen += p;
+        cen /= o.Count;
+        for (int i = 0; i < o.Count; i++) o[i] -= cen;
+        for (int d = 0; d < 3; d++) { int dd = d; ExportD("esma_sultan_lod" + d, dd, l => l.BrickShellYali(o, 15f, 1)); }
+    }
     for (int d = 0; d < 3; d++) { int dd = d; ExportD("gate_lod" + d, dd, l => l.GateMonument(19.4f, 8.7f, 14f)); }
     {
         // Palace ensembles from the OSM footprints (ground at 0; around Dolmabahçe and Çırağan).
@@ -218,6 +233,8 @@ if (Array.IndexOf(args, "--masonry") >= 0)
     var (ma, mn) = Apex.Environment.MasonryTextures.Marble(512);
     var (pa, pn) = Apex.Environment.MasonryTextures.Plaster(256);
     Ppm("marble_albedo.ppm", ma); Ppm("marble_normal.ppm", mn); Ppm("plaster_albedo.ppm", pa); Ppm("plaster_normal.ppm", pn);
+    var (ba, bn) = Apex.Environment.MasonryTextures.Brick(512);
+    Ppm("brick_albedo.ppm", ba); Ppm("brick_normal.ppm", bn);
     return;
 }
 if (Array.IndexOf(args, "--monument") >= 0)

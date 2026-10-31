@@ -30,7 +30,7 @@ namespace Apex.Environment
             Vector2 centre, float radius, int quality, IReadOnlyList<CityLayout.Reserved> reserved = null)
         {
             if (quality <= 0) return;
-            float fill = quality == 1 ? 0.5f : 0.85f;
+            float fill = quality == 1 ? 0.5f : quality == 2 ? 0.85f : 1f;
             var taken = new HashSet<long>();
             var blocked = new HashSet<long>();
             const float cell = 0.7f;

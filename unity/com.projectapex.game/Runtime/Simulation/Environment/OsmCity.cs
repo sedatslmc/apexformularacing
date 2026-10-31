@@ -212,6 +212,8 @@ namespace Apex.Environment
             /// <summary>0 flat roof with parapet, 1 tiled hip roof (small, simple footprints).</summary>
             public int roof;
             public bool historic, shop;
+            /// <summary>House of worship (mosque, church, synagogue): no shops, signs, balconies or hanging flags.</summary>
+            public bool worship;
             /// <summary>Within <see cref="StreetFronts.OrtakoyRadius"/> of the Ortaköy Mosque (shop mix, more flags).</summary>
             public bool ortakoy;
             public string name;
@@ -228,7 +230,12 @@ namespace Apex.Environment
             public float[] level;
         }
 
-        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4, Gate = 5;
+        public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4, Gate = 5, BrickShell = 6;
+
+        /// <summary>OSM amenities that are shops, cafés or similar street-front businesses (not houses of worship,
+        /// schools or offices, which also carry an amenity tag).</summary>
+        public static bool IsShopAmenity(string amenity) => amenity == "cafe" || amenity == "restaurant" || amenity == "fast_food" || amenity == "bar" ||
+            amenity == "pub" || amenity == "ice_cream" || amenity == "pharmacy" || amenity == "bank" || amenity == "food_court" || amenity == "marketplace";
 
         /// <summary>
         /// Historic palace buildings from their OSM names, built with modelled classical facades instead of the
@@ -240,6 +247,8 @@ namespace Apex.Environment
         {
             string n = b.name;
             if (b.ensemble == "akaretler") return RowHouse;
+            // Esma Sultan Yalısı (1875; burnt out 1975, brick shell with a glass hall since 2001) beside the Ortaköy Mosque.
+            if (n.Contains("Esma Sultan")) return BrickShell;
             if (n.Length == 0) return b.type == "palace" ? PalaceWing : NotClassical;
             if (n.Contains("Kempinski") || n.Contains("Geçidi")) return NotClassical;
             if (n.Contains("Saat Kulesi")) return ClockTower;
@@ -279,6 +288,7 @@ namespace Apex.Environment
             string n = b.name;
             if (kind == ClockTower) return 27f;
             if (kind == Gate) return 14f;
+            if (kind == BrickShell) return 15f;
             if (n.Contains("Muayede")) return 26f;
             if (n.Contains("Selamlık")) return 21f;
             if (n.Contains("Harem")) return 17f;
@@ -440,7 +450,7 @@ namespace Apex.Environment
                 ground = MathF.Min(ground, field.Height(p.X, p.Y));
             }
             int hash = Hash(b.id);
-            bool historic = b.historic.Length > 0 || b.type == "mosque" || b.type == "church" || b.type == "palace";
+            bool historic = b.historic.Length > 0 || b.type == "mosque" || b.type == "church" || b.type == "palace" || b.amenity == "place_of_worship";
             // Small, simple older houses get tiled hip roofs; apartment blocks the usual flat roofs.
             int roof = o.Count <= 6 && area < 450f && b.height <= 14f && hash % 3 != 0 ? 1 : 0;
             buildings.Add(new Building
@@ -452,7 +462,8 @@ namespace Apex.Environment
                 style = historic ? CityLayout.Styles - 1 : hash % CityLayout.Styles,
                 roof = roof,
                 historic = historic,
-                shop = b.amenity.Length > 0 || b.type == "commercial" || b.type == "retail",
+                shop = IsShopAmenity(b.amenity) || ((b.type == "commercial" || b.type == "retail") && b.amenity.Length == 0),
+                worship = b.amenity == "place_of_worship" || b.type == "mosque" || b.type == "church" || b.type == "synagogue",
                 ortakoy = ortakoyCentre.HasValue && Vector2.Distance(c, ortakoyCentre.Value) < StreetFronts.OrtakoyRadius,
                 name = b.name,
             });

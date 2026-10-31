@@ -50,6 +50,38 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void BrickIsRedWithMortarJointsAndTiles()
+        {
+            const int n = 512;
+            var (albedo, normal) = MasonryTextures.Brick(n);
+            float r = Mean(albedo, 0), g = Mean(albedo, 1), b = Mean(albedo, 2);
+            TestContext.WriteLine($"brick mean rgb {r:F3} {g:F3} {b:F3}");
+            Assert.That(r, Is.GreaterThan(g * 1.6f), "red brick (colour in the texture)");
+            Assert.That(g, Is.GreaterThan(b * 0.9f));
+            // Mortar: light, greyish pixels where red barely exceeds green; 1 cm joints on 7.5 cm courses.
+            int mortar = 0;
+            for (int i = 0; i < albedo.Length; i += 4) if (albedo[i] < albedo[i + 1] * 1.15f) mortar++;
+            Assert.That(mortar / (float)(n * n), Is.InRange(0.1f, 0.3f), "mortar joints");
+            // Seamless: the step across the tile edge is no larger than the largest step between neighbouring pixels
+            // inside (the centre lines of this texture lie on mortar joints, so SeamRatio's reference does not fit).
+            int inner = 0, seamU = 0, seamV = 0;
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x + 1 < n; x++)
+                {
+                    inner = Math.Max(inner, Math.Abs(albedo[(y * n + x) * 4 + 1] - albedo[(y * n + x + 1) * 4 + 1]));
+                    inner = Math.Max(inner, Math.Abs(albedo[(x * n + y) * 4 + 1] - albedo[((x + 1) * n + y) * 4 + 1]));
+                }
+            for (int k = 0; k < n; k++)
+            {
+                seamU = Math.Max(seamU, Math.Abs(albedo[(k * n + n - 1) * 4 + 1] - albedo[(k * n) * 4 + 1]));
+                seamV = Math.Max(seamV, Math.Abs(albedo[((n - 1) * n + k) * 4 + 1] - albedo[k * 4 + 1]));
+            }
+            Assert.That(seamU, Is.LessThanOrEqualTo(inner), "seamless in u");
+            Assert.That(seamV, Is.LessThanOrEqualTo(inner), "seamless in v");
+            Assert.That(Mean(normal, 2), Is.GreaterThan(0.85f));
+        }
+
+        [Test]
         public void LimePlasterIsJointlessAndTiles()
         {
             const int n = 128;

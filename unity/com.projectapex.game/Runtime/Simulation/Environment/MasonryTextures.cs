@@ -17,6 +17,9 @@ namespace Apex.Environment
     public static class MasonryTextures
     {
         public const float MarbleTile = 2.4f, PlasterTile = 2.0f;
+        /// <summary>Brick in running bond (Esma Sultan Yalısı): bricks 21.5 x 6.5 cm, 1 cm joints; 4 bricks x 12
+        /// courses per 0.9 m repeat.</summary>
+        public const float BrickTile = 0.9f, BrickLength = 0.225f, BrickCourse = 0.075f, BrickJoint = 0.01f;
         public const float CourseHeight = 0.6f, BlockLength = 1.2f, JointWidth = 0.008f;
 
         public static (byte[] albedo, byte[] normal) Marble(int n)
@@ -70,6 +73,61 @@ namespace Apex.Environment
                 }
             return (Pack(a, n, new[] { 1f, 0.98f, 0.95f }), NormalFromHeight(h, n, 0.8f));
         }
+
+        /// <summary>
+        /// Weathered red brick in running bond with lime mortar, per-brick colour variation (some darker, burnt
+        /// bricks) and soot on the courses (the shell burnt in 1975). The albedo carries the full colour (the
+        /// material colour is white): RGB per pixel, sRGB like the other albedo maps.
+        /// </summary>
+        public static (byte[] albedo, byte[] normal) Brick(int n)
+        {
+            var h = new float[n * n];
+            var rgb = new float[n * n * 3];
+            float px = BrickTile / n;
+            int courses = (int)Math.Round(BrickTile / BrickCourse);
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float u = x * px, v = y * px;
+                    int course = (int)(v / BrickCourse);
+                    float bu = Mod(u + (course % 2) * BrickLength * 0.5f, BrickTile);
+                    int brick = (int)(bu / BrickLength);
+                    float dv = MathF.Min(Mod(v, BrickCourse), BrickCourse - Mod(v, BrickCourse));
+                    float du = MathF.Min(Mod(bu, BrickLength), BrickLength - Mod(bu, BrickLength));
+                    float d = MathF.Min(du, dv);
+                    bool mortar = d < BrickJoint * 0.5f;
+                    float s = x / (float)n, t = y / (float)n;
+                    float grain = 0.06f * Fbm(s, t, 32, 23);
+                    float r, g, b;
+                    if (mortar)
+                    {
+                        float m = 0.62f + grain;
+                        r = m; g = m * 0.96f; b = m * 0.9f;
+                    }
+                    else
+                    {
+                        float k = Hash(brick + course * 13, courses);
+                        float burnt = k > 0.7f ? 0.55f : 1f;            // about one brick in seven darker
+                        float shade = (0.86f + 0.12f * k + grain) * burnt;
+                        r = 0.56f * shade; g = 0.25f * shade; b = 0.17f * shade;
+                    }
+                    // Soot and weathering: soft horizontal bands (seamless).
+                    float soot = 0.88f + 0.12f * (0.5f + 0.5f * Fbm(s, t, 2, 29));
+                    int i = (y * n + x) * 3;
+                    rgb[i] = r * soot; rgb[i + 1] = g * soot; rgb[i + 2] = b * soot;
+                    h[y * n + x] = mortar ? 0f : MathF.Min(1f, (d - BrickJoint * 0.5f) / 0.004f) * 0.9f + 0.1f * (0.5f + 0.5f * Fbm(s, t, 24, 31));
+                }
+            var albedo = new byte[n * n * 4];
+            for (int i = 0; i < n * n; i++)
+            {
+                albedo[i * 4] = ToByte(rgb[i * 3]);
+                albedo[i * 4 + 1] = ToByte(rgb[i * 3 + 1]);
+                albedo[i * 4 + 2] = ToByte(rgb[i * 3 + 2]);
+                albedo[i * 4 + 3] = 255;
+            }
+            return (albedo, NormalFromHeight(h, n, 2.2f));
+        }
+
 
         static float Mod(float a, float m) => a - m * MathF.Floor(a / m);
 
