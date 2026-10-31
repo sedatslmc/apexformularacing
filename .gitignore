@@ -13,6 +13,7 @@ unity/ProjectApex/.idea/
 # .NET verification builds
 build/**/bin/
 build/**/obj/
+build/**/TestResults/
 # Godot legacy
 legacy/godot/.godot/
 # General
