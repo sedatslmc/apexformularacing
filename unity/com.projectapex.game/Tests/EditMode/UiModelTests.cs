@@ -230,5 +230,149 @@ namespace Apex.Tests
             Assert.That(ChampionshipModel.PlayerPosition(points), Is.EqualTo(1));
             Assert.That(ChampionshipModel.Standings(points, 10, 0)[0].player, Is.True);
         }
+        [Test]
+        public void HudPresetsAndDefaultLayoutKeepTheRoadClear()
+        {
+            Assert.That(HudLayout.Shows(HudPreset.Minimal, HudElement.Dash) && HudLayout.Shows(HudPreset.Minimal, HudElement.Info), Is.True);
+            Assert.That(HudLayout.Shows(HudPreset.Minimal, HudElement.Tower) || HudLayout.Shows(HudPreset.Minimal, HudElement.Map), Is.False);
+            foreach (var e in HudLayout.All)
+            {
+                Assert.That(HudLayout.Shows(HudPreset.Standard, e), Is.True);
+                Assert.That(HudLayout.Shows(HudPreset.Off, e), Is.False);
+            }
+            Assert.That(HudLayout.ShowsTelemetry(HudPreset.Extended) && !HudLayout.ShowsTelemetry(HudPreset.Standard), Is.True);
+            Assert.That(HudLayout.ShowsSafetyInfo(HudPreset.Off), Is.True, "start lights and flags stay");
+            Assert.That(HudLayout.Next(HudPreset.Off), Is.EqualTo(HudPreset.Minimal));
+            // Default layout: no element covers the road or another element, on 16:9, 21:9 and 16:10.
+            foreach (var w in new[] { 1920f, 2520f, 1728f })
+                Assert.That(HudLayout.Conflicts(new HudLayoutData(), HudPreset.Standard, w, 1080f), Is.Empty, $"width {w}");
+            // Right-anchored elements follow the right edge on ultrawide screens.
+            Assert.That(HudLayout.DefaultRect(HudElement.Timing, 2520f, 1080f).XMax, Is.EqualTo(2520f - 40f).Within(0.01f));
+            Assert.That(HudLayout.DefaultRect(HudElement.Dash, 2520f, 1080f).x + 260f, Is.EqualTo(1260f).Within(0.01f), "dash centred");
+        }
+
+        [Test]
+        public void HudEditorMovesScalesAndStaysOnScreen()
+        {
+            var data = new HudLayoutData();
+            var ed = new HudEditor(data);
+            ed.SelectElement(HudElement.Timing);
+            Assert.That(ed.Current, Is.EqualTo(HudElement.Timing));
+            ed.Nudge(-100f, -50f, 1920f, 1080f);
+            var r = HudLayout.Rect(HudElement.Timing, data.Get(HudElement.Timing), 1920f, 1080f);
+            var d = HudLayout.DefaultRect(HudElement.Timing, 1920f, 1080f);
+            Assert.That(r.x, Is.EqualTo(d.x - 100f).Within(0.01f));
+            Assert.That(r.y, Is.EqualTo(d.y - 50f).Within(0.01f));
+            // Pushing past the edge clamps, and the stored offset does not drift beyond it.
+            ed.Nudge(5000f, 0f, 1920f, 1080f);
+            Assert.That(HudLayout.Rect(HudElement.Timing, data.Get(HudElement.Timing), 1920f, 1080f).XMax, Is.EqualTo(1920f).Within(0.01f));
+            ed.Nudge(-10f, 0f, 1920f, 1080f);
+            Assert.That(HudLayout.Rect(HudElement.Timing, data.Get(HudElement.Timing), 1920f, 1080f).XMax, Is.EqualTo(1910f).Within(0.01f));
+            for (int i = 0; i < 20; i++) ed.Resize(0.1f);
+            Assert.That(data.Get(HudElement.Timing).scale, Is.EqualTo(HudLayoutData.MaxScale));
+            for (int i = 0; i < 20; i++) ed.Fade(-0.1f);
+            Assert.That(data.Get(HudElement.Timing).opacity, Is.EqualTo(HudLayoutData.MinOpacity));
+            ed.Reset();
+            Assert.That(data.Get(HudElement.Timing).scale, Is.EqualTo(1f));
+            Assert.That(HudLayout.Rect(HudElement.Timing, data.Get(HudElement.Timing), 1920f, 1080f).x, Is.EqualTo(d.x).Within(0.01f));
+            // Moving the dash into the middle of the screen is reported.
+            ed.SelectElement(HudElement.Dash);
+            ed.Nudge(0f, -400f, 1920f, 1080f);
+            Assert.That(HudLayout.Conflicts(data, HudPreset.Standard, 1920f, 1080f).Exists(c => c.Contains("Fahrbahn")), Is.True);
+            ed.Select(1);
+            Assert.That(ed.Current, Is.EqualTo(HudElement.Tyres));
+            ed.Select(-2);
+            Assert.That(ed.Current, Is.EqualTo(HudElement.Events));
+            // Save files with junk are repaired.
+            var junk = new HudLayoutData { elements = new[] { null, new HudElementLayout { element = 99 }, new HudElementLayout { element = 1, scale = 9f, opacity = 0f }, new HudElementLayout { element = 1 } } };
+            Assert.That(junk.Normalize(), Is.True);
+            Assert.That(junk.elements.Length, Is.EqualTo(1));
+            Assert.That(junk.elements[0].scale, Is.EqualTo(HudLayoutData.MaxScale));
+            var settings = new SettingsData { hudLayout = null, hudPreset = 7 };
+            settings.MigrateAndValidate();
+            Assert.That(settings.hudLayout, Is.Not.Null);
+            Assert.That(settings.hudPreset, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void ShiftLightsAndTyreBands()
+        {
+            const float limiter = 12300f;
+            Assert.That(ShiftLights.Lit(5000f, limiter), Is.EqualTo(0));
+            Assert.That(ShiftLights.Lit(limiter * ShiftLights.ShiftFraction, limiter), Is.EqualTo(ShiftLights.Count));
+            int prev = 0;
+            for (float rpm = 8000f; rpm <= limiter; rpm += 50f) { int n = ShiftLights.Lit(rpm, limiter); Assert.That(n, Is.GreaterThanOrEqualTo(prev)); prev = n; }
+            Assert.That(ShiftLights.Flash(limiter * 0.99f, limiter) && !ShiftLights.Flash(limiter * 0.9f, limiter), Is.True);
+            Assert.That(ShiftLights.ColourOf(0), Is.EqualTo(ShiftLights.Colour.Green));
+            Assert.That(ShiftLights.ColourOf(7), Is.EqualTo(ShiftLights.Colour.Red));
+            Assert.That(ShiftLights.ColourOf(14), Is.EqualTo(ShiftLights.Colour.Blue));
+            Assert.That(TyreTemps.Band(60f, 95f, 25f), Is.EqualTo(TyreBand.Cold));
+            Assert.That(TyreTemps.Band(100f, 95f, 25f), Is.EqualTo(TyreBand.Optimal));
+            Assert.That(TyreTemps.Band(120f, 95f, 25f), Is.EqualTo(TyreBand.Hot));
+        }
+
+        [Test]
+        public void EventFeedPrioritisesDedupesAndQueues()
+        {
+            var f = new RaceEventFeed();
+            f.Post(HudEventKind.PositionGained, "P5", "+1 Platz", HudTone.Good, 0);
+            Assert.That(f.Update(0.1).title, Is.EqualTo("P5"));
+            f.Post(HudEventKind.Flag, "SAFETY CAR", "", HudTone.Warning, 0.5);
+            Assert.That(f.Update(0.6).title, Is.EqualTo("SAFETY CAR"), "a flag replaces a position change at once");
+            Assert.That(f.Post(HudEventKind.Flag, "SAFETY CAR", "", HudTone.Warning, 1.0), Is.Null, "no repeat within seconds");
+            f.Post(HudEventKind.FastestLap, "SCHNELLSTE RUNDE", "1:30.000", HudTone.Best, 1.0);
+            Assert.That(f.Update(1.1).title, Is.EqualTo("SAFETY CAR"), "lower priority waits");
+            Assert.That(f.Queued, Is.EqualTo(1));
+            Assert.That(f.Update(4.6).title, Is.EqualTo("SCHNELLSTE RUNDE"));
+            Assert.That(f.Update(7.5), Is.Not.Null, "queued message gets its full time");
+            Assert.That(f.Update(7.7), Is.Null);
+        }
+
+        [Test]
+        public void EventDetectorReportsFlagsPositionsFinalLapAndFinish()
+        {
+            var f = new RaceEventFeed();
+            var d = new RaceEventDetector();
+            var s = new RaceSnapshot { race = true, racing = true, position = 6, fieldSize = 12, lap = 4, laps = 5, status = TrackStatus.Green };
+            double t = 0;
+            d.Update(s, t, f);
+            // Overtake that is undone at once: no message.
+            s.position = 5; d.Update(s, t += 0.5, f);
+            s.position = 6; d.Update(s, t += 0.5, f);
+            d.Update(s, t += 2.0, f);
+            Assert.That(f.Update(t), Is.Null);
+            // A held overtake is reported once.
+            s.position = 5; d.Update(s, t += 0.1, f);
+            d.Update(s, t += 1.6, f);
+            Assert.That(f.Update(t).title, Is.EqualTo("P5"));
+            Assert.That(f.Current.detail, Is.EqualTo("+1 Platz"));
+            // Safety car, then green.
+            s.status = TrackStatus.SafetyCar; d.Update(s, t += 0.1, f);
+            Assert.That(f.Update(t).title, Is.EqualTo("SAFETY CAR"));
+            s.status = TrackStatus.Green; d.Update(s, t += 10, f);
+            Assert.That(f.Update(t).title, Is.EqualTo("GRÜNE FLAGGE"));
+            // A local yellow elsewhere on track is not shown; at the player's position it is.
+            s.status = TrackStatus.Yellow; s.yellowHere = false; d.Update(s, t += 5, f);
+            Assert.That(f.Update(t), Is.Null);
+            s.yellowHere = true; d.Update(s, t += 1, f);
+            Assert.That(f.Update(t).title, Is.EqualTo("GELBE FLAGGE"));
+            s.status = TrackStatus.Green; s.yellowHere = false;
+            // Final lap and finish.
+            s.lap = 5; d.Update(s, t += 5, f);
+            Assert.That(f.Update(t).title, Is.EqualTo("LETZTE RUNDE"));
+            s.finished = true; s.position = 2; d.Update(s, t += 5, f);
+            Assert.That(f.Update(t).title, Is.EqualTo("ZIEL · P2"));
+            Assert.That(f.Current.tone, Is.EqualTo(HudTone.Best));
+        }
+
+        [Test]
+        public void TrackMapProjectsWorldPoints()
+        {
+            var def = TestData.Circuit("test_loop");
+            var g = TrackGeometry.FromDefinition(def);
+            var m = TrackMap.Fit(def, g, 250f, 210f, 12f, 200);
+            Assert.That(m.MapX(g.Positions[0].X), Is.EqualTo(m.x[0]).Within(0.01f));
+            Assert.That(m.MapY(g.Positions[0].Z), Is.EqualTo(m.y[0]).Within(0.01f));
+        }
     }
 }

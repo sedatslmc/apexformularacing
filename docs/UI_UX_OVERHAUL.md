@@ -227,7 +227,7 @@ Rennen: Grid → Fahrt ⇄ Boxenfunk/Strategie ⇄ Pause → Ergebnisse → (Pod
    - Bühne mit Lichtring; Istanbul-Kulisse aus dem Spiel ab Stufe Mittel.
    - Erledigt, siehe Abschnitt 8.
 3. **Spielmodi:** Rennvorbereitung (Grand Prix, Zeitfahren, Training), Meisterschaftsübersicht, Streckenauswahl (Istanbul-Auftritt). Implementiert, siehe Abschnitt 9; der Grand-Prix-Hub zwischen Qualifying und Rennen folgt mit dem Ergebnisbildschirm (Phase 5).
-4. **Renn-HUD:** Turm, Dash mit Shift-LEDs, Timing, Reifen, Ereignis-Feed, Presets, HUD-Editor, Startsequenz mit Kamerafahrt, mobile Anpassung.
+4. **Renn-HUD:** Turm, Dash mit Shift-LEDs, Timing, Reifen, Ereignis-Feed, Presets, HUD-Editor, Startampel. Implementiert, siehe Abschnitt 10; Kamerafahrt vor dem Start und die Abstimmung mit den Touch-Tasten sind offen.
 5. **Weitere Oberflächen:** Garage (Kameraperspektiven, Drehen/Zoom), Boxenstrategie, Pause, Ergebnisse/Podium, Fahrerprofil, Einstellungen mit Kategorien.
 6. **Feinschliff:** Übergänge, Musik, Lokalisierung (Deutsch/Englisch), Leistung, Barrierefreiheit (Textgröße, Kontrast, Farbenblind-Modi, Untertitel für Boxenfunk).
 
@@ -310,6 +310,36 @@ gegen den Uhrzeigersinn), Karte genordet und eingepasst mit allen Sektoren, Kale
 3. Lesbarkeit der rechten Seite über der Showroom-Kamera (Abdunklung 55 %).
 4. Zeilenumbruch der Kurvennamen unter der Karte.
 
-## 10. Nächste Phasen
-4 HUD (Presets, Editor, Ereignisse, Startampel) ·
+## 10. Umsetzung Phase 4: Renn-HUD
+
+**Status: implementiert, Simulationsteil getestet; in Unity nicht geprüft.** `tools/verify.sh` läuft durch
+(205 NUnit-Tests grün; Runtime, URP-Pfad, Editor und Tests kompilieren ohne Fehler und Warnungen).
+
+### 10.1 Was gebaut ist
+| Teil | Datei | Inhalt |
+|---|---|---|
+| Layout und Presets | `Runtime/Simulation/UI/HudModel.cs` | Elemente Positionsturm, Rennstatus, Ereignisse, Cockpit-Anzeige, Reifen, Streckenkarte, Zeiten mit Ankern (rechte Elemente bleiben bei 21:9 am rechten Rand); Presets Minimal (Anzeige, Status, Ereignisse), Standard (alles), Erweitert (plus Telemetrie), Aus (nur Startampel und Flaggen); Freihaltezone vor dem Auto; Konfliktprüfung |
+| HUD-Editor | ebenda, `HudEditor` | Element wählen, verschieben (bleibt auf dem Bildschirm), Größe 70–140 %, Deckkraft 30–100 %, zurücksetzen; gespeichert in `SettingsData.hudLayout` (repariert beschädigte Einträge) |
+| Schaltlichter, Reifen | ebenda | 15 LEDs (5 grün, 5 rot, 5 blau) ab 72 % der Begrenzerdrehzahl, Blinken am Schaltpunkt; Reifentemperatur kalt/optimal/heiß wie bisher |
+| Ereignisse | `Runtime/Simulation/UI/RaceEventFeed.cs` | Banner mit Priorität (Flagge vor Strafe vor Rekord vor Positionswechsel), Warteschlange, keine Wiederholung binnen 3 s; `RaceEventDetector`: Gelb (nur am eigenen Ort), VSC, Safety Car, Grün nach Neutralisierung, Positionswechsel erst nach 1,5 s (kein Flackern im Zweikampf), letzte Runde, Ziel |
+| Ansicht | `Runtime/Game/UI/RaceHudView.cs` | UI Toolkit, Broadcast-Stil laut Mockup; Minikarte aus den Streckendaten mit Autos; Startampel mit fünf Doppelleuchten; Editor-Overlay mit Freihaltezone, Rahmen, Werten, Hinweisen (Tastatur, Gamepad, Maus ziehen) |
+| Anbindung | `ApexGame.RaceHud.cs` | füllt jedes Bild alle Werte aus der Simulation (dieselben wie das alte HUD); Spielmeldungen (Strafen, Funkantworten) laufen in das Banner; Taste H und Einstellungen: Preset; Pause → „HUD anpassen“ |
+
+IMGUI bleibt für Boxenfunk, Boxenstopp-Timer, Telemetrie, Touch-Tasten, Pause-/Funk-Knöpfe und die Layoutprüfung (F2)
+sowie als vollständiger Rückfall ohne UI Toolkit.
+
+### 10.2 Tests
+`UiModelTests`: Presets, Standardlayout ohne Überdeckung von Fahrbahn und Elementen bei 16:9, 21:9 und 16:10, rechte
+Anker bei Ultrawide, Editor (verschieben, Rand, Größe, Deckkraft, Zurücksetzen, Konfliktmeldung, beschädigte Daten,
+Einstellungs-Migration), Schaltlichter monoton mit Farbfolge, Reifenbänder, Ereignis-Priorität, Entprellung,
+Warteschlange, Detektor (Flaggen, gehaltene und rückgängig gemachte Überholmanöver, letzte Runde, Ziel), Kartenprojektion.
+
+### 10.3 Offen und in Unity zu prüfen
+1. Lesbarkeit und Größe im Fahrbetrieb (Verfolger- und Cockpitkamera), Leistung bei 20 Autos.
+2. `style.transformOrigin` und Skalierung der Elemente; Mausziehen im Editor.
+3. Touch-Tasten (IMGUI) gegen die neuen Elemente: die F2-Prüfung kennt die UI-Toolkit-Elemente noch nicht.
+4. Reihenfolge IMGUI über UI Toolkit (Funk, Telemetrie über dem HUD).
+5. Nicht umgesetzt: Kamerafahrt vor dem Start, Boxenfunk mit Wellenform (Mockup) – der Funk bleibt vorerst IMGUI.
+
+## 11. Nächste Phasen
 5 Garage, Pause, Ergebnis, Podium, Einstellungskategorien · 6 Feinschliff, Musik, Lokalisierung.

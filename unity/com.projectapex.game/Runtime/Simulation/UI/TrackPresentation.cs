@@ -58,6 +58,10 @@ namespace Apex.UI
         public float startX, startY;
         public float[] cornerX = new float[0], cornerY = new float[0];
         public int Count => x.Length;
+        // Projection (world east/north to map pixels), for cars on the minimap.
+        public float scale, offsetX, offsetY, minEast, maxNorth;
+        public float MapX(float east) => offsetX + (east - minEast) * scale;
+        public float MapY(float north) => offsetY + (maxNorth - north) * scale;
     }
 
     public static class TrackMap
@@ -98,7 +102,7 @@ namespace Apex.UI
 
             int step = Math.Max(1, (g.Count + maxPoints - 1) / Math.Max(2, maxPoints));
             int n = (g.Count + step - 1) / step;
-            var line = new TrackMapLine { x = new float[n], y = new float[n], sector = new int[n] };
+            var line = new TrackMapLine { x = new float[n], y = new float[n], sector = new int[n], scale = scale, offsetX = ox, offsetY = oy, minEast = minX, maxNorth = maxZ };
             for (int k = 0; k < n; k++)
             {
                 int i = k * step;

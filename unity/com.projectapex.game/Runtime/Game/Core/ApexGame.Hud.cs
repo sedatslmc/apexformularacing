@@ -161,15 +161,22 @@ namespace Apex.Game
             var safe = SafeRect();
             var d = Race.Director;
             var p = Race.Player;
-            if (hudPreset < 2) DrawTower(safe, d, p);
-            DrawInfoPanel(safe, d, p);
-            DrawDash(safe, p);
-            if (d.CurrentPhase == RaceDirector.Phase.Lights) DrawLights(safe, d);
-            DrawToasts(safe);
-            if (showMap && hudPreset == 0) DrawMiniMap(safe);
-            if (p.car.setup.legacy)
-                ApexStyle.Text(new Rect(safe.center.x - 160f, safe.y + 8f, 320f, 26f), "ALTES FAHRVERHALTEN (VERGLEICH)", 16, ApexStyle.Caution, FontStyle.Bold, TextAnchor.MiddleCenter);
-            if (showTelemetry) DrawTelemetry(safe, p);
+            // With UI Toolkit the tower, status, dash, lights, events, map and timing are RaceHudView; IMGUI keeps
+            // the radio, pit timer, telemetry, touch buttons, the pause/radio buttons and the layout check.
+            bool newHud = hudView != null;
+            if (!newHud)
+            {
+                if (hudPreset < 2) DrawTower(safe, d, p);
+                DrawInfoPanel(safe, d, p);
+                DrawDash(safe, p);
+                if (d.CurrentPhase == RaceDirector.Phase.Lights) DrawLights(safe, d);
+                DrawToasts(safe);
+                if (showMap && hudPreset == 0) DrawMiniMap(safe);
+                if (p.car.setup.legacy)
+                    ApexStyle.Text(new Rect(safe.center.x - 160f, safe.y + 8f, 320f, 26f), "ALTES FAHRVERHALTEN (VERGLEICH)", 16, ApexStyle.Caution, FontStyle.Bold, TextAnchor.MiddleCenter);
+            }
+            else if (!hudView.Editing) DrawHudButtons(safe);
+            if (showTelemetry || (newHud && Apex.UI.HudLayout.ShowsTelemetry(CurrentHudPreset))) DrawTelemetry(safe, p);
             if (radioOpen) DrawRadio(safe);
             if (p.pit.stage == PitState.Stage.Stopped) DrawPitTimer(safe, p);
             DrawTouchButtons();
@@ -258,6 +265,13 @@ namespace Apex.Game
             DrawTrackStatus(new Rect(x, y + h + 30f, w, 30f), p);
             float fx = safe.xMax - 120f;
             ApexStyle.Text(new Rect(fx - 160f, y + h + 4f, 270f, 24f), $"{fps:0} FPS", 16, ApexStyle.TextDim, FontStyle.Normal, TextAnchor.MiddleRight);
+            DrawHudButtons(safe);
+        }
+
+        /// <summary>Pause and radio buttons in the top-right corner (mouse; touch has its own buttons).</summary>
+        void DrawHudButtons(Rect safe)
+        {
+            float y = safe.y + 20f;
             if (Settings.controlPreset == ControlPreset.Keyboard)
             {
                 if (ApexStyle.Button(new Rect(safe.xMax - 110f, y, 90f, 60f), "II", false, 28)) sm.TryTransition(GameState.Pause);
@@ -388,7 +402,8 @@ namespace Apex.Game
         void DrawRadio(Rect safe)
         {
             float w = 330f, rowH = 42f;
-            float x = safe.xMax - w - 130f, y = safe.y + 130f;
+            // Below the race status box (and its flag strip) of the UI Toolkit HUD.
+            float x = safe.xMax - w - 130f, y = safe.y + (hudView != null ? 240f : 130f);
             var r = new Rect(x, y, w, rowH * RadioItems.Length + 50f);
             ApexStyle.Box(r, ApexStyle.PanelSolid);
             Zone("Radio", r);
