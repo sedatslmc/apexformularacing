@@ -1,0 +1,136 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#000}canvas{display:block}</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+// Main-menu showroom mock (UI/UX overhaul, docs/UI_UX_OVERHAUL.md): the A01 on a dark reflective stage with
+// cyan LED strips in front of an in-game Bosphorus night backdrop (&bg_img=). Concept render, not a game capture.
+// Unity is left-handed (+z forward); three.js is right-handed, so the model is
+// mirrored on x on import, which also turns Unity's clockwise front faces into
+// three.js's counter-clockwise ones.
+import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 1600), Hh = +(params.get('h') || 900);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, Hh);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b1118);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+function weave(gloss) {
+  // 2x2 twill carbon weave, generated procedurally (no external texture).
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  const n = 8, s = 128 / n;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const warp = ((i + j) >> 1) % 2 === 0;
+    const grd = warp ? g.createLinearGradient(i * s, 0, i * s + s, 0) : g.createLinearGradient(0, j * s, 0, j * s + s);
+    grd.addColorStop(0, '#0d0e10'); grd.addColorStop(0.5, gloss ? '#2a2c31' : '#212226'); grd.addColorStop(1, '#0d0e10');
+    g.fillStyle = grd; g.fillRect(i * s, j * s, s, s);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(16, 16); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+const M = (o) => new THREE.MeshPhysicalMaterial(o);
+const mats = {
+  CarPaint: M({ color: 0x0c1f48, metalness: 0.35, roughness: 0.32, clearcoat: 1, clearcoatRoughness: 0.06 }),
+  CarAccent: M({ color: 0x00d4ff, metalness: 0.1, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.05 }),
+  Carbon: M({ color: 0xffffff, map: weave(true), metalness: 0.2, roughness: 0.28, clearcoat: 0.8, clearcoatRoughness: 0.12 }),
+  CarbonSatin: M({ color: 0xffffff, map: weave(false), metalness: 0.15, roughness: 0.55 }),
+  Titanium: M({ color: 0x7c8087, metalness: 1, roughness: 0.32 }),
+  Tire: M({ color: 0x141414, metalness: 0, roughness: 0.88 }),
+  Rim: M({ color: 0x24272c, metalness: 0.85, roughness: 0.38 }),
+  Mirror: M({ color: 0xdfe6ee, metalness: 1, roughness: 0.04 }),
+  Interior: M({ color: 0x18191c, metalness: 0, roughness: 0.82 }),
+  Belt: M({ color: 0xd8262b, metalness: 0, roughness: 0.6 }),
+  Helmet: M({ color: 0xe9ecf1, metalness: 0.1, roughness: 0.25, clearcoat: 1 }),
+  Visor: M({ color: 0x050608, metalness: 0.6, roughness: 0.05 }),
+  Glove: M({ color: 0x1c1d20, metalness: 0, roughness: 0.75 }),
+  Display: M({ color: 0x050505, emissive: 0x003a4a, roughness: 0.2 }),
+  Exhaust: M({ color: 0x5a5d62, metalness: 1, roughness: 0.42 }),
+  RainLight: M({ color: 0x400505, emissive: 0xff2010, emissiveIntensity: 2 }),
+  // Environment / landmarks (match ApexMaterials).
+  Stone: M({ color: 0xd8ccb2, roughness: 0.85 }),
+  Marble: M({ color: 0xefede6, roughness: 0.55 }),
+  Lead: M({ color: 0x7e848b, metalness: 0.35, roughness: 0.5 }),
+  BridgeSteel: M({ color: 0xc2c6cb, metalness: 0.5, roughness: 0.45 }),
+  BridgeCable: M({ color: 0x8e9298, metalness: 0.6, roughness: 0.4 }),
+  Glass: M({ color: 0x1a2229, metalness: 0.5, roughness: 0.12 }),
+  HagiaPlaster: M({ color: 0xc58e6a, roughness: 0.85 }),
+  FerryHull: M({ color: 0xf0f0ee, roughness: 0.5 }),
+  FerryFunnel: M({ color: 0xe3b23c, roughness: 0.5 }),
+  Rock: M({ color: 0x6b6359, roughness: 0.95 }),
+  Roof: M({ color: 0xa4442e, roughness: 0.8 }),
+};
+
+
+import('three/addons/postprocessing/EffectComposer.js').then(async ({ EffectComposer }) => {
+  const { RenderPass } = await import('three/addons/postprocessing/RenderPass.js');
+  const { UnrealBloomPass } = await import('three/addons/postprocessing/UnrealBloomPass.js');
+  const { OutputPass } = await import('three/addons/postprocessing/OutputPass.js');
+  const tex = await new THREE.TextureLoader().loadAsync(params.get('bg_img'));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  // Backdrop: a large curved screen far behind the stage.
+  const bd = new THREE.Mesh(new THREE.PlaneGeometry(+(params.get('bdw') || 76), +(params.get('bdw') || 76) * 9 / 16), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false, color: new THREE.Color(0.9, 0.9, 0.95), fog: false }));
+  scene.add(bd);
+  scene.fog = new THREE.Fog(0x0b1118, 14, 60);
+  // Stage: glossy dark floor, cyan LED ring, red accent line (Istanbul).
+  const floor = new THREE.Mesh(new THREE.CircleGeometry(7.5, 96), M({ color: 0x0a1018, metalness: 0.3, roughness: 0.42, clearcoat: 0.4, clearcoatRoughness: 0.35 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(60, 64), M({ color: 0x05080b, roughness: 0.8 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.01; scene.add(ground);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(7.5, 0.025, 8, 160), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.13, 0.85, 0.91).multiplyScalar(1.1) }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 0.01; scene.add(ring);
+  const red = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.012, 0.05), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.78, 0.06, 0.18).multiplyScalar(1.2) }));
+  red.position.set(0, 0.01, 7.0); scene.add(red);
+  for (const s of [-1, 1]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.012, 5.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.13, 0.85, 0.91).multiplyScalar(0.9) }));
+    strip.position.set(s * 2.4, 0.01, 0); scene.add(strip);
+  }
+  // Lights: cool key from above, cyan rims, warm low front fill.
+  const key = new THREE.DirectionalLight(0xe8f2ff, 1.15); key.position.set(2, 9, 2); key.castShadow = true; key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6 }); scene.add(key);
+  const rimA = new THREE.DirectionalLight(0x8fdfe8, 0.55); rimA.position.set(-6, 2.5, -5); scene.add(rimA);
+  const rimB = new THREE.DirectionalLight(0x8fdfe8, 0.35); rimB.position.set(6, 2, -6); scene.add(rimB);
+  const warm = new THREE.DirectionalLight(0xffc995, 0.9); warm.position.set(-2, 1.2, 8); scene.add(warm);
+  scene.add(new THREE.HemisphereLight(0x324a63, 0x05080b, 0.6));
+  new OBJLoader().load(params.get('obj'), (obj) => {
+    obj.traverse((m) => {
+      if (!m.isMesh) return;
+      const name = Array.isArray(m.material) ? null : m.material.name;
+      m.material = Array.isArray(m.material) ? m.material.map((x) => mats[x.name] || mats.Interior) : (mats[name] || mats.Interior);
+      m.castShadow = true; m.receiveShadow = true;
+    });
+    for (const k in mats) mats[k].envMapIntensity = 0.8;
+    obj.scale.x = -1;
+    obj.position.y = 0.30;
+    obj.rotation.y = +(params.get('yaw') || 0.55);
+    scene.add(obj);
+    const cam = new THREE.PerspectiveCamera(+(params.get('fov') || 34), W / Hh, 0.05, 200);
+    const e = params.get('eye').split(',').map(Number), t = params.get('target').split(',').map(Number);
+    cam.position.set(e[0], e[1], e[2]); cam.lookAt(t[0], t[1], t[2]);
+    // Backdrop 55 m along the view, facing the camera, lifted so the skyline sits above the stage.
+    const dir = new THREE.Vector3(t[0] - e[0], 0, t[2] - e[2]).normalize();
+    bd.position.set(e[0] + dir.x * 55, +(params.get('bdy') || 14), e[2] + dir.z * 55);
+    bd.lookAt(e[0], bd.position.y, e[2]);
+    const comp = new EffectComposer(renderer);
+    comp.addPass(new RenderPass(scene, cam));
+    comp.addPass(new UnrealBloomPass(new THREE.Vector2(W, Hh), 0.22, 0.4, 0.92));
+    comp.addPass(new OutputPass());
+    comp.render();
+    window.renderDone = true;
+  });
+});
+</script></body></html>

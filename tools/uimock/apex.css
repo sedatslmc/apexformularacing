@@ -1,0 +1,25 @@
+/* APEX // RACE CONTROL design tokens (docs/UI_UX_OVERHAUL.md section 2). Mockups only; the game uses the same
+   values from Apex.UI.DesignTokens. Fonts: Barlow / Barlow Condensed (SIL OFL 1.1) from Resources/Fonts. */
+@font-face { font-family: 'BarlowC'; font-weight: 600; src: url('../../unity/com.projectapex.game/Runtime/Resources/Fonts/BarlowCondensed-SemiBold.ttf'); }
+@font-face { font-family: 'BarlowC'; font-weight: 700; src: url('../../unity/com.projectapex.game/Runtime/Resources/Fonts/BarlowCondensed-Bold.ttf'); }
+@font-face { font-family: 'Barlow'; font-weight: 500; src: url('../../unity/com.projectapex.game/Runtime/Resources/Fonts/Barlow-Medium.ttf'); }
+@font-face { font-family: 'Barlow'; font-weight: 600; src: url('../../unity/com.projectapex.game/Runtime/Resources/Fonts/Barlow-SemiBold.ttf'); }
+:root {
+  --navy: #101820; --carbon: #18232E; --surface: #253440; --cyan: #20D9E8; --red: #C8102E; --amber: #F4B544;
+  --ivory: #F5F7FA; --steel: #9BA8B5;
+  --flag-green: #2FBF71; --flag-yellow: #F2D21B; --flag-red: #E0242F; --flag-blue: #2F7FE0;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --panel: rgba(16, 24, 32, 0.78); --panel-strong: rgba(24, 35, 46, 0.92); --hair: rgba(155, 168, 181, 0.22);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--navy); color: var(--ivory); font-family: 'Barlow', sans-serif; }
+.h-display { font-family: 'BarlowC'; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+.h-label { font-family: 'Barlow'; font-weight: 600; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--steel); }
+.num { font-family: 'BarlowC'; font-weight: 600; font-variant-numeric: tabular-nums; }
+.panel { background: var(--panel); border: 1px solid var(--hair); backdrop-filter: blur(6px); }
+.panel-strong { background: var(--panel-strong); border: 1px solid var(--hair); }
+.cut { clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%); }
+.tick { position: absolute; width: 18px; height: 2px; background: var(--cyan); }
+.key { display: inline-block; min-width: 26px; padding: 2px 7px; border: 1px solid var(--steel); border-radius: 4px; font: 600 13px 'Barlow'; color: var(--ivory); text-align: center; margin-right: 6px; }
+.chip { display: inline-block; padding: 3px 10px; font: 600 12px 'Barlow'; letter-spacing: 0.12em; text-transform: uppercase; border: 1px solid var(--hair); color: var(--steel); }
+.red-chip { border-color: var(--red); color: #ff6b7d; }

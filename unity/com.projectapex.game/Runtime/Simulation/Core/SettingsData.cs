@@ -63,6 +63,8 @@ namespace Apex.Core
         public int environmentDetail = 1;
         /// <summary>Camera motion blur at the tier's strength (High and above); off = no blur.</summary>
         public bool motionBlur = true;
+        /// <summary>Main menu in front of the real Istanbul scene (PC; built behind the boot overlay).</summary>
+        public bool menuBackdrop = true;
         /// <summary>URP post-processing (tonemapping, colour grade, bloom, FXAA); only offered with URP.</summary>
         public bool postProcessing = true;
         /// <summary>A/B comparison: the player's car uses the setup and input from before the October 2026

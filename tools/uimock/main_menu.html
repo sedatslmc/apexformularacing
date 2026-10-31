@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="apex.css">
+<style>
+.bg { position: absolute; inset: 0; background: url('bg_showroom_night.jpg') center/cover; }
+.shade { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(16,24,32,0.96) 0%, rgba(16,24,32,0.82) 30%, rgba(16,24,32,0.15) 58%, rgba(16,24,32,0) 75%),
+  linear-gradient(0deg, rgba(16,24,32,0.9) 0%, rgba(16,24,32,0) 22%), linear-gradient(180deg, rgba(16,24,32,0.75) 0%, rgba(16,24,32,0) 16%); }
+.top { position: absolute; left: 72px; right: 72px; top: 40px; height: 56px; display: flex; align-items: center; }
+.logo { font: 700 34px 'BarlowC'; letter-spacing: 0.32em; }
+.logo b { color: var(--cyan); font-weight: 700; }
+.logo small { display: block; font: 600 11px 'Barlow'; letter-spacing: 0.42em; color: var(--steel); margin-top: 2px; }
+.top .right { margin-left: auto; display: flex; gap: 14px; align-items: center; }
+.profile { display: flex; align-items: center; gap: 14px; padding: 8px 18px 8px 8px; }
+.avatar { width: 40px; height: 40px; background: var(--surface); border: 1px solid var(--cyan); display: grid; place-items: center; font: 700 18px 'BarlowC'; }
+.profile .name { font: 600 16px 'Barlow'; } .profile .lv { font: 600 12px 'Barlow'; color: var(--steel); letter-spacing: 0.1em; }
+.xp { width: 140px; height: 3px; background: var(--surface); margin-top: 5px; } .xp i { display: block; height: 100%; width: 62%; background: var(--cyan); }
+.icon { width: 44px; height: 44px; display: grid; place-items: center; }
+.menu { position: absolute; left: 72px; top: 210px; width: 560px; }
+.eyebrow { margin-bottom: 18px; }
+.item { position: relative; height: 64px; display: flex; align-items: center; padding-left: 26px; margin-bottom: 8px; font: 600 26px 'BarlowC'; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(245,247,250,0.82); }
+.item .sub { margin-left: auto; margin-right: 18px; font: 500 14px 'Barlow'; letter-spacing: 0.04em; text-transform: none; color: var(--steel); }
+.item.dim { color: rgba(245,247,250,0.55); }
+.start { height: 104px; white-space: nowrap; flex-direction: column; align-items: flex-start; justify-content: center; margin-bottom: 26px; background: linear-gradient(90deg, rgba(32,217,232,0.22), rgba(32,217,232,0.04) 70%, rgba(32,217,232,0) 100%); border-left: 3px solid var(--cyan); color: var(--ivory); font-size: 40px; transform: scale(1.02); transform-origin: left center; box-shadow: inset 0 1px 0 rgba(32,217,232,0.5), inset 0 -1px 0 rgba(32,217,232,0.25); }
+.start .sub { margin: 4px 0 0 0; font-size: 15px; color: var(--ivory); opacity: 0.8; }
+.start .arrow { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); font: 700 30px 'BarlowC'; color: var(--cyan); }
+.start .speed { position: absolute; left: 0; bottom: 10px; width: 260px; height: 1px; background: linear-gradient(90deg, var(--cyan), transparent); }
+.focusline { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--cyan); }
+.bottom { position: absolute; left: 72px; right: 72px; bottom: 36px; display: flex; gap: 20px; align-items: stretch; }
+.card { padding: 16px 22px; min-width: 330px; position: relative; }
+.card .h-label { margin-bottom: 6px; }
+.card .big { font: 700 26px 'BarlowC'; letter-spacing: 0.04em; text-transform: uppercase; }
+.card .meta { font: 500 15px 'Barlow'; color: var(--steel); margin-top: 4px; }
+.card .meta b { color: var(--ivory); font-weight: 600; }
+.redbar { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--red); }
+.hints { margin-left: auto; align-self: flex-end; font: 500 14px 'Barlow'; color: var(--steel); text-align: right; line-height: 1.9; }
+.ver { font: 600 11px 'Barlow'; letter-spacing: 0.2em; color: rgba(155,168,181,0.6); margin-top: 6px; }
+.mark { position: absolute; right: 72px; top: 120px; text-align: right; }
+.mark .h-display { font-size: 15px; color: var(--steel); letter-spacing: 0.3em; }
+.mock { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); font: 600 11px 'Barlow'; letter-spacing: 0.3em; color: rgba(244,181,68,0.85); }
+</style></head><body>
+<div class="bg"></div><div class="shade"></div>
+<div class="mock">KONZEPT-MOCKUP · BEISPIELDATEN · KEIN SPIELBILD</div>
+<div class="top">
+  <div class="logo">AP<b>E</b>X<small>RACE CONTROL</small></div>
+  <div class="right">
+    <div class="profile panel"><div class="avatar">27</div><div><div class="name">Fahrer · TUR</div><div class="lv">LEVEL 12 · APEX AZURE</div><div class="xp"><i></i></div></div></div>
+    <div class="icon panel"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F5F7FA" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg></div>
+  </div>
+</div>
+<div class="mark"><div class="h-display">Bosphorus Grand Prix · Istanbul</div></div>
+<div class="menu">
+  <div class="h-label eyebrow">Hauptmenü</div>
+  <div class="item start"><div class="focusline"></div>Rennen starten<span class="sub">Bosphorus GP · 8 Runden · Goldene Stunde</span><span class="arrow">›</span><div class="speed"></div></div>
+  <div class="item">Grand Prix<span class="sub">Qualifying + Rennen</span></div>
+  <div class="item">Meisterschaft<span class="sub">Runde 2 / 2 · P3</span></div>
+  <div class="item">Zeitfahren<span class="sub">Bestzeit 2:21.874</span></div>
+  <div class="item dim">Freies Training</div>
+  <div class="item dim">Garage</div>
+  <div class="item dim">Fahrerprofil</div>
+</div>
+<div class="bottom">
+  <div class="card panel cut"><div class="redbar"></div><div class="h-label">Ausgewählte Strecke</div><div class="big">Bosphorus Grand Prix</div><div class="meta"><b>8,16 km</b> · 16 Kurven · gegen den Uhrzeigersinn</div></div>
+  <div class="card panel cut"><div class="h-label">Letztes Ergebnis</div><div class="big">P4 · Grand Prix</div><div class="meta">Schnellste Runde <b class="num">2:22.418</b> · +3 Plätze</div></div>
+  <div class="hints"><span class="key">↑↓</span>Auswählen &nbsp; <span class="key">Enter</span>Bestätigen &nbsp; <span class="key">Esc</span>Zurück<div class="ver">PROJECT APEX · V0.9 · DEV BUILD</div></div>
+</div>
+</body></html>
