@@ -48,10 +48,10 @@ namespace Apex.Tests
                 int k = g.IndexAt(a);
                 Assert.That(plan.RunoffAt(k, plan.posts[i].side), Is.GreaterThanOrEqualTo(0.5f));
             }
-            // Heavy braking zones (Ortaköy, Balmumcu, Beşiktaş, Maçka) get impact protection on the outside.
-            foreach (int ci in new[] { 0, 4, 5, 7 })
+            // Heavy braking zones (Ortaköy square entry, Balmumcu, Beşiktaş, Maçka) get impact protection on the outside.
+            foreach (string name in new[] { "Meydan Girişi", "Balmumcu", "Barbaros İnişi", "Akaretler 2" })
             {
-                var c = def.corners[ci];
+                var c = def.corners.Find(x => x.name == name);
                 bool found = plan.protections.Exists(p => p.side == (c.right ? -1 : 1) && Math.Abs(g.Wrap(p.to - c.distance) - 25f) < 30f);
                 Assert.That(found, Is.True, $"protection at {c.name}");
             }

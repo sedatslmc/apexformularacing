@@ -254,8 +254,10 @@ namespace Apex.Tracks
                 float ahead = Vector3.Dot(LinePoint(side, mid, inset) - (a + b) * 0.5f, right);
                 if (ahead > 0f) { a += right * ahead; b += right * ahead; }
                 // Impact protection stands on the run-off in front of the barrier: not where the run-off
-                // is narrower than the module (it would stand on the asphalt).
-                if (minRunoff > 0f && plan.RunoffAt(g.IndexAt(mid), side) < minRunoff) continue;
+                // is narrower than the module (it would stand on the asphalt), at its middle or either end
+                // (where the run-off narrows, e.g. into a side-by-side section, one end would reach the road).
+                if (minRunoff > 0f && (plan.RunoffAt(g.IndexAt(mid), side) < minRunoff || plan.RunoffAt(g.IndexAt(st[k].d), side) < minRunoff
+                    || plan.RunoffAt(g.IndexAt(st[k + 1].d), side) < minRunoff)) continue;
                 Add(m, side, a, b, g.Wrap(mid), variants > 0 ? k % variants : 0);
             }
         }

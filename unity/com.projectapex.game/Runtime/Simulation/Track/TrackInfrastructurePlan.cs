@@ -114,6 +114,7 @@ namespace Apex.Tracks
             kerbs.height = new float[n];
             foreach (var c in corners)
             {
+                if (c.noKerbs) continue;
                 float r = c.minRadius;
                 // Fast corners: low wide kerbs; slow corners: more pronounced ones, but never higher than the
                 // car's body clearance at the front axle minus a margin (BodyCollider: 35 mm at rest), so a car

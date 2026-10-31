@@ -8,7 +8,7 @@ namespace Apex.Tests
 {
     public class TrackTests
     {
-        static readonly string[] Tracks = { "test_loop", "bosphorus_gp", "bosphorus_a" };
+        static readonly string[] Tracks = { "test_loop", "bosphorus_gp", "bosphorus_a", "bosphorus_a_classic" };
         static readonly string[] OpenTracks = { "test_loop", "bosphorus_gp" };
 
         [TestCaseSource(nameof(Tracks))]
@@ -64,24 +64,61 @@ namespace Apex.Tests
             Assert.That(corners.Count, Is.InRange(19, 21), "corner count");
         }
 
+        /// <summary>
+        /// Variant A with the Ortaköy R20 routing (approved 2026-10-31): Muallim Naci Cd. past Ortaköy Square, a 20 m
+        /// left-hand hairpin on the square's open north part, back on a parallel carriageway into the Palanga climb.
+        /// </summary>
         [Test]
         public void BosphorusVariantAMatchesTheApprovedPlan()
         {
             var def = TestData.Circuit("bosphorus_a");
             var g = TrackGeometry.FromDefinition(def);
             Assert.That(def.name, Is.EqualTo("Bosphorus Grand Prix"));
+            Assert.That(g.Length, Is.InRange(8000f, 8300f), "approved R20 length ~8.15 km");
+            Assert.That(def.cornerNames.Count, Is.EqualTo(16));
+            var corners = g.CornersFor(def);
+            Assert.That(corners.Count, Is.EqualTo(16), "approved corner count (R20)");
+            float Lap(int k) => g.Wrap(g.Distances[corners[k].index] - def.startLineDistance);
+            int Find(string name) => def.cornerNames.IndexOf(name);
+            // Ortaköy: Muallim Naci kink, right onto the square, the hairpin (left), the exit (left).
+            Assert.That(corners[Find("Muallim Naci")].right, Is.True);
+            Assert.That(corners[Find("Meydan Girişi")].right, Is.True);
+            Assert.That(corners[Find("Ortaköy Meydan Virajı")].right, Is.False);
+            Assert.That(Lap(Find("Ortaköy Meydan Virajı")), Is.InRange(2300f, 2500f));
+            Assert.That(corners[Find("Barbaros İnişi")].right, Is.True);
+            // The hairpin turns round on Ortaköy Square: 40-80 m from the mosque, never on it.
+            var mosque = def.FindLandmark("ortakoy_mosque");
+            float minMosque = float.MaxValue;
+            foreach (var p in g.Positions) minMosque = Math.Min(minMosque, (float)Math.Sqrt((p.X - mosque.east) * (p.X - mosque.east) + (p.Z - mosque.north) * (p.Z - mosque.north)));
+            Assert.That(minMosque, Is.InRange(40f, 80f), "hairpin beside the mosque, not on it");
+            AssertCommonVariantA(def, g);
+        }
+
+        /// <summary>The earlier layout (Ortaköy hairpin at the end of Çırağan Cd.), kept as bosphorus_a_classic.</summary>
+        [Test]
+        public void BosphorusClassicLayoutIsTheEarlierApprovedPlan()
+        {
+            var def = TestData.Circuit("bosphorus_a_classic");
+            var g = TrackGeometry.FromDefinition(def);
+            Assert.That(def.cityId, Is.EqualTo("bosphorus_a"), "shares the real-city data");
             Assert.That(g.Length, Is.InRange(7500f, 7800f), "approved length ~7.64 km");
-            Assert.That(def.direction, Is.EqualTo("counter_clockwise"));
-            Assert.That(def.sectorFractions.Length, Is.EqualTo(3));
             Assert.That(def.cornerNames.Count, Is.EqualTo(13));
             var corners = g.CornersFor(def);
             Assert.That(corners.Count, Is.EqualTo(13), "approved corner count");
-            for (int i = 1; i < corners.Count; i++)
-                Assert.That(g.Distances[corners[i].index], Is.Not.EqualTo(g.Distances[corners[i - 1].index]));
             // T1 Ortaköy is a left hairpin at ~2.15 km, T6 the right-hander at the bottom of Barbaros.
             Assert.That(corners[0].right, Is.False);
             Assert.That(g.Wrap(g.Distances[corners[0].index] - def.startLineDistance), Is.InRange(2050f, 2250f));
             Assert.That(corners[5].right, Is.True);
+            AssertCommonVariantA(def, g);
+        }
+
+        static void AssertCommonVariantA(CircuitDefinition def, TrackGeometry g)
+        {
+            Assert.That(def.direction, Is.EqualTo("counter_clockwise"));
+            Assert.That(def.sectorFractions.Length, Is.EqualTo(3));
+            var corners = g.CornersFor(def);
+            for (int i = 1; i < corners.Count; i++)
+                Assert.That(g.Distances[corners[i].index], Is.Not.EqualTo(g.Distances[corners[i - 1].index]));
             float minY = float.MaxValue, maxY = float.MinValue;
             foreach (var p in g.Positions) { minY = Math.Min(minY, p.Y); maxY = Math.Max(maxY, p.Y); }
             Assert.That(maxY - minY, Is.InRange(80f, 115f), "Palanga/Yıldız climb");

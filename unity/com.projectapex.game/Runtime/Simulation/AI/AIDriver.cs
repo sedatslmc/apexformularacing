@@ -116,7 +116,12 @@ namespace Apex.AI
             float k = MathF.Sqrt(PaceFactor());
             float power = line.SpeedAt(distance);
             power = power >= RacingLine.MaxSpeed - 0.01f ? float.PositiveInfinity : power * MathF.Max(1f, k);
-            float v = MathF.Min(power, line.GripSpeedAt(distance) * k);
+            // In the wet the grip part comes from a profile recomputed with the wet friction (keeps the downforce
+            // physics); only the remaining driver pace scales by its square root.
+            float grip = wet && gripFactor < 0.97f
+                ? line.GripSpeedAt(distance, gripFactor) * MathF.Sqrt(PaceFactor() / gripFactor)
+                : line.GripSpeedAt(distance) * k;
+            float v = MathF.Min(power, grip);
             return MathF.Min(v, MathF.Min(speedCap, controlSpeedCap));
         }
 
