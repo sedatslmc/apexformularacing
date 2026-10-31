@@ -1,15 +1,16 @@
 # Echte Stadt aus OpenStreetMap (Bosphorus GP, Variante A)
 
-**Stand:** 2026-10-26. **Status:** implementiert und getestet (Simulation, Kompiliertests); im Unity-Editor noch nicht gesehen.
+**Stand:** 2026-10-31. **Status:** implementiert und getestet (Simulation, Kompiliertests); im Unity-Editor noch nicht gesehen.
 
 ## 1. Daten
 - **Erzeugung:** `python3 tools/geo/build_city_a.py` schreibt `Runtime/Resources/City/bosphorus_a.json` (Radius 750 m um die Strecke).
 - **Inhalt:**
-  - 4.088 Gebäude mit Grundriss und Höhe
-  - 2.081 Straßen und Wege
-  - 277 Grünflächen
+  - 4.137 Gebäude mit Grundriss und Höhe
+  - 2.074 Straßen und Wege
+  - 278 Grünflächen
   - 47 Mauern
 - **Höhen:** aus OSM-Tags (`height`, `building:levels` × 3,2 m), sonst der Median der getaggten Nachbarn im Umkreis von 300 m, ±1 Geschoss.
+  - Bauwerke (z. B. die Pylone der Bosporusbrücke, OSM `column`, 165 m) und Höhen über 60 m zählen seit 2026-10-31 nicht mehr als Nachbarn. Vorher wurden die Häuser östlich des Ortaköy-Platzes auf 60 m geschätzt; 167 Gebäude haben jetzt eine niedrigere, plausiblere Höhe.
   - Das DEM wird für Gebäudehöhen nicht verwendet. Gegen 106 getaggte Gebäude lag es um den Faktor 2,8 zu niedrig (Korrelation 0,3).
 - **Koordinatenrahmen:** wie die Strecke: x = Ost, z = Nord, Ursprung Dolmabahçe.
 - **Lizenz:** ODbL 1.0, abgeleitete Datenbank (`ASSET_LICENSES.md`).
@@ -41,11 +42,17 @@ Straßen sind rein visuell: kein Collider, nicht befahrbar.
   - **Markisen** aus Stoff (vier Farben) über den Läden im Erdgeschoss
   - **Nur Stufe Hoch/Ultra:** Klimageräte neben einzelnen Fenstern und Türkei-Fahnen an kurzen Stangen an einigen Balkonen
 - **Stufen:** Mobil ohne Fassadenrelief, Mittel mit Balkonen, Erkern und Markisen, Hoch/Ultra mit allem.
-- **Kosten:** ca. 318.000 Dreiecke für die ganze Stadt (Stufe 2).
+- **Seit 2026-10-31 zusätzlich** (`StreetFronts`, Details in `docs/ORTAKOY_REFERENCE.md`):
+  - **Ladenschilder:** über jeder Ladenachse eine Tafel mit türkischem Branchennamen, darunter die Markise. Die Tafeln kommen aus einem Atlas mit 43 Schildern und leuchten nachts schwach.
+  - **Senkrecht hängende Türkei-Fahnen** an Balkongeländern und unter Fenstern, Mondsichel und Stern oben: an etwa jeder zehnten Straßenfront, in Ortaköy an jeder vierten.
+  - **Nur in Ortaköy (Referenzabschnitt):** Haustüren mit Steinrahmen und Vordach, steinerne Fensterbänke und Rollladenkästen über den Läden.
+  - **Stufen:** ab Mittel, wie das übrige Fassadenrelief.
+- **Kosten:** ca. 389.000 Dreiecke für die ganze Stadt (Stufe 2; vorher 318.000).
   - Das Relief liegt pro Stadtchunk auf einer eigenen nahen LOD-Stufe (Bildschirmhöhe 0,35; etwa 400 m). Weiter weg trägt die Fassadentextur allein.
 - **Test:** In `TheRealCityStandsBesideTheTrackNotOnIt` hat mehr als 40 % der Gebäude eine Straßenfront, und keine Front blickt auf ein anderes Gebäude.
 
 ## 4. Stadtleben (`CityLife`, Darstellung `CityLifeComponent`)
+- **Ortaköy (seit 2026-10-31):** In den Basargassen (OSM-Fußgängerzonen im Umkreis von 320 m um die Moschee) stehen Café-Tische mit zwei Stühlen und Sonnenschirm entlang der Hausfronten, die Gassenmitte bleibt frei; dazu einzelne Simitwagen. Im Test sind es 141 Tische und 14 Wagen, alle außerhalb von Gebäuden und mindestens 3 m von der Strecke entfernt. Erst ab Stufe Mittel.
 - **Straßenmöbel:**
   - Bänke, Mülleimer, Poller und Pflanzkübel auf den Gehwegen
   - Bushaltestellen alle ca. 300 m an Hauptstraßen

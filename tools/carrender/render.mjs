@@ -10,7 +10,8 @@ const [objPath, outPrefix, only] = process.argv.slice(2);
 const root = path.dirname(new URL(import.meta.url).pathname);
 const server = http.createServer((req, res) => {
   const url = decodeURIComponent(req.url.split('?')[0]);
-  const file = url === '/car.obj' ? objPath : path.join(root, url);
+  // /repo/... serves files of the repository (e.g. textures under Resources/).
+  const file = url === '/car.obj' ? objPath : url.startsWith('/repo/') ? path.join(root, '..', '..', url.slice(6)) : path.join(root, url);
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); res.end(); return; }
     const type = file.endsWith('.js') ? 'text/javascript' : file.endsWith('.html') ? 'text/html' : 'text/plain';

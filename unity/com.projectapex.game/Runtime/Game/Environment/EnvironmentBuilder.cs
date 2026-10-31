@@ -1339,6 +1339,21 @@ namespace Apex.Game
                 ApexMaterials.Register(EnvironmentGeometry.Awning(i), m);
             }
             ApexMaterials.Register(EnvironmentGeometry.BalconyFlag, Flag);
+            // Shop signs: the Turkish trade-name atlas (tools/signs/build_sign_atlas.py), softly lit at night.
+            var signTex = Resources.Load<Texture2D>("Textures/Signs/ShopSigns");
+            var sign = new Material(ApexMaterials.LitShader()) { name = "Env_ShopSign", enableInstancing = true };
+            if (signTex != null)
+            {
+                SetTexture(sign, "_BaseMap", "_MainTex", signTex);
+                SetTexture(sign, "_EmissionMap", null, signTex);
+            }
+            else Debug.LogWarning("Shop sign atlas Textures/Signs/ShopSigns missing: signs are plain boards.");
+            SetColour(sign, signTex != null ? Color.white : new Color(0.7f, 0.1f, 0.08f));
+            if (sign.HasProperty("_Smoothness")) sign.SetFloat("_Smoothness", 0.45f);
+            if (sign.HasProperty("_EmissionColor")) sign.SetColor("_EmissionColor", Color.black);
+            ApexMaterials.Register(EnvironmentGeometry.ShopSignAtlas, sign);
+            env.AddLight(sign, new Color(1f, 0.97f, 0.9f) * 0.8f);
+            ApexMaterials.Register(EnvironmentGeometry.Door, Solid(new Color(0.3f, 0.19f, 0.11f)));
             var fence = TrackInfrastructureBuilder.CatchFenceMaterial("Env_CatchFence");
             ApexMaterials.Register(EnvironmentGeometry.CatchFence, fence);
             // Night lights (moderate intensities: no neon, no blown-out bloom).

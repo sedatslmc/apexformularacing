@@ -142,10 +142,14 @@ def main(argv=None):
                           "historic": b.get("historic") or "", "amenity": b.get("amenity") or "",
                           "outline": [[round(x, 1), round(z, 1)] for x, z in ring], "height": h, "source": src,
                           "_c": (cx, cz), "_a": ar})
+    STRUCTURES = ("column", "bridge", "tower", "mast", "chimney", "silo", "storage_tank")
     # Neighbourhood estimate for the rest: median of tagged heights within 300 m (whole OSM extract).
     measured = []
     for t in osm["buildings"]:
-        if t.get("height") and t.get("height_source") in ("osm", "levels") and len(t["outline"]) >= 3:
+        # Structures are no neighbourhood reference: the Bosphorus Bridge towers (OSM "column", 165 m) made the
+        # houses of Ortaköy 60 m tall.
+        if (t.get("height") and t.get("height_source") in ("osm", "levels") and len(t["outline"]) >= 3
+                and (t.get("type") or "yes") not in STRUCTURES and float(t["height"]) <= 60.0):
             o = t["outline"]
             measured.append(((sum(p[0] for p in o) / len(o), sum(p[1] for p in o) / len(o)), float(t["height"])))
     mx = np.array([c for c, _ in measured]) if measured else np.zeros((0, 2))
