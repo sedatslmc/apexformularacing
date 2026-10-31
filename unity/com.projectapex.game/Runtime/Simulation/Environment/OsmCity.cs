@@ -621,8 +621,12 @@ namespace Apex.Environment
         /// <summary>
         /// Land with neither buildings nor streets (wooded hillsides, palace grounds, parks that OSM holds only as
         /// relations, such as Yıldız Park) gets natural tree cover: dense inside the circuit's park landmarks
-        /// (umbrella pines and planes), scattered elsewhere. Only within the real-city radius.
+        /// (umbrella pines and planes), sparse elsewhere (8 %, earlier 30 % made a uniform forest), and none within
+        /// <see cref="OpenCoastBand"/> of the coast. Only within the real-city radius.
         /// </summary>
+        /// <summary>Strip behind the coast kept free of filler trees (real gardens and street trees still grow there).</summary>
+        public const float OpenCoastBand = 40f;
+
         void PlantOpenLand(CityData data, CircuitDefinition def, int quality)
         {
             float spacing = quality == 0 ? 16f : quality == 1 ? 12f : 10f;
@@ -638,8 +642,11 @@ namespace Apex.Environment
                     bool park = false;
                     foreach (var l in parks)
                         if ((px - l.east) * (px - l.east) + (pz - l.north) * (pz - l.north) < 230f * 230f) park = true;
-                    float density = park ? 0.9f : 0.3f;
+                    // Dense only in the circuit's park landmarks (Yıldız Park, which OSM holds as a relation); elsewhere
+                    // a few scattered trees, none on the first 40 m behind the quays (open views onto the Bosphorus).
+                    float density = park ? 0.9f : 0.08f;
                     if (LandModel.Hash((int)(px * 5), (int)(pz * 5)) * 0.5f + 0.5f > density) continue;
+                    if (!park && field.land.HasLand && field.land.CoastDistance(px, pz) < OpenCoastBand) continue;
                     if (NearBuilding(px, pz, 6f) || StreetDistance(px, pz) < 3f) continue;
                     AddTree(px, pz, park && LandModel.Hash((int)px, (int)pz) < -0.2f ? 1 : 0);
                 }

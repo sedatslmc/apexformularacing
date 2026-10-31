@@ -375,6 +375,57 @@ namespace Apex.Game
             }
         }
 
+        /// <summary>
+        /// The Bosphorus edge from <see cref="Waterfront"/>: stone quay walls from 3 m below the water to the quay top
+        /// with a coping stone; on the promenade sections paving (world UVs, 3 m pavers), the inland kerb face, an
+        /// iron railing along the water, mooring bollards and promenade lamps (lamp heads glow at night).
+        /// level 0 (mobile): walls, coping and paving only.
+        /// </summary>
+        public static void WaterfrontEdge(Parts B, Waterfront wf, int level)
+        {
+            foreach (var s in wf.segments)
+            {
+                var a = new Vector3(s.a.X, 0f, s.a.Y);
+                var b = new Vector3(s.b.X, 0f, s.b.Y);
+                var inl = new Vector3(s.inland.X, 0f, s.inland.Y);
+                float len = (b - a).magnitude, t = s.top;
+                B(Quay).QuadFacing(Up(a, -3f), Up(b, -3f), Up(b, t - 0.25f), Up(a, t - 0.25f),
+                    new Vector2(0f, 0f), new Vector2(len / 4f, 0f), new Vector2(len / 4f, 1f), new Vector2(0f, 1f), -inl);
+                var o = -inl * 0.08f;
+                B(LandmarkGeometry.Stone).QuadFacing(Up(a, t - 0.25f) + o, Up(b, t - 0.25f) + o, Up(b, t + 0.05f) + o, Up(a, t + 0.05f) + o,
+                    Vector2.zero, Vector2.right, Vector2.one, Vector2.up, -inl);
+                B(LandmarkGeometry.Stone).QuadFacing(Up(a, t + 0.05f) + o, Up(b, t + 0.05f) + o, Up(b + inl * 0.6f, t + 0.05f), Up(a + inl * 0.6f, t + 0.05f),
+                    Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                if (!s.promenade) continue;
+                float w = Waterfront.PromenadeWidth;
+                Vector2 Uv(Vector3 p) => new Vector2(p.x, p.z) / 3f;
+                Vector3 p0 = Up(a + inl * 0.6f, t + 0.03f), p1 = Up(b + inl * 0.6f, t + 0.03f), p2 = Up(b + inl * w, t + 0.03f), p3 = Up(a + inl * w, t + 0.03f);
+                B(Pavement).QuadFacing(p0, p1, p2, p3, Uv(p0), Uv(p1), Uv(p2), Uv(p3), Vector3.up);
+                B(Concrete).QuadFacing(Up(a + inl * w, t - 1.5f), Up(b + inl * w, t - 1.5f), p2, p3, Vector2.zero, Vector2.right, Vector2.one, Vector2.up, inl);
+                if (level <= 0) continue;
+                // Railing along the water: two rails and a post per 6 m piece.
+                var r0 = a + inl * 0.3f; var r1 = b + inl * 0.3f;
+                B(LandmarkGeometry.Lead).Tube(Up(r0, t + 1.05f), Up(r1, t + 1.05f), 0.035f, 5, false);
+                B(LandmarkGeometry.Lead).Tube(Up(r0, t + 0.5f), Up(r1, t + 0.5f), 0.02f, 4, false);
+                B(LandmarkGeometry.Lead).Box(Up(r0, t + 0.55f), new Vector3(0.06f, 1.1f, 0.06f));
+            }
+            if (level <= 0) return;
+            foreach (var p in wf.bollards)
+            {
+                var c = new Vector3(p.X, p.Y, p.Z);
+                B(LandmarkGeometry.Lead).Tube(c, c + Vector3.up * 0.55f, 0.13f, 8, true);
+                B(LandmarkGeometry.Lead).Tube(c + Vector3.up * 0.55f, c + Vector3.up * 0.62f, 0.18f, 8, true);
+            }
+            foreach (var (foot, sea) in wf.lamps)
+            {
+                var f = new Vector3(foot.X, foot.Y, foot.Z);
+                var s = new Vector3(sea.X, 0f, sea.Y);
+                B(DarkSteel).Tube(f, f + Vector3.up * 4.6f, 0.07f, 6, true);
+                B(DarkSteel).Tube(f + Vector3.up * 4.5f, f + Vector3.up * 4.5f + s * 0.8f, 0.04f, 4, false);
+                B(LampHead).Box(f + Vector3.up * 4.35f + s * 0.8f, new Vector3(0.45f, 0.3f, 0.45f));
+            }
+        }
+
         /// <summary>Tree at the origin, 1 m tall (scaled per instance): trunk and crown builders.</summary>
         public static void TreeMesh(int kind, MeshBuilder trunk, MeshBuilder crown)
         {

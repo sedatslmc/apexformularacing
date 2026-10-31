@@ -81,6 +81,7 @@ namespace Apex.Game
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
             }
+            Safe("waterfront edge", () => BuildWaterEdge(root.transform, ci, osm));
             Safe("generic city", () => BuildCity(root.transform, city));
             Safe("trees", () => BuildTrees(root.transform, env, city));
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
@@ -202,10 +203,53 @@ namespace Apex.Game
             coastTex.SetPixelData(coast.Encode(WaterOptics.CoastMaxDistance), 0);
             coastTex.Apply(false, true);
             wc.SetCoast(coastTex, new Vector4(minX, minZ, 1f / coastSize, 1f / coastSize));
+            // Without land outlines the simple quay along the shorelines; with them BuildWaterEdge follows the coastline.
+            if (field.land.HasLand) return;
             var quay = new MeshBuilder();
             EnvironmentGeometry.QuayWall(quay, def.shoreline, true);
             if (def.farShoreline.Count > 1) EnvironmentGeometry.QuayWall(quay, def.farShoreline, false);
             AddMeshObject(root, "QuayWalls", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.Quay] = quay }, false);
+        }
+
+        /// <summary>
+        /// Quays and promenade along the real coastline (Waterfront), chunked so distant pieces cull; the promenade
+        /// keeps clear of buildings and of the landmark terraces (Ortaköy Mosque).
+        /// </summary>
+        static void BuildWaterEdge(Transform root, CircuitInstance ci, OsmCity osm)
+        {
+            var def = ci.Definition;
+            var mosque = def.FindLandmark("ortakoy_mosque");
+            bool Blocked(float x, float z)
+            {
+                if (osm != null && osm.InsideBuilding(x, z, 0f)) return true;
+                if (mosque != null && (x - mosque.east) * (x - mosque.east) + (z - mosque.north) * (z - mosque.north) < 45f * 45f) return true;
+                return false;
+            }
+            var wf = new Waterfront(ci.Terrain, ci.Clearance, Blocked);
+            var edgeRoot = new GameObject("Waterfront").transform;
+            edgeRoot.SetParent(root, false);
+            const float size = 256f;
+            var chunks = new Dictionary<(int, int), Waterfront>();
+            // Split by chunk: one Waterfront-shaped bucket per cell (segments, bollards, lamps).
+            Waterfront Bucket(float x, float z)
+            {
+                var key = (Mathf.FloorToInt(x / size), Mathf.FloorToInt(z / size));
+                if (!chunks.TryGetValue(key, out var b)) chunks[key] = b = Waterfront.Empty();
+                return b;
+            }
+            foreach (var sgm in wf.segments) Bucket(sgm.a.X, sgm.a.Y).segments.Add(sgm);
+            foreach (var p in wf.bollards) Bucket(p.X, p.Z).bollards.Add(p);
+            foreach (var l in wf.lamps) Bucket(l.foot.X, l.foot.Z).lamps.Add(l);
+            foreach (var kv in chunks)
+            {
+                var parts = new PartSet();
+                EnvironmentGeometry.WaterfrontEdge(parts.B, kv.Value, Mathf.Clamp(Quality, 0, 2));
+                var go = AddMeshObject(edgeRoot, $"Waterfront_{kv.Key.Item1}_{kv.Key.Item2}", parts.parts, true);
+                var lg = go.AddComponent<LODGroup>();
+                lg.SetLODs(new[] { new LOD(0.01f, new Renderer[] { go.GetComponent<Renderer>() }) });
+                lg.RecalculateBounds();
+            }
+            Debug.Log($"[Apex] Waterfront: {wf.quayLength / 1000f:F1} km quay, {wf.promenadeLength / 1000f:F1} km promenade, {wf.bollards.Count} bollards, {wf.lamps.Count} lamps.");
         }
 
         // --- City -------------------------------------------------------------------------------

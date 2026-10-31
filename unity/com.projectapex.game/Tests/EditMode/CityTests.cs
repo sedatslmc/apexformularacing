@@ -182,6 +182,46 @@ namespace Apex.Tests
                     Assert.That(clear.Margin(p.X, p.Y), Is.GreaterThanOrEqualTo(OsmCity.BuildingClearance), b.name);
         }
 
+        /// <summary>
+        /// The land/water edge is the OSM coastline (tools/geo/osm_land.py), not the DEM 0 m contour that ran up to
+        /// 450 m out into the Bosphorus: the waterfront landmarks stand at the water, quays follow the coast, and the
+        /// promenade never reaches the circuit.
+        /// </summary>
+        [Test]
+        public void TheWaterfrontLandmarksStandAtTheRealCoast()
+        {
+            var (def, field, clear, _, city) = World();
+            var land = field.land;
+            foreach (var (id, maxCoast) in new[] { ("ortakoy_mosque", 40f), ("ciragan", 60f) })
+            {
+                var l = def.FindLandmark(id);
+                float d = land.CoastDistance(l.east, l.north);
+                TestContext.WriteLine($"{id}: {d:F0} m from the coast");
+                Assert.That(land.IsLand(l.east, l.north), Is.True, id + " on land");
+                Assert.That(d, Is.LessThan(maxCoast), id + " at the waterfront");
+            }
+            // Dolmabahçe: the palace wings stand within 100 m of the quay.
+            foreach (var b in city.buildings.FindAll(x => x.name.Contains("Selamlık") || x.name.Contains("Harem")))
+            {
+                var c = Centre(b.outline);
+                Assert.That(land.CoastDistance(c.X, c.Y), Is.LessThan(110f), b.name);
+            }
+            var wf = new Waterfront(field, clear, (x, z) => city.InsideBuilding(x, z, 0f));
+            TestContext.WriteLine($"{wf.quayLength / 1000f:F1} km quay, {wf.promenadeLength / 1000f:F1} km promenade, {wf.bollards.Count} bollards, {wf.lamps.Count} lamps");
+            Assert.That(wf.quayLength, Is.GreaterThan(4000f));
+            Assert.That(wf.promenadeLength, Is.GreaterThan(1500f));
+            foreach (var sg in wf.segments)
+            {
+                Assert.That(sg.top, Is.InRange(Waterfront.MinTop, Waterfront.MaxTop));
+                if (!sg.promenade) continue;
+                var q = (sg.a + sg.b) * 0.5f + sg.inland * Waterfront.PromenadeWidth;
+                Assert.That(clear.Margin(q.X, q.Y), Is.GreaterThan(1.9f), "promenade into the circuit");
+                Assert.That(land.IsLand(q.X, q.Y), Is.True, "promenade over the water");
+            }
+            // Nothing planted on the water.
+            foreach (var t in city.trees) Assert.That(field.IsWater(t.x, t.z), Is.False, $"tree on the water at {t.x:F0},{t.z:F0}");
+        }
+
         static Vector2 Centre(List<Vector2> o)
         {
             var c = Vector2.Zero;
