@@ -472,6 +472,45 @@ if (Array.IndexOf(args, "--environment") >= 0)
                     Wb(kv.Key).Append(kv.Value, v => new Vector3(v.x * cy + v.z * sy + pr.position.X - fx, v.y + pr.position.Y, -v.x * sy + v.z * cy + pr.position.Z - fz));
             }
             Console.WriteLine($"{nProps} street props in the window");
+            // The terrain of the window on a 2 m grid (the game's ground surface; streets are drawn on it).
+            {
+                var gm = Wb("Ground");
+                const float gc = 2f;
+                for (float gx = fx - 140f; gx < fx + 140f; gx += gc)
+                    for (float gz = fz - 140f; gz < fz + 140f; gz += gc)
+                    {
+                        if (field.IsWater(gx + gc * 0.5f, gz + gc * 0.5f)) continue;
+                        Vector3 T(float x, float z) => new Vector3(x, field.Height(x, z), z);   // Wb offsets by (-fx, -fz)
+                        gm.QuadFacing(T(gx, gz), T(gx + gc, gz), T(gx + gc, gz + gc), T(gx, gz + gc), Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                    }
+            }
+            // People and cats of the window: café guests, street cats, the standing trackside crowd.
+            void PutMesh(Action<EnvironmentGeometry.Parts> build, System.Numerics.Vector3 pos, float yaw, float scale)
+            {
+                var tmp = new Dictionary<string, MeshBuilder>();
+                build(k => tmp.TryGetValue(k, out var mb) ? mb : tmp[k] = new MeshBuilder());
+                float cy = MathF.Cos(yaw), sy = MathF.Sin(yaw);
+                foreach (var kv in tmp)
+                    Wb(kv.Key).Append(kv.Value, v => new Vector3((v.x * cy + v.z * sy) * scale + pos.X - fx, v.y * scale + pos.Y, (-v.x * sy + v.z * cy) * scale + pos.Z - fz));
+            }
+            bool InWin(System.Numerics.Vector3 q) => (q.X - fx) * (q.X - fx) + (q.Z - fz) * (q.Z - fz) < 140f * 140f;
+            foreach (var gs in life.guests)
+                if (InWin(gs.position)) PutMesh(B => EnvironmentGeometry.SeatedPerson(B, "CityShirt" + gs.kind % 6, "CityTrousers" + gs.variant % 3), gs.position, gs.yaw, 1f);
+            foreach (var ct in life.cats)
+                if (InWin(ct.position)) PutMesh(B => EnvironmentGeometry.Cat(B, (Apex.Environment.CityLife.CatPose)ct.kind, EnvironmentGeometry.CatCoat(ct.variant % 4)), ct.position, ct.yaw, 1f);
+            if (osm.OrtakoyCentre.HasValue)
+            {
+                var crowd = new Apex.Environment.TracksideCrowd(g, new Apex.Tracks.TrackClearance(rs), field, osm, life.props, osm.OrtakoyCentre.Value, Apex.Environment.StreetFronts.OrtakoyRadius, 2);
+                int nf = 0;
+                foreach (var f in crowd.fans)
+                {
+                    if (!InWin(f.position)) continue;
+                    nf++;
+                    string shirt = f.rnd > 0.65f ? "FanRed" : f.rnd > 0.3f ? "FanWhite" : "CityShirt" + (int)((f.rnd + 1f) * 3f) % 6;
+                    PutMesh(B => { var sh = B(shirt); var sk = B(EnvironmentGeometry.Skin); EnvironmentGeometry.SpectatorMesh(sh, sk); }, f.position, f.yaw, 1.62f + MathF.Abs(f.rnd) * 0.25f);
+                }
+                Console.WriteLine($"trackside crowd: {crowd.fans.Count} fans ({nf} in the window), {life.guests.Count} café guests, {life.cats.Count} cats");
+            }
             var sbw = new StringBuilder();
             int vbw = 1;
             foreach (var kv in win)

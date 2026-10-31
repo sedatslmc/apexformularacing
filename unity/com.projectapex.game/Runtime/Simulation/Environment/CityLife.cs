@@ -99,6 +99,12 @@ namespace Apex.Environment
 
         public readonly List<Placed> props = new List<Placed>();
         public readonly List<Placed> parked = new List<Placed>();
+        /// <summary>Guests sitting at Ortaköy's café tables (kind = shirt colour, variant = trousers), facing the table.</summary>
+        public readonly List<Placed> guests = new List<Placed>();
+        /// <summary>Istanbul's street cats (kind = <see cref="CatPose"/>, variant = coat).</summary>
+        public readonly List<Placed> cats = new List<Placed>();
+        public enum CatPose { Sitting, Lying }
+        public const int CatCoats = 4, GuestShirts = 6;
         public readonly List<Mover> pedestrians = new List<Mover>();
         public readonly List<Mover> vehicles = new List<Mover>();
 
@@ -285,11 +291,28 @@ namespace Apex.Environment
                             var p = run[i] + d * (next - run0) + right * (lateral * side);
                             var kind = rng.NextDouble() < 0.07 ? Prop.SimitCart : Prop.CafeSet;
                             if (Vector2.Distance(p, centre) < StreetFronts.OrtakoyRadius && Free(p, kind == Prop.SimitCart ? 1.2f : 1.0f))
-                                props.Add(new Placed
+                            {
+                                float y = field.Height(p.X, p.Y) + StreetNetwork.Lift + 0.03f, yaw = MathF.Atan2(d.X, d.Y);
+                                props.Add(new Placed { position = new Vector3(p.X, y, p.Y), yaw = yaw, kind = (int)kind, variant = rng.Next(4) });
+                                if (kind == Prop.CafeSet)
                                 {
-                                    position = new Vector3(p.X, field.Height(p.X, p.Y) + StreetNetwork.Lift + 0.03f, p.Y),
-                                    yaw = MathF.Atan2(d.X, d.Y), kind = (int)kind, variant = rng.Next(4),
-                                });
+                                    // Guests on the chairs (0.55 m either side along the lane), facing the table.
+                                    foreach (float z in new[] { -0.55f, 0.55f })
+                                        if (rng.NextDouble() < 0.55)
+                                        {
+                                            var q = p + d * z;
+                                            guests.Add(new Placed { position = new Vector3(q.X, y, q.Y), yaw = z < 0f ? yaw : yaw + MathF.PI, kind = rng.Next(GuestShirts), variant = rng.Next(3) });
+                                        }
+                                    // A cat under or beside the table now and then (Ortaköy's café cats).
+                                    if (rng.NextDouble() < 0.18)
+                                    {
+                                        var q = p - right * (side * 0.9f) + d * (0.6f * (float)(rng.NextDouble() * 2.0 - 1.0));
+                                        if (Free(q, 0.2f))
+                                            cats.Add(new Placed { position = new Vector3(q.X, field.Height(q.X, q.Y) + StreetNetwork.Lift + 0.03f, q.Y), yaw = (float)(rng.NextDouble() * Math.PI * 2.0),
+                                                kind = rng.NextDouble() < 0.5 ? (int)CatPose.Sitting : (int)CatPose.Lying, variant = rng.Next(CatCoats) });
+                                    }
+                                }
+                            }
                             next += 5f + 3f * (float)rng.NextDouble();
                         }
                         run0 += seg;

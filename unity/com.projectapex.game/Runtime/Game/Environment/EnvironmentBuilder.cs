@@ -76,7 +76,13 @@ namespace Apex.Game
             {
                 Safe("OSM buildings", () => BuildOsmCity(root.transform, osm));
                 Safe("streets", () => BuildStreets(root.transform, new StreetNetwork(cityData, field, ci.Clearance, q)));
-                Safe("city life", () => BuildCityLife(root.transform, new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240), q));
+                CityLife life = null;
+                Safe("city life", () =>
+                {
+                    life = new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240);
+                    BuildCityLife(root.transform, life, q);
+                });
+                if (osm.OrtakoyCentre.HasValue) Safe("trackside crowd", () => BuildTracksideCrowd(root.transform, env, ci, osm, life, q, reserved));
                 allLots.AddRange(osm.AsLots());
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
@@ -329,6 +335,24 @@ namespace Apex.Game
             c.shadowDistance = q == 0 ? 0f : q == 1 ? 80f : 140f;
             c.Setup(life);
             Debug.Log($"[Apex] City life: {life.props.Count} props, {life.parked.Count} parked cars, {life.pedestrians.Count} pedestrians, {life.vehicles.Count} vehicles.");
+        }
+
+        /// <summary>
+        /// Standing fans behind the barriers of the Ortaköy section (TracksideCrowd), drawn like the grandstand crowd;
+        /// many wave Turkish hand flags and they cheer when cars pass.
+        /// </summary>
+        static void BuildTracksideCrowd(Transform root, EnvironmentInstance env, CircuitInstance ci, OsmCity osm, CityLife life, int q, List<CityLayout.Reserved> reserved)
+        {
+            var crowd = new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, life != null ? life.props : null,
+                osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q, reserved);
+            if (crowd.fans.Count == 0) return;
+            var go = new GameObject("TracksideCrowd");
+            go.transform.SetParent(root, false);
+            var c = go.AddComponent<CrowdComponent>();
+            c.env = env;
+            c.handFlagShare = 0.45f;
+            foreach (var f in crowd.fans) c.Add(V(f.position), f.yaw * Mathf.Rad2Deg, f.rnd);
+            Debug.Log($"[Apex] Trackside crowd (Ortaköy): {crowd.fans.Count} fans.");
         }
 
         /// <summary>LOD screen heights of the palace buildings (per building, they are up to 140 m long).</summary>

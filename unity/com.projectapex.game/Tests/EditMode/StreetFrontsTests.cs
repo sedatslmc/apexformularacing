@@ -99,9 +99,17 @@ namespace Apex.Tests
             var surface = new RoadSurface(g, def, plan.kerbs.left, plan.kerbs.right, plan.kerbs.height);
             var city = new OsmCity(TestData.City("bosphorus_a"), new TerrainField(g, def), new TrackClearance(surface), def, null, 1);
             var mosque = def.FindLandmark("ortakoy_mosque");
-            int quarter = 0, fronts = 0;
+            int quarter = 0, fronts = 0, uphill = 0;
             foreach (var b in city.buildings)
             {
+                // Each facade's ground floor starts at its own street (between the footprint's lowest corner and
+                // two storeys below the roof).
+                for (int i = 0; i < b.outline.Count; i++)
+                {
+                    Assert.That(b.level[i], Is.GreaterThanOrEqualTo(b.ground + 0.6f - 1e-3f));
+                    Assert.That(b.level[i], Is.LessThanOrEqualTo(MathF.Max(b.ground + 0.6f, b.ground + b.height - 2f * CityLayout.FloorHeight) + 1e-3f));
+                    if (b.ortakoy && b.front[i] && b.level[i] > b.ground + 0.6f + 1f) uphill++;
+                }
                 var c = System.Numerics.Vector2.Zero;
                 foreach (var p in b.outline) c += p;
                 c /= b.outline.Count;
@@ -113,7 +121,8 @@ namespace Apex.Tests
                     if (b.front != null && Array.IndexOf(b.front, true) >= 0) fronts++;
                 }
             }
-            TestContext.WriteLine($"Ortaköy quarter: {quarter} buildings, {fronts} with street fronts");
+            TestContext.WriteLine($"Ortaköy quarter: {quarter} buildings, {fronts} with street fronts, {uphill} uphill fronts above the lowest corner");
+            Assert.That(uphill, Is.GreaterThan(20), "on Ortaköy's slope the uphill shop fronts start at their own street");
             Assert.That(quarter, Is.GreaterThan(80), "the bazaar lanes and Muallim Naci Cd. around the square");
             Assert.That(fronts, Is.GreaterThan(quarter / 2));
         }

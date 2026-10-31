@@ -219,6 +219,13 @@ namespace Apex.Environment
             public int classical;
             /// <summary>Per outline edge (edge i runs from outline[i] to outline[i + 1]): faces a street or the circuit.</summary>
             public bool[] front;
+            /// <summary>
+            /// Per outline edge: street level in front of it (terrain 1.5 m outside the facade). On a slope the ground
+            /// floor (shop row, doors, signs) of each facade starts at its own street, not at the lowest corner of the
+            /// footprint; the walls still reach down to <see cref="ground"/> (a plinth on the downhill side).
+            /// Between ground + 0.6 and two storeys below the roof.
+            /// </summary>
+            public float[] level;
         }
 
         public const int NotClassical = 0, PalaceWing = 1, PalaceDependency = 2, ClockTower = 3, RowHouse = 4, Gate = 5;
@@ -321,13 +328,20 @@ namespace Apex.Environment
                 var b = buildings[k];
                 int n = b.outline.Count;
                 b.front = new bool[n];
+                b.level = new float[n];
+                float lowest = b.ground + 0.6f, highest = MathF.Max(lowest, b.ground + 0.6f + b.height - 2f * CityLayout.FloorHeight - 0.6f);
                 for (int i = 0; i < n; i++)
                 {
                     var a = b.outline[i]; var c = b.outline[(i + 1) % n];
                     var e = c - a;
                     float len = e.Length();
-                    if (len < 3f) continue;
+                    b.level[i] = lowest;
+                    if (len < 0.05f) continue;
                     var outward = new Vector2(e.Y, -e.X) / len;
+                    var street = (a + c) * 0.5f + outward * 1.5f;
+                    if (b.classical == NotClassical && !field.IsWater(street.X, street.Y))
+                        b.level[i] = ApexMath.Clamp(field.Height(street.X, street.Y), lowest, highest);
+                    if (len < 3f) continue;
                     var p = (a + c) * 0.5f + outward * 3f;
                     // Not where a neighbour stands in front of the facade (balconies would cut into its roof).
                     bool open = true;

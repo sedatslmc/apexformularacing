@@ -29,6 +29,11 @@ namespace Apex.Game
             new Color(0.85f, 0.85f, 0.84f), new Color(0.12f, 0.16f, 0.28f), new Color(0.5f, 0.12f, 0.12f),
             new Color(0.2f, 0.2f, 0.21f), new Color(0.55f, 0.48f, 0.36f), new Color(0.25f, 0.4f, 0.48f),
         };
+        /// <summary>Street cats: ginger tabby, black, grey tabby, white with patches (one colour each here).</summary>
+        static readonly Color[] CatCoats =
+        {
+            new Color(0.78f, 0.45f, 0.2f), new Color(0.06f, 0.06f, 0.07f), new Color(0.48f, 0.46f, 0.43f), new Color(0.88f, 0.86f, 0.82f),
+        };
         static readonly Color[] TrouserColours =
         {
             new Color(0.12f, 0.14f, 0.2f), new Color(0.08f, 0.08f, 0.09f), new Color(0.42f, 0.38f, 0.3f),
@@ -87,6 +92,18 @@ namespace Apex.Game
                 AddStatic(KindFor("Prop" + p.kind + "_" + variant, B => EnvironmentGeometry.StreetProp(B, prop, variant)), V(p.position), p.yaw);
             }
             foreach (var p in life.parked) AddStatic(VehicleKind(p.kind, p.variant, true), V(p.position), p.yaw);
+            // Ortaköy: guests at the café tables and the street cats (static, instanced like the furniture).
+            foreach (var p in life.guests)
+            {
+                int shirt = p.kind % ShirtColours.Length, trousers = p.variant % TrouserColours.Length;
+                AddStatic(KindFor("Guest" + shirt + "_" + trousers, B => EnvironmentGeometry.SeatedPerson(B, "CityShirt" + shirt, "CityTrousers" + trousers)), V(p.position), p.yaw);
+            }
+            foreach (var p in life.cats)
+            {
+                var pose = (CityLife.CatPose)p.kind;
+                int coat = p.variant % CatCoats.Length;
+                AddStatic(KindFor("Cat" + p.kind + "_" + coat, B => EnvironmentGeometry.Cat(B, pose, EnvironmentGeometry.CatCoat(coat))), V(p.position), p.yaw);
+            }
             foreach (var b in statics)
             {
                 b.matrices = b.list.ToArray();
@@ -134,6 +151,7 @@ namespace Apex.Game
             EnsureColour("CityBus", BusColour);
             for (int i = 0; i < ShirtColours.Length; i++) EnsureColour("CityShirt" + i, ShirtColours[i]);
             for (int i = 0; i < TrouserColours.Length; i++) EnsureColour("CityTrousers" + i, TrouserColours[i]);
+            for (int i = 0; i < CatCoats.Length; i++) EnsureColour(EnvironmentGeometry.CatCoat(i), CatCoats[i]);
         }
 
         /// <summary>Mesh kind of a vehicle; parked ones get unlit lamp lenses so they stay dark at night.</summary>
