@@ -639,6 +639,28 @@ else if (mode == "terrain-line")
         Console.WriteLine($"{x,7:F0} {z,7:F0}  h {field.Height(x, z),6:F2}  water {field.IsWater(x, z)}  track dist {td,6:F1}");
     }
 }
+else if (mode == "mosque-terrace")
+{
+    // Ortaköy Mosque quay terrace (LandmarkModels: 44 x 54 m box around (0, -9) in the model frame) against the
+    // racing envelope: smallest margin beyond the barrier line over a 1 m grid of the terrace.
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/" + (args.Length > 1 ? args[1] : "bosphorus_a") + ".json"));
+    var bed = new CircuitTestBed(def);
+    var clr = new TrackClearance(bed.surface);
+    var l = def.FindLandmark("ortakoy_mosque");
+    float yaw = 140.8f * MathF.PI / 180f, cs = MathF.Cos(yaw), sn = MathF.Sin(yaw);
+    (float x, float z) W(float lx, float lz) => (l.east + lx * cs + lz * sn, l.north - lx * sn + lz * cs);
+    var o = W(0.46f, 16.1f);
+    float best = float.MaxValue, bx = 0, bz = 0;
+    for (float lx = -22f; lx <= 22f; lx += 1f)
+        for (float lz = -36f; lz <= 18f; lz += 1f)
+        {
+            var (wx, wz) = W(0.46f + lx * 1f, 16.1f + lz);
+            float m = clr.Margin(wx, wz);
+            if (m < best) { best = m; bx = wx; bz = wz; }
+        }
+    Console.WriteLine($"terrace origin {o.x:F1},{o.z:F1}; smallest margin to the barrier line {best:F1} m at {bx:F0},{bz:F0}");
+}
 else if (mode == "clearance-buildings")
 {
     // OSM buildings the track's keep-out envelope displaces (OsmCity rule: every corner and edge midpoint at least

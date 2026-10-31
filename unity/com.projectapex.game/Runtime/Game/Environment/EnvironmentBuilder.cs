@@ -400,6 +400,11 @@ namespace Apex.Game
                     float h = b.height;
                     PlaceDetailed(palaceRoot, "osm_classical_" + s, name, h, g => g.GateMonument(width, depth, h), pos, yaw, PalaceLods);
                 }
+                else if (b.classical == OsmCity.BrickShell)
+                {
+                    float h = b.height;
+                    PlaceDetailed(palaceRoot, "osm_classical_" + s, name, h, g => g.BrickShellYali(local, h, s), pos, 0f, PalaceLods);
+                }
                 else if (b.classical == OsmCity.ClockTower)
                 {
                     // Faces square to the longest footprint edge.
@@ -1390,11 +1395,17 @@ namespace Apex.Game
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeRed), new Color(0.89f, 0.04f, 0.09f) * 1.3f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.BridgeWhite), new Color(1f, 0.97f, 0.92f) * 2.4f);
             env.AddLight(ApexMaterials.Get(EnvironmentGeometry.TowerGlass), new Color(0.32f, 0.33f, 0.3f));
+            // The Ortaköy Mosque's windows glow warm from the lit prayer hall at night (chandeliers behind the glass).
+            env.AddLight(ApexMaterials.Get(LandmarkGeometry.MosqueGlass), new Color(1f, 0.74f, 0.4f) * 1.3f);
             // Textured stone for the landmark models; on failure the plain palette materials stay in use.
             try
             {
                 ApexMaterials.Register(LandmarkGeometry.Marble, MasonryMaterial("Env_MarbleAshlar", LandmarkGeometry.Marble, MasonryTextures.Marble(512), MasonryTextures.MarbleTile, 0.42f, 0.8f));
                 ApexMaterials.Register(LandmarkGeometry.RowPlaster, MasonryMaterial("Env_LimePlaster", LandmarkGeometry.RowPlaster, MasonryTextures.Plaster(256), MasonryTextures.PlasterTile, 0.15f, 0.5f));
+                // Brick carries its full colour in the texture (mortar and burnt bricks), so the material colour is white.
+                var brick = MasonryMaterial("Env_Brick", LandmarkGeometry.Brick, MasonryTextures.Brick(512), MasonryTextures.BrickTile, 0.12f, 1f);
+                SetColour(brick, Color.white);
+                ApexMaterials.Register(LandmarkGeometry.Brick, brick);
             }
             catch (System.Exception e) { Debug.LogException(e); }
             foreach (var key in new[] { LandmarkGeometry.Stone, LandmarkGeometry.Marble, LandmarkGeometry.HagiaPlaster })

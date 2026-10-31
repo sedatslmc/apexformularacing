@@ -220,6 +220,16 @@ namespace Apex.Tests
             foreach (var b in wings)
                 foreach (var p in b.outline)
                     Assert.That(clear.Margin(p.X, p.Y), Is.GreaterThanOrEqualTo(OsmCity.BuildingClearance), b.name);
+            // Ortaköy: the Esma Sultan Yalısı is its own model (brick shell), 15 m; houses of worship never get shop
+            // fronts (the Etz Ahayim Synagogue beside the circuit carried shop signs while every amenity counted as a shop).
+            var esma = city.buildings.FindAll(b => b.classical == OsmCity.BrickShell);
+            Assert.That(esma.Count, Is.EqualTo(1));
+            Assert.That(esma[0].name, Does.Contain("Esma Sultan"));
+            Assert.That(esma[0].height, Is.EqualTo(15f));
+            var synagogue = city.buildings.Find(b => b.name != null && b.name.Contains("Sinagog"));
+            Assert.That(synagogue.outline, Is.Not.Null, "the Etz Ahayim Synagogue stands");
+            Assert.That(synagogue.worship && !synagogue.shop && synagogue.historic, Is.True);
+            foreach (var b in city.buildings) if (b.worship) Assert.That(b.shop, Is.False, b.name);
         }
 
         /// <summary>

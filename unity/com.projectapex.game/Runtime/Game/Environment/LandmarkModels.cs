@@ -22,7 +22,7 @@ namespace Apex.Game
         /// <summary>Metric box-projected UVs on the textured masonry materials (marble ashlar, lime plaster).</summary>
         public void MasonryUVs()
         {
-            foreach (var key in new[] { Marble, RowPlaster })
+            foreach (var key in new[] { Marble, RowPlaster, Brick })
                 if (parts.TryGetValue(key, out var mb)) mb.MetricUVs();
         }
 
@@ -87,7 +87,7 @@ namespace Apex.Game
         {
             float r = width * 0.5f;
             int seg = ArcSeg(r);
-            Panel(B(Glass), ArchOutline(cx, y0, width, spring, seg), 0.04f, 0.06f);
+            Panel(B(windowGlass), ArchOutline(cx, y0, width, spring, seg), 0.04f, 0.06f);
             if (detail >= 2) return;
             ArchBand(B(wall), cx, spring, r, r + frame, 0f, 0.14f, seg);
             foreach (float s in new[] { -1f, 1f })
@@ -111,7 +111,7 @@ namespace Apex.Game
         /// <summary>Rectangular window with an architrave frame and a cornice-like lintel.</summary>
         public void RectWindow(string wall, float cx, float y0, float width, float height, float frame = 0.18f)
         {
-            Panel(B(Glass), new[] { new Vector2(cx - width * 0.5f, y0), new Vector2(cx + width * 0.5f, y0), new Vector2(cx + width * 0.5f, y0 + height), new Vector2(cx - width * 0.5f, y0 + height) }, 0.04f, 0.06f);
+            Panel(B(windowGlass), new[] { new Vector2(cx - width * 0.5f, y0), new Vector2(cx + width * 0.5f, y0), new Vector2(cx + width * 0.5f, y0 + height), new Vector2(cx - width * 0.5f, y0 + height) }, 0.04f, 0.06f);
             if (detail >= 2) return;
             foreach (float s in new[] { -1f, 1f })
                 B(wall).Box(new Vector3(cx + s * (width + frame) * 0.5f, y0 + height * 0.5f, 0.06f), new Vector3(frame, height + frame * 2f, 0.12f));
@@ -263,6 +263,13 @@ namespace Apex.Game
         /// </summary>
         public void OrtakoyMosqueDetailed()
         {
+            windowGlass = MosqueGlass;
+            try { OrtakoyMosqueBody(); }
+            finally { windowGlass = Glass; }
+        }
+
+        void OrtakoyMosqueBody()
+        {
             const float half = 10.6f, wallH = 15.5f, plinth = 1.2f;
             string W = Marble;
             // Terrace on the quay (the model stands on its own platform, top at y = 0).
@@ -368,7 +375,7 @@ namespace Apex.Game
             // Great window: glass, archivolt, keystone; stone mullions and two transoms make three tiers.
             float gw = 9f, gy = plinth + 0.3f, gSpring = 11.5f;
             int gseg = ArcSeg(gw * 0.5f);
-            Panel(B(Glass), ArchOutline(0f, gy, gw, gSpring, gseg), 0.5f, 0.06f);
+            Panel(B(windowGlass), ArchOutline(0f, gy, gw, gSpring, gseg), 0.5f, 0.06f);
             ArchBand(B(W), 0f, gSpring, gw * 0.5f, gw * 0.5f + 0.6f, 0.45f, 0.25f, gseg);
             foreach (float s in new[] { -1f, 1f })
                 B(W).Box(new Vector3(s * (gw * 0.5f + 0.3f), (gy + gSpring) * 0.5f, 0.57f), new Vector3(0.6f, gSpring - gy, 0.25f));
@@ -541,6 +548,101 @@ namespace Apex.Game
         }
 
         public const string RowPlaster = "RowPlaster";
+        public const string Brick = "Brick";
+        /// <summary>Window glass of the Ortaköy Mosque: dark by day, lit warm from inside at night.</summary>
+        public const string MosqueGlass = "MosqueGlass";
+        /// <summary>Material of the window panes ArchWindow, RectWindow and the hall's great windows draw.</summary>
+        string windowGlass = Glass;
+
+        /// <summary>
+        /// Esma Sultan Yalısı (1875, Ortaköy): three-storey brick mansion on the Bosphorus, burnt out in 1975; since
+        /// 2001 the roofless shell holds a glass hall. Built on its OSM footprint (local, centroid at the origin,
+        /// ground at y = 0): each wall in bays of about 3.6 m with brick piers, sill and head zones and open window
+        /// voids; stone sills, keystones and string courses (detail 0-1); a ragged wall crown; inside, a glass and
+        /// steel hall on a stone floor. Proportions are estimated, not surveyed.
+        /// </summary>
+        public void BrickShellYali(IList<Vector2> outline, float height, int seed)
+        {
+            int n = outline.Count;
+            for (int i = 0; i < n; i++)
+            {
+                Vector2 a = outline[i], c = outline[(i + 1) % n];
+                var e = c - a;
+                float len = e.magnitude;
+                if (len < 1.5f) continue;
+                // Counter-clockwise footprint: the outside is to the right of the edge.
+                var outward = new Vector2(e.y, -e.x) / len;
+                var mid = (a + c) * 0.5f;
+                int edgeSeed = seed * 31 + i;
+                InFrame(new Vector3(mid.x, 0f, mid.y), Mathf.Atan2(outward.x, outward.y) * Mathf.Rad2Deg, () => ShellWall(len, height, edgeSeed));
+            }
+            // Glass hall and floor inside: the footprint's oriented bounding box along its longest edge.
+            int longest = 0;
+            float Len2(Vector2 d) => d.x * d.x + d.y * d.y;
+            for (int i = 1; i < n; i++)
+                if (Len2(outline[(i + 1) % n] - outline[i]) > Len2(outline[(longest + 1) % n] - outline[longest])) longest = i;
+            var ax = (outline[(longest + 1) % n] - outline[longest]) / Mathf.Sqrt(Len2(outline[(longest + 1) % n] - outline[longest]));
+            var ay = new Vector2(-ax.y, ax.x);
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            foreach (var p in outline)
+            {
+                float u = p.x * ax.x + p.y * ax.y, v = p.x * ay.x + p.y * ay.y;
+                minX = Mathf.Min(minX, u); maxX = Mathf.Max(maxX, u); minY = Mathf.Min(minY, v); maxY = Mathf.Max(maxY, v);
+            }
+            var rot = Quaternion.LookRotation(new Vector3(ax.x, 0f, ax.y));
+            var centre2 = ax * ((minX + maxX) * 0.5f) + ay * ((minY + maxY) * 0.5f);
+            var centre = new Vector3(centre2.x, 0f, centre2.y);
+            float along = maxX - minX, across = maxY - minY;
+            B(Stone).Box(centre + Vector3.up * 0.15f, new Vector3(Mathf.Max(1f, across - 1.2f), 0.3f, Mathf.Max(1f, along - 1.2f)), rot);
+            float hallH = Mathf.Min(9f, height * 0.6f);
+            float gx = Mathf.Max(2f, across - 6f), gz = Mathf.Max(2f, along - 6f);
+            B(Glass).Box(centre + Vector3.up * (0.3f + hallH * 0.5f), new Vector3(gx, hallH, gz), rot);
+            B(Steel).Box(centre + Vector3.up * (0.3f + hallH + 0.15f), new Vector3(gx + 0.4f, 0.3f, gz + 0.4f), rot);
+            if (detail < 2)
+            {
+                // Steel mullions of the glass hall every 3 m on the long sides.
+                for (float z = -gz * 0.5f; z <= gz * 0.5f + 0.01f; z += 3f)
+                    foreach (float sx in new[] { -1f, 1f })
+                        B(Steel).Box(centre + rot * new Vector3(sx * (gx * 0.5f + 0.05f), 0.3f + hallH * 0.5f, z), new Vector3(0.12f, hallH, 0.12f), rot);
+            }
+        }
+
+        /// <summary>One brick wall of the shell in its facade frame (x along, y up, z out; wall 0.6 m thick inwards).</summary>
+        void ShellWall(float len, float height, int seed)
+        {
+            const int floors = 3;
+            const float t = 0.6f;
+            float fh = height / floors;
+            int bays = Mathf.Max(1, Mathf.RoundToInt(len / 3.6f));
+            float bw = len / bays, pier = Mathf.Min(1.1f, bw * 0.35f), ow = bw - pier;
+            for (int k = 0; k <= bays; k++)
+            {
+                float x = -len * 0.5f + k * bw;
+                // Ragged crown of the burnt-out shell: the piers end at slightly different heights.
+                float top = height + (detail < 2 ? 0.5f * Mathf.Sin(seed * 12.9898f + k * 78.233f) : 0f);
+                B(Brick).Box(new Vector3(x, top * 0.5f, -t * 0.5f), new Vector3(pier, top, t));
+            }
+            for (int j = 0; j < bays; j++)
+            {
+                float xc = -len * 0.5f + (j + 0.5f) * bw;
+                for (int f = 0; f < floors; f++)
+                {
+                    float y0 = f * fh, sill = f == 0 ? 1.4f : 1.0f, head = 0.9f;
+                    B(Brick).Box(new Vector3(xc, y0 + sill * 0.5f, -t * 0.5f), new Vector3(ow, sill, t));
+                    B(Brick).Box(new Vector3(xc, y0 + fh - head * 0.5f, -t * 0.5f), new Vector3(ow, head, t));
+                    if (detail < 2)
+                    {
+                        B(Stone).Box(new Vector3(xc, y0 + sill + 0.05f, 0.05f), new Vector3(ow + 0.2f, 0.1f, 0.3f));
+                        // Projecting brick header course and a stone keystone over the opening.
+                        B(Brick).Box(new Vector3(xc, y0 + fh - head + 0.17f, 0.04f), new Vector3(ow + 0.3f, 0.34f, 0.1f));
+                        B(Stone).Box(new Vector3(xc, y0 + fh - head + 0.22f, 0.07f), new Vector3(0.36f, 0.46f, 0.16f));
+                    }
+                }
+            }
+            if (detail < 2)
+                for (int f = 1; f < floors; f++)
+                    B(Stone).Box(new Vector3(0f, f * fh, 0.08f), new Vector3(len + 0.2f, 0.22f, 0.16f));
+        }
 
         /// <summary>
         /// One Akaretler row house (Akaretler Sıra Evleri, 1875, Sarkis Balyan) on its OSM footprint: three storeys,

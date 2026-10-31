@@ -84,6 +84,23 @@ Jedes Modell entsteht aus demselben Code in drei Detailstufen und hängt an eine
   - Tests: nahtlos kachelbar, Fugenanteil 1–12 %, Helligkeit im erwarteten Bereich.
   - Vorschau: `dotnet run -- <dir> --masonry` schreibt PPMs. Für `kit.html` als PNG in `tools/carrender/masonry/` ablegen und `&masonry=1` anhängen.
 
+## Ergänzungen (2026-10-31, Priorität D, Ortaköy)
+- **Esma Sultan Yalısı** (1875; 1975 ausgebrannt, seit 2001 Backsteinhülle mit Glashalle) neben der Moschee (`LandmarkGeometry.BrickShellYali`):
+  - **Hülle:** auf dem OSM-Grundriss dreigeschossig, 15 m hoch (geschätzt), dachlos. Jede Wand in Achsen von etwa 3,6 m mit Backsteinpfeilern, Brüstungs- und Sturzzonen; die Fensteröffnungen sind offen.
+  - **Details:** Steinbänke, vorspringende Rollschicht mit Schlussstein, Gurtgesimse aus Stein, unregelmäßige Mauerkrone.
+  - **Innen:** Glashalle (9 m, Stahlpfosten alle 3 m) auf Steinboden.
+  - **Dreiecke:** 7.600 / 7.600 / 3.200.
+  - **Erkennung:** am OSM-Namen (`OsmCity.BrickShell`). Vorher stand dort ein 3,8 m hoher generischer Block.
+  - **Bilder:** `docs/img/landmark_esma_sultan.jpg`, `docs/img/landmark_esma_sultan_close.jpg`.
+- **Backsteintextur** (`MasonryTextures.Brick`, prozedural):
+  - Läuferverband aus Steinen 21,5 × 6,5 cm mit 1-cm-Kalkfugen; etwa jeder siebte Stein dunkler (gebrannt), Rußbänder.
+  - Die Farbe steckt in der Textur; die Kachel wiederholt sich alle 0,9 m.
+  - **Test:** `BrickIsRedWithMortarJointsAndTiles` (rot, Fugenanteil, nahtlos).
+- **Moscheefenster nachts:** Die Fenster der Ortaköy-Moschee haben ein eigenes Glas (`MosqueGlass`). Es leuchtet nachts warm, als wäre der Gebetsraum mit seinen Kronleuchtern erhellt; tagsüber ist es dunkel wie bisher.
+- **Gebetshäuser** (Moschee, Kirche, Synagoge; OSM `place_of_worship`):
+  - **Vorher:** Sie bekamen wie Läden Ladenschilder, Markisen, Balkone und hängende Fahnen, weil jedes OSM-`amenity` als Laden galt. Das betraf die Etz-Ahayim-Synagoge direkt an der Strecke.
+  - **Jetzt:** Läden sind nur noch Geschäfts-Amenities (Café, Restaurant, Apotheke, Bank …) oder Geschäftshäuser ohne anderes Amenity. Gebetshäuser bekommen kein Fassadenrelief und die historische Steinfarbe.
+
 ## Zuordnung aus den Daten
 - **Paläste:** `OsmCity.ClassicalKind` erkennt sie am OSM-Namen.
   - Palastgebäude: Name enthält „Saray“ bzw. Gebäudetyp `palace`.
@@ -110,4 +127,5 @@ Bilder: `docs/img/landmark_*.jpg`. three.js mit Abendsonne, nicht die Unity-Dars
 - **Kosten:** In Unity prüfen: Bild, Bildrate, LOD-Sprünge. Dolmabahçe hat im LOD 1 noch viele Dreiecke; nach dem Profiling (Phase 7) eventuell eine zusätzliche Impostor-Stufe.
 - **Dolmabahçe:** Kai-Gitter am Wasser, reichere Reliefs (Rosetten, Girlanden).
 - **Materialien:** Die Bleidächer haben noch keine Stehfalz-Textur. Gescannte Marmor-Sätze (CC0) wären eine mögliche Verbesserung gegenüber der prozeduralen Textur.
-- **Moschee:** Innenraum-Andeutung hinter den Fenstern (Interior Mapping).
+- **Moschee:** Innenraum hinter den Fenstern (Interior Mapping). Bisher leuchten die Fenster nachts nur flächig.
+- **Weitere Ortaköy-Bauten:** Die Synagoge, die Kirche Aya Fokas und der Fähranleger sind noch generisch; Grundrisse bzw. Belege für eigene Modelle fehlen.

@@ -213,7 +213,7 @@ namespace Apex.Game
         /// </summary>
         public static void FacadeOrnaments(Parts B, OsmCity.Building b, int level)
         {
-            if (level <= 0 || b.front == null || b.classical != OsmCity.NotClassical) return;
+            if (level <= 0 || b.front == null || b.classical != OsmCity.NotClassical || b.worship) return;
             var o = b.outline;
             int n = o.Count;
             float fh = CityLayout.FloorHeight, tileW = BayWidth * TileBays, roofY = b.ground + 0.6f + b.height;
