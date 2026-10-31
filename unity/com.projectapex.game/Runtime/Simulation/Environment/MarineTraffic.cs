@@ -124,16 +124,18 @@ namespace Apex.Environment
             Shuttle("Beşiktaş–Üsküdar", "besiktas_pier", "uskudar_pier", 7.5f, 55f);
             Shuttle("Karaköy–Üsküdar", "karakoy_pier", "uskudar_pier", 7.5f, 70f);
             Shuttle("Eminönü–Üsküdar", "eminonu_pier", "uskudar_pier", 7f, 60f);
-            // Channel transit along the mid-line between the shores, south to north.
-            if (def.shoreline.Count > 1 && def.farShoreline.Count > 1)
+            // Channel transit south to north: on each cross-section the open-water span of the strait (the water run
+            // next to the previous one, from the land outlines; the shorelines only cover the circuit's stretch).
+            if (def.shoreline.Count > 1)
             {
                 var north = new MarineRoute { name = "Transit Nord", speed = 5.5f, shuttle = false, vesselKind = 1 };
                 var south = new MarineRoute { name = "Transit Süd", speed = 6f, shuttle = false, vesselKind = 1 };
-                for (float z = -2600f; z <= 4800f; z += 400f)
+                float guess = TerrainField.ShoreX(def.shoreline, -900f) + 700f;
+                for (float z = -2600f; z <= 4800f; z += 200f)
                 {
-                    float xe = TerrainField.ShoreX(def.shoreline, z), xa = TerrainField.ShoreX(def.farShoreline, z);
-                    float mid = (xe + xa) * 0.5f, half = MathF.Abs(xa - xe) * 0.5f;
-                    if (z < def.farShoreline[0].north) { mid = xe + 900f; half = 700f; }
+                    if (!Channel(land, z, guess, out float xe, out float xa)) continue;
+                    float mid = (xe + xa) * 0.5f, half = (xa - xe) * 0.5f;
+                    guess = mid;
                     var pn = new Vector2(mid - half * 0.2f, z);
                     var ps = new Vector2(mid + half * 0.25f, z);
                     if (!land.IsLand(pn.X, pn.Y)) north.points.Add(pn);
@@ -143,6 +145,30 @@ namespace Apex.Environment
                 if (south.points.Count > 1) routes.Add(south);
             }
             return routes;
+        }
+
+        /// <summary>
+        /// Water span of the strait on the cross-section z: the run of water samples (20 m) that contains `guess`,
+        /// or the nearest one to it, limited to 1.2 km either side of the guess.
+        /// </summary>
+        static bool Channel(LandModel land, float z, float guess, out float west, out float east)
+        {
+            west = east = 0f;
+            float bestScore = float.MaxValue;
+            float runStart = float.NaN;
+            for (float x = guess - 1200f; x <= guess + 1220f; x += 20f)
+            {
+                bool water = x <= guess + 1200f && !land.IsLand(x, z);
+                if (water && float.IsNaN(runStart)) runStart = x;
+                if (!water && !float.IsNaN(runStart))
+                {
+                    float a = runStart, b = x - 20f;
+                    float score = guess < a ? a - guess : guess > b ? guess - b : 0f;
+                    if (b - a >= 200f && score < bestScore) { bestScore = score; west = a; east = b; }
+                    runStart = float.NaN;
+                }
+            }
+            return bestScore < float.MaxValue;
         }
 
         /// <summary>

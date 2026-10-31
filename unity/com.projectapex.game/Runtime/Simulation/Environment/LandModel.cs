@@ -123,6 +123,21 @@ namespace Apex.Environment
             }
         }
 
+        /// <summary>Coastline edges (a, b, land-mass id) with at least one end inside the rectangle.</summary>
+        public void CoastEdges(float minX, float maxX, float minZ, float maxZ, List<(float ax, float az, float bx, float bz, string mass)> output)
+        {
+            foreach (var m in masses)
+            {
+                int n = m.x.Length;
+                for (int i = 0, j = n - 1; i < n; j = i++)
+                {
+                    bool inA = m.x[j] >= minX && m.x[j] <= maxX && m.z[j] >= minZ && m.z[j] <= maxZ;
+                    bool inB = m.x[i] >= minX && m.x[i] <= maxX && m.z[i] >= minZ && m.z[i] <= maxZ;
+                    if (inA || inB) output.Add((m.x[j], m.z[j], m.x[i], m.z[i], m.id));
+                }
+            }
+        }
+
         /// <summary>Distance to the coast of the containing mass (0 over water).</summary>
         public float CoastDistance(float x, float z)
         {

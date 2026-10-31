@@ -4,7 +4,7 @@
 Writes unity/.../Resources/Tracks/bosphorus_a.json in the existing CircuitDefinition
 format: points [east, north, elevation, width, run-off left, run-off right] in the unrotated local frame of
 tools/geo/dem_tools.py (true north = +z), the drivable height profile (tools/geo/vertical_alignment.py), widths
-(11 m, 13 m on Dolmabahçe Cd.), pit lane, sectors, corner names, DEM shorelines and
+(11 m, 13 m on Dolmabahçe Cd.), pit lane, sectors, corner names, OSM shorelines and
 the verified landmarks. Derived from OSM (ODbL) and Copernicus DEM.
 """
 import json
@@ -66,27 +66,6 @@ ESCAPES = [(1950.0, 2200.0, "right", 12.0),   # T1 Ortaköy
 # Barbaros Descent, Akaretler Esses, Bayıldım Hairpin, Kabataş Return), Turkish in game.
 CORNER_NAMES = ["Ortaköy Virajı", "Palanga 1", "Palanga 2", "Yıldız Sırtı", "Balmumcu", "Barbaros İnişi", "Akaretler 1",
                 "Akaretler 2", "Bayıldım 1", "Bayıldım Virajı", "Kabataş Dönüşü", "Saray 1", "Saray 2"]
-
-
-def shoreline(x_from, x_to, step, zs):
-    """DEM coastline: first x (scanning from x_from towards x_to) with 3 consecutive sea samples."""
-    out = []
-    for z in zs:
-        run = 0
-        x = x_from
-        found = None
-        while (x <= x_to) if step > 0 else (x >= x_to):
-            if dem.height(*dem.latlon(x, z)) <= 0.0:
-                run += 1
-                if run == 3:
-                    found = x - 2 * step
-                    break
-            else:
-                run = 0
-            x += step
-        if found is not None:
-            out.append([round(found, 1), z])
-    return out
 
 
 def height_grid(cell=100.0):
@@ -216,13 +195,13 @@ def main():
         "corners": [{"name": CORNER_NAMES[i], "distance": round((c["s"] + lead) % L, 1), "right": c["dir"] == "rechts",
                      "angle": c["angle"]} for i, c in enumerate(plan["corners"])],
         "sightlines": [],
-        "shoreline": shoreline(-1500.0, 2600.0, 10.0, list(range(-900, 2601, 50))),
+        "shoreline": [],   # from the OSM coastline below
         "geo": {
             "note": "Unrotated local frame around Dolmabahçe (true north = +z); street axes from OSM, heights from Copernicus DEM.",
             "origin": {"lat": dem.LAT0, "lon": dem.LON0, "name": "Dolmabahçe"},
             "rotation_deg": 0, "translation": [0, 0], "true_north_bearing_deg": 0,
             "landmarks": [],
-            "shoreline_asia": shoreline(4200.0, 1500.0, -10.0, list(range(-900, 2601, 50))),
+            "shoreline_asia": [],
         },
     }
     for lid, name, kind, h, la, lo, ok, src in LANDMARKS:
@@ -240,17 +219,17 @@ def main():
                             ("Bosporusbrücke von der Yıldız-Kuppe", (1000, 1615), bridge_mid)):
         b = math.degrees(math.atan2(tgt[0] - frm[0], tgt[1] - frm[1])) % 360
         data["sightlines"].append({"label": label, "from": list(frm), "bearing_deg": round(b, 1)})
-    # Land masses (DEM coastline) and a coarse street-level height grid (Copernicus DEM).
-    import land_masses
-    masses = land_masses.classified((0.0, 150.0), dem.enu(41.03998, 29.044), dem.enu(41.00526, 28.97687))
-    seen = set()
-    data["geo"]["land"] = []
-    for m in masses:
-        key = tuple(map(tuple, m["polygon"][:5]))
-        if key in seen:
-            continue          # the historic peninsula joins the European side beyond the Golden Horn
-        seen.add(key)
-        data["geo"]["land"].append(m)
+    # Land masses and shorelines from the OSM coastline (osm_land.py). The DEM must not move the coast: its 0 m
+    # contour ran up to 450 m out into the Bosphorus (docs/BOSPHORUS_WATERFRONT.md). Heights stay from the DEM.
+    import osm_land
+    osm = json.load(open(osm_land.OSM, encoding="utf-8"))
+    lm = {l["id"]: l["game"] for l in data["geo"]["landmarks"]}
+    masses = osm_land.classified(osm, lm)
+    zs = list(range(-900, 2601, 20))
+    data["geo"]["land"] = masses
+    data["shoreline"] = osm_land.shoreline(masses, "europe", -1500.0, 4200.0, 2.0, zs)
+    data["geo"]["shoreline_asia"] = osm_land.shoreline(masses, "asia", 4200.0, 1500.0, -2.0, zs)
+    data["geo"]["land_source"] = "OSM coastline (tools/geo/osm_land.py), © OpenStreetMap contributors, ODbL 1.0"
     data["geo"]["height_grid"] = height_grid()
     json.dump(data, open(OUT, "w"), ensure_ascii=False, indent=1)
     print(f"{OUT}: {len(rows)} points, length ≈ {L} m, sectors {data['sector_fractions']}, shore {len(data['shoreline'])} / {len(data['geo']['shoreline_asia'])}")
