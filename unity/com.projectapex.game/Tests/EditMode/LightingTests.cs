@@ -122,9 +122,24 @@ namespace Apex.Tests
                     Assert.That(p.lodBias, Is.GreaterThan(prev.lodBias));
                     Assert.That(p.reflectionResolution, Is.GreaterThan(prev.reflectionResolution));
                     Assert.That(p.environmentDetail, Is.GreaterThanOrEqualTo(prev.environmentDetail));
+                    Assert.That(p.renderScale, Is.GreaterThanOrEqualTo(prev.renderScale));
+                    Assert.That(p.motionBlur, Is.GreaterThanOrEqualTo(prev.motionBlur));
                 }
+                Assert.That(p.environmentDetail, Is.InRange(0, GraphicsPreset.EnvironmentLevels - 1));
+                Assert.That(p.renderScale, Is.InRange(0.5f, 2f), "URP render scale range");
+                Assert.That(p.motionBlur, Is.InRange(0f, 0.5f), "motion blur stays subtle");
+                Assert.That(new[] { 64, 128, 256, 512, 1024, 2048 }, Does.Contain(p.reflectionResolution));
                 prev = p;
             }
+            // PC tiers: Cinema supersamples with TAA and the extreme environment; mobile and medium have no blur.
+            var cinema = GraphicsPreset.For(GraphicsTier.Cinema);
+            Assert.That(cinema.renderScale, Is.EqualTo(1.5f));
+            Assert.That(cinema.antialiasing, Is.EqualTo(PostAntialiasing.Taa));
+            Assert.That(cinema.environmentDetail, Is.EqualTo(3));
+            Assert.That(GraphicsPreset.Name(GraphicsTier.Cinema), Is.EqualTo("Kino"));
+            Assert.That(GraphicsPreset.For(GraphicsTier.Medium).motionBlur, Is.EqualTo(0f));
+            Assert.That(GraphicsPreset.Auto(false, 12288), Is.EqualTo(GraphicsTier.Ultra), "strong PCs start on Ultra");
+            Assert.That(GraphicsPreset.Auto(false, 24576), Is.Not.EqualTo(GraphicsTier.Cinema), "Cinema is the player's choice");
             var mobile = GraphicsPreset.For(GraphicsTier.Mobile);
             Assert.That(mobile.ssao, Is.False);
             Assert.That(mobile.ultraTextures, Is.False, "mobile never loads 4K sets");
@@ -132,6 +147,9 @@ namespace Apex.Tests
             Assert.That(GraphicsPreset.For(GraphicsTier.Ultra).ultraTextures, Is.True);
             Assert.That(GraphicsPreset.Auto(true, 12000), Is.EqualTo(GraphicsTier.Mobile));
             Assert.That(GraphicsPreset.Auto(false, 8192), Is.EqualTo(GraphicsTier.High));
+            var settings = new Apex.Core.SettingsData { environmentDetail = 7 };
+            settings.MigrateAndValidate();
+            Assert.That(settings.environmentDetail, Is.EqualTo(3), "extreme environment is the top level");
             Assert.That(GraphicsPreset.Auto(false, 2048), Is.EqualTo(GraphicsTier.Medium));
         }
 

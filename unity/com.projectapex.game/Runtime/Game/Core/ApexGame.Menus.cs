@@ -519,8 +519,9 @@ namespace Apex.Game
                         s.environmentDetail = p.environmentDetail;
                         s.ultraTextures = p.ultraTextures;
                     } },
-                new Row { label = "Umgebungsdetails (ab nächster Session)", value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : "Hoch",
-                    change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), 3) },
+                new Row { label = "Umgebungsdetails (ab nächster Session)",
+                    value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : s.environmentDetail == 2 ? "Hoch" : "Extrem (PC)",
+                    change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), GraphicsPreset.EnvironmentLevels) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
             // Only where 4K road textures were fetched (tools/textures/fetch_cc0.py --tier ultra) and not on mobile.
@@ -529,7 +530,13 @@ namespace Apex.Game
                     change = d => s.ultraTextures = !s.ultraTextures });
             // Only with URP: the built-in pipeline has no post-processing stack here.
             if (PostFxStack.Supported)
+            {
                 rows.Insert(rows.Count - 1, new Row { label = "Nachbearbeitung (Farbe, Bloom)", value = () => OnOff(s.postProcessing), change = d => s.postProcessing = !s.postProcessing });
+                // Motion blur exists from the High tier on (part of the post-processing volume); "reduced motion" turns it off.
+                rows.Insert(rows.Count - 1, new Row { label = "Bewegungsunschärfe",
+                    value = () => GraphicsQuality.Current.motionBlur <= 0f ? "– (ab Hoch)" : s.reducedMotion ? "aus (reduzierte Bewegung)" : OnOff(s.motionBlur),
+                    change = d => s.motionBlur = !s.motionBlur });
+            }
             return rows;
         }
 
@@ -587,6 +594,7 @@ namespace Apex.Game
             input.ApplySettings(Settings);
             ApplyAssists();
             if (weatherVisuals != null) weatherVisuals.postProcessing = Settings.postProcessing;
+            PostFxStack.MotionBlurEnabled = Settings.motionBlur && !Settings.reducedMotion;
             ApplyGraphics();
             SaveService.SaveSettings(Settings);
         }

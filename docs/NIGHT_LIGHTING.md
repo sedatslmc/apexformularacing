@@ -37,6 +37,13 @@ Architekturlicht statt einer gleichmäßig glühenden Brücke:
 
 ![Brücke nachts](img/bridge_night.jpg)
 
+## Fassadenstrahler in Ortaköy (seit 2026-10-31, ab Stufe Hoch)
+- **Ortaköy-Moschee:** fünf warmweiße Spotlichter von der Kaiterrasse auf die drei freien Hallenfassaden, die Pavillonfront und die Kuppel. Dazu leuchten die Fenster von innen (`MosqueGlass`).
+- **Esma Sultan Yalısı:** bernsteinfarbene Bodenstrahler vor jeder Wand über 12 m.
+- **Technik:** echte Lichter ohne Schatten, geschaltet mit dem übrigen Nachtlicht (`EnvironmentInstance.AddRealLight`).
+- **Helligkeit:** etwa 4 an der Fassade, zehnmal so hell wie die Fahrbahn unter einer Laterne.
+- **Code:** `EnvironmentBuilder.Floodlight`.
+
 ## Im Unity-Editor zu prüfen
 1. **Nachtfahrt:**
    - Ist die Fahrbahn durchgehend fahrbar hell, ohne harte dunkle Lücken?

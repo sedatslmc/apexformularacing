@@ -8,6 +8,8 @@ namespace Apex.Core
         Medium,
         High,
         Ultra,
+        /// <summary>PC only, for strong GPUs: supersampling (render scale 1.5), far 4096 shadows, extreme environment.</summary>
+        Cinema,
     }
 
     /// <summary>Post-process anti-aliasing (maps 1:1 onto URP's AntialiasingMode).</summary>
@@ -58,8 +60,15 @@ namespace Apex.Core
         /// <summary>Content defaults the tier sets when chosen (environment density 0..2, 4K road textures).</summary>
         public int environmentDetail;
         public bool ultraTextures;
+        /// <summary>Camera motion blur intensity (0 = off); the player can switch it off in the options.</summary>
+        public float motionBlur;
+        /// <summary>Motion blur sample quality 0 low .. 2 high.</summary>
+        public int motionBlurQuality;
 
-        public const int TierCount = 4;
+        public const int TierCount = 5;
+        /// <summary>Environment detail levels: 0 low (mobile), 1 medium, 2 high, 3 extreme (PC: more people and
+        /// traffic, longer draw distances).</summary>
+        public const int EnvironmentLevels = 4;
 
         public static GraphicsPreset For(GraphicsTier tier)
         {
@@ -93,10 +102,10 @@ namespace Apex.Core
                         shadowDistance = 320f, shadowCascades = 4, shadowResolution = 2048, softShadowQuality = 2,
                         ssao = true, reflectionResolution = 256, reflectionCapturesWorld = true, reflectionInterval = 4f,
                         lodBias = 1.6f, forceAnisotropic = true, maxAdditionalLights = 6, bloomHighQuality = true,
-                        environmentDetail = 2, ultraTextures = false, streetLights = 32,
+                        environmentDetail = 2, ultraTextures = false, streetLights = 32, motionBlur = 0.25f, motionBlurQuality = 1,
                     };
                     break;
-                default:
+                case GraphicsTier.Ultra:
                     // TAA also calms specular shimmer of the detailed 4K normal maps at grazing angles.
                     p = new GraphicsPreset
                     {
@@ -104,9 +113,21 @@ namespace Apex.Core
                         shadowDistance = 450f, shadowCascades = 4, shadowResolution = 4096, softShadowQuality = 2,
                         ssao = true, reflectionResolution = 512, reflectionCapturesWorld = true, reflectionInterval = 1.5f,
                         lodBias = 2.2f, forceAnisotropic = true, maxAdditionalLights = 8, bloomHighQuality = true,
-                        environmentDetail = 2, ultraTextures = true, streetLights = 48,
+                        environmentDetail = 2, ultraTextures = true, streetLights = 48, motionBlur = 0.3f, motionBlurQuality = 2,
                     };
-                    tier = GraphicsTier.Ultra;
+                    break;
+                default:
+                    // Cinema: supersampled (1.5x render scale, TAA on top), shadows sharp out to 600 m, a reflection
+                    // probe of 1024 px refreshed every 0.75 s, far LODs and the extreme environment.
+                    p = new GraphicsPreset
+                    {
+                        renderScale = 1.5f, msaa = 1, antialiasing = PostAntialiasing.Taa, antialiasingQuality = 2,
+                        shadowDistance = 600f, shadowCascades = 4, shadowResolution = 4096, softShadowQuality = 2,
+                        ssao = true, reflectionResolution = 1024, reflectionCapturesWorld = true, reflectionInterval = 0.75f,
+                        lodBias = 3f, forceAnisotropic = true, maxAdditionalLights = 8, bloomHighQuality = true,
+                        environmentDetail = 3, ultraTextures = true, streetLights = 96, motionBlur = 0.35f, motionBlurQuality = 2,
+                    };
+                    tier = GraphicsTier.Cinema;
                     break;
             }
             p.tier = tier;
@@ -136,14 +157,17 @@ namespace Apex.Core
             return r;
         }
 
-        /// <summary>Tier when the player chose "Auto": phones and tablets get Mobile; desktops by video memory.</summary>
+        /// <summary>Tier when the player chose "Auto": phones and tablets get Mobile; desktops by video memory
+        /// (Ultra from 10 GB). Cinema is never chosen automatically (supersampling needs a top GPU).</summary>
         public static GraphicsTier Auto(bool mobile, int graphicsMemoryMb)
         {
             if (mobile) return GraphicsTier.Mobile;
+            if (graphicsMemoryMb >= 10000) return GraphicsTier.Ultra;
             if (graphicsMemoryMb >= 6000) return GraphicsTier.High;
             return GraphicsTier.Medium;
         }
 
-        public static string Name(GraphicsTier t) => t == GraphicsTier.Mobile ? "Mobil" : t == GraphicsTier.Medium ? "Mittel" : t == GraphicsTier.High ? "Hoch" : "Ultra";
+        public static string Name(GraphicsTier t) => t == GraphicsTier.Mobile ? "Mobil" : t == GraphicsTier.Medium ? "Mittel" : t == GraphicsTier.High ? "Hoch"
+            : t == GraphicsTier.Ultra ? "Ultra" : "Kino";
     }
 }

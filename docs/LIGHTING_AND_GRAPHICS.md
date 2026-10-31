@@ -61,24 +61,42 @@
 
 ## 2. Grafikstufen (`GraphicsPreset`, `GraphicsQuality`)
 
-**Einstellung:** Optionen → „Grafikstufe“ mit Auto, Mobil, Mittel, Hoch und Ultra.
-- **Auto:** Mobilgerät → Mobil; PC mit mindestens 6 GB Grafikspeicher → Hoch, sonst Mittel.
+**Einstellung:** Optionen → „Grafikstufe“ mit Auto, Mobil, Mittel, Hoch, Ultra und (seit 2026-10-31) Kino.
+- **Auto:** Mobilgerät → Mobil; PC mit mindestens 10 GB Grafikspeicher → Ultra, mit mindestens 6 GB → Hoch, sonst Mittel. „Kino“ wird nie automatisch gewählt.
 - **Was sofort wirkt:** Schatten, Kantenglättung, SSAO, Reflexionen, LOD.
 - **Was die Stufe mitsetzt:** Umgebungsdetails und 4K-Straßentexturen. Diese wirken ab der nächsten Session und lassen sich danach einzeln ändern.
 
-| | Mobil | Mittel | Hoch | Ultra |
-|---|---|---|---|---|
-| Render Scale | 0,85 | 1,0 | 1,0 | 1,0 |
-| Kantenglättung | FXAA | SMAA (mittel) | MSAA 4× | TAA (hoch), MSAA aus |
-| Schatten | 120 m, 2 Kaskaden, 1024 px | 200 m, 3, 2048 px | 320 m, 4, 2048 px | 450 m, 4, 4096 px |
-| Weiche Schatten | niedrig | mittel | hoch | hoch |
-| SSAO | aus | aus | an | an |
-| Reflexionssonde | 64 px, nur Himmel | 128 px, Welt, bei Lichtwechsel | 256 px, folgt Kamera, alle 4 s | 512 px, folgt Kamera, alle 1,5 s |
-| LOD-Bias | 1,0 | 1,25 | 1,6 | 2,2 |
-| Anisotropie | pro Textur | pro Textur | erzwungen | erzwungen |
-| Zusatzlichter je Objekt | 2 | 4 | 6 | 8 |
-| Bloom-Filter | einfach | einfach | hochwertig | hochwertig |
-| Umgebungsdetails / 4K | Niedrig / nein | Mittel / nein | Hoch / nein | Hoch / ja |
+| | Mobil | Mittel | Hoch | Ultra | Kino (PC) |
+|---|---|---|---|---|---|
+| Render Scale | 0,85 | 1,0 | 1,0 | 1,0 | 1,5 (Supersampling) |
+| Kantenglättung | FXAA | SMAA (mittel) | MSAA 4× | TAA (hoch), MSAA aus | TAA (hoch) |
+| Schatten | 120 m, 2 Kaskaden, 1024 px | 200 m, 3, 2048 px | 320 m, 4, 2048 px | 450 m, 4, 4096 px | 600 m, 4, 4096 px |
+| Weiche Schatten | niedrig | mittel | hoch | hoch | hoch |
+| SSAO | aus | aus | an | an | an |
+| Reflexionssonde | 64 px, nur Himmel | 128 px, Welt, bei Lichtwechsel | 256 px, folgt Kamera, alle 4 s | 512 px, folgt Kamera, alle 1,5 s | 1024 px, alle 0,75 s |
+| LOD-Bias | 1,0 | 1,25 | 1,6 | 2,2 | 3,0 |
+| Anisotropie | pro Textur | pro Textur | erzwungen | erzwungen | erzwungen |
+| Zusatzlichter je Objekt | 2 | 4 | 6 | 8 | 8 |
+| Straßenlaternen als echte Lichter | 8 | 16 | 32 | 48 | 96 |
+| Bloom-Filter | einfach | einfach | hochwertig | hochwertig | hochwertig |
+| Bewegungsunschärfe (Kamera) | – | – | 0,25 | 0,30 | 0,35 |
+| Umgebungsdetails / 4K | Niedrig / nein | Mittel / nein | Hoch / nein | Hoch / ja | Extrem / ja |
+
+**Kino (PC, seit 2026-10-31):**
+- **Zielgruppe:** starke Grafikkarten.
+- **Bild:**
+  - Die Szene wird mit 1,5-facher Auflösung gerendert und heruntergerechnet, TAA kommt darüber.
+  - Die Schatten bleiben bis 600 m scharf, die Reflexionssonde hat 1024 px.
+- **Umgebungsdetails „Extrem“:**
+  - 2.600 Fußgänger und 360 Fahrzeuge (Hoch: 1.600 / 240), Sichtweite des Stadtlebens 520 m (Hoch: 350 m).
+  - Zuschauer an der Strecke und auf Tribünen in voller Dichte, 36 Möwen, ferne Landschaft bis 9 km.
+  - Die Stufe „Extrem“ ist auch einzeln wählbar.
+- **Kosten:** nicht gemessen. Supersampling kostet etwa das 2,25-Fache an Pixeln.
+
+**Bewegungsunschärfe:**
+- Kamerabasiert (URP Motion Blur, „Camera only“). Strecke und Stadt verwischen bei Tempo, das Auto vor der Verfolgerkamera bleibt scharf.
+- Ab Hoch aktiv; in den Optionen abschaltbar. Bei „Reduzierte Bewegung“ ist sie immer aus.
+- Sie gehört zum Post-Processing-Volume, mit „Nachbearbeitung“ aus entfällt sie also auch.
 
 **Kaskaden:**
 - Praktische Aufteilung (Mischung aus logarithmisch und gleichmäßig, λ 0,75).
