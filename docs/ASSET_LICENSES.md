@@ -24,7 +24,11 @@ Stand: Inhalte sind selbst erstellt oder prozedural erzeugt; Ausnahme sind die u
 | Stadtdaten `Resources/City/bosphorus_a.json`: 4.088 Gebäudegrundrisse, 2.081 Straßen/Wege, 277 Grünflächen, 47 Mauern im Umkreis von 750 m | © OpenStreetMap-Mitwirkende, über `data/geo/osm` | **ODbL 1.0** (abgeleitete Datenbank: bei Veröffentlichung unter ODbL anbieten, Quellenangabe im Spiel) | erzeugt mit `tools/geo/build_city_a.py`; Höhen: OSM-Tags, sonst Schätzung aus getaggten Nachbarn |
 | Materialien, Himmel | Unity-Standard-Shader (URP Lit, Skybox/Procedural) | Unity-Lizenz | keine Texturen von Dritten |
 | Motor- und Reifensound | prozedural synthetisiert | Projekteigentum | keine Aufnahmen |
-| Schrift (UI) | Unity-Standard-Font | Unity-Lizenz | wird in M4 durch eine lizenzierte Schrift ersetzt (Lizenz hier eintragen) |
+| Schriften Barlow Medium/SemiBold, Barlow Condensed SemiBold/Bold (`Resources/Fonts`) | [Barlow](https://github.com/jpt/barlow), Jeremy Tribby (über Google Fonts) | SIL Open Font License 1.1 (`Resources/Fonts/OFL-Barlow.txt` liegt bei) | neue UI (UI Toolkit); Einbettung im Spiel erlaubt, Schrift nicht einzeln verkaufen; die alten IMGUI-Bildschirme nutzen weiter die Unity-Standard-Font |
+| Schrift (alte IMGUI-Bildschirme) | Unity-Standard-Font | Unity-Lizenz | wird mit den UI-Phasen 3–5 abgelöst |
+| UI-Sounds (Fokus, Bestätigen, Zurück, Übergang, Start) | prozedural synthetisiert (`UiSounds`) | Projekteigentum | keine Aufnahmen |
+| Menü-Showroom (Bühne, LED-Ring) | prozedural im Code (`MenuStage`) | Projekteigentum | Platzhalter-Art |
+| UI-Mockups `docs/img/ui_mock_*.jpg`, Hintergründe in `tools/uimock/` | selbst gerendert (`tools/uimock`, `tools/carrender/showroom.html`) aus eigenen Renders der prozeduralen Szene | Projekteigentum | nur Entwurfsbilder, nicht im Spiel; Fahrername „Fahrer“ als Platzhalter |
 
 ## Regeln für neue Assets
 - Wahrzeichen-Modelle werden als Prefab unter `Runtime/Resources/Landmarks/<id>` abgelegt (Konvention und Budgets: `docs/VISUAL_OVERHAUL.md`). Jedes Prefab braucht hier eine eigene Zeile.

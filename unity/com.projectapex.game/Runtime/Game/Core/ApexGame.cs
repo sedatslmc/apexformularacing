@@ -6,6 +6,7 @@ using Apex.Core;
 using Apex.Race;
 using Apex.Tracks;
 using Apex.Vehicle;
+using Apex.Weather;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -49,6 +50,13 @@ namespace Apex.Game
         VehicleController showroomCar;
         GameObject world;
         WeatherVisuals weatherVisuals;
+        // APEX // RACE CONTROL main menu (UI Toolkit) and its 3D backdrop (docs/UI_UX_OVERHAUL.md).
+        MainMenuView menuView;
+        UiSounds uiSounds;
+        GameObject menuWorld;
+        bool backdropLoading, menuOverlayLast;
+        int swallowClickFrame = -1;
+        float menuViewHeading;
 
         SessionKind kind;
         SessionType currentType;
@@ -91,7 +99,164 @@ namespace Apex.Game
             input = gameObject.AddComponent<InputRouter>();
             input.ApplySettings(Settings);
             sm.Changed += OnStateChanged;
+            CreateMenuView();
             sm.TryTransition(GameState.MainMenu);
+        }
+
+        void CreateMenuView()
+        {
+            try
+            {
+                uiSounds = new UiSounds(gameObject) { volume = Settings.masterVolume };
+                menuView = new MainMenuView(uiSounds) { ReducedMotion = Settings.reducedMotion };
+                menuView.Activated += OnMenuAction;
+                menuView.SettingsRequested += () => { settingsOpen = true; focus = 0; };
+                menuView.ShowBoot("");
+            }
+            catch (Exception e)
+            {
+                // Without UI Toolkit the interim IMGUI menu stays available.
+                Debug.LogException(e);
+                menuView = null;
+            }
+        }
+
+        void OnMenuAction(Apex.UI.MenuAction a)
+        {
+            // The click that chose the entry must not reach the IMGUI screen that opens in the same frame.
+            swallowClickFrame = Time.frameCount;
+            switch (a)
+            {
+                case Apex.UI.MenuAction.QuickRace: StartSession(SessionKind.GrandPrix, SessionType.Race); break;
+                case Apex.UI.MenuAction.ContinueChampionship: StartSession(SessionKind.Championship, SessionType.Race); break;
+                case Apex.UI.MenuAction.GrandPrix: OpenSetup(SetupMode.GrandPrix); break;
+                case Apex.UI.MenuAction.Championship: OpenSetup(SetupMode.Championship); break;
+                case Apex.UI.MenuAction.TimeTrial: OpenSetup(SetupMode.TimeTrial); break;
+                case Apex.UI.MenuAction.Practice: OpenSetup(SetupMode.Practice); break;
+                case Apex.UI.MenuAction.Garage: sm.TryTransition(GameState.Garage); break;
+                case Apex.UI.MenuAction.Settings: settingsOpen = true; focus = 0; break;
+                case Apex.UI.MenuAction.Help: helpOpen = true; break;
+                case Apex.UI.MenuAction.Quit: Application.Quit(); break;
+            }
+        }
+
+        /// <summary>Main menu content from the real game state (MainMenuModel: no entry without a working function).</summary>
+        void RefreshMenu()
+        {
+            if (menuView == null) return;
+            var def = Definition(Config.trackId);
+            var ctx = new Apex.UI.MenuContext
+            {
+                trackName = def?.name ?? Config.trackId,
+                laps = Config.laps,
+                timeOfDay = TimeName(Config.timeOfDay),
+                championshipActive = Career.ChampionshipActive,
+                bestLap = SaveService.BestLap(Settings, Config.trackId),
+                canQuit = !Application.isMobilePlatform,
+            };
+            if (Career.ChampionshipActive)
+            {
+                ctx.championshipRound = Career.nextRound + 1;
+                ctx.championshipRounds = Career.calendar.Length;
+                ctx.championshipTrack = Definition(Career.calendar[Career.nextRound])?.name ?? Career.calendar[Career.nextRound];
+                int better = 0;
+                for (int i = 1; i < Career.points.Length; i++) if (Career.points[i] > Career.points[0]) better++;
+                ctx.championshipPosition = Career.points.Length > 0 ? better + 1 : 0;
+            }
+            int lvl = Career.Level;
+            long here = Progression.XpForLevel(lvl), next = Progression.XpForLevel(Mathf.Min(lvl + 1, Progression.MaxLevel));
+            var data = new MainMenuView.Data
+            {
+                entries = Apex.UI.MainMenuModel.Build(ctx),
+                carNumber = Career.carNumber,
+                driver = "Fahrer",
+                team = Roster.Teams[Config.playerTeam].name,
+                level = lvl,
+                levelProgress = next > here ? (Career.xp - here) / (float)(next - here) : 1f,
+                trackName = def?.name ?? Config.trackId,
+                trackMeta = def != null ? TrackMeta(def) : "",
+                version = "Project Apex · " + Application.version,
+                mobile = Application.isMobilePlatform,
+            };
+            if (Career.lastPosition > 0)
+            {
+                data.lastTitle = $"P{Career.lastPosition} · {Career.lastSession}";
+                data.lastMeta = Career.lastTrack + (Career.lastBestLap > 0 ? " · Beste Runde " + ApexStyle.FormatTime(Career.lastBestLap) : "")
+                    + (Career.lastSession == "Rennen" && Career.lastPositionsGained != 0 ? $" · {(Career.lastPositionsGained > 0 ? "+" : "")}{Career.lastPositionsGained} Plätze" : "");
+            }
+            var pr = data.profile;
+            pr.name = "Fahrer"; pr.nationality = "TUR"; pr.team = data.team; pr.number = Career.carNumber;
+            pr.level = lvl; pr.xp = Career.xp; pr.xpNext = next;
+            pr.races = Career.racesStarted; pr.wins = Career.wins; pr.podiums = Career.podiums; pr.poles = Career.poles;
+            pr.distanceKm = Career.distanceKm; pr.averageFinish = Career.AverageFinish;
+            foreach (var id in TrackIds)
+            {
+                double best = SaveService.BestLap(Settings, id);
+                if (best > 0) pr.bestLaps.Add((Definition(id)?.name ?? id, ApexStyle.FormatTime(best)));
+            }
+            menuView.ReducedMotion = Settings.reducedMotion;
+            uiSounds.volume = Settings.masterVolume;
+            menuView.Show(data);
+        }
+
+        static string TrackMeta(CircuitDefinition def)
+        {
+            var g = TrackGeometry.FromDefinition(def);
+            string dir = def.direction == "clockwise" ? "im Uhrzeigersinn" : "gegen den Uhrzeigersinn";
+            int corners = def.corners.Count > 0 ? def.corners.Count : g.DetectCorners().Count;
+            return $"{g.Length / 1000f:0.00} km · {corners} Kurven · {dir}".Replace('.', ',');
+        }
+
+        /// <summary>
+        /// The Istanbul backdrop for the menu (PC, environment detail medium or higher, setting on): the real
+        /// Bosphorus circuit and city are built behind the boot overlay, with night or golden-hour lighting; the
+        /// stage then floats on the water off Ortaköy facing the mosque and the bridge. Mobile keeps the bare stage.
+        /// </summary>
+        System.Collections.IEnumerator BuildMenuBackdrop()
+        {
+            backdropLoading = true;
+            menuView?.ShowBoot("ISTANBUL WIRD GELADEN");
+            yield return null;
+            yield return null;
+            try
+            {
+                var def = Definition("bosphorus_a");
+                if (def != null)
+                {
+                    menuWorld = new GameObject("MenuWorld");
+                    EnvironmentBuilder.Quality = Settings.environmentDetail;
+                    SurfaceTextures.UseUltra = Settings.ultraTextures;
+                    var circuit = CircuitBuilder.Build(def, menuWorld.transform);
+                    var wv = menuWorld.AddComponent<WeatherVisuals>();
+                    wv.weather = new WeatherModel(WeatherState.Clear, false, 7);
+                    // Alternating motifs: Istanbul at night (lit bridge) or at sunset.
+                    wv.timeOfDay = UnityEngine.Random.value < 0.5f ? TimeOfDay.Night : TimeOfDay.GoldenHour;
+                    wv.sun = sun;
+                    wv.trueNorthBearing = def.trueNorthBearing;
+                    wv.environment = circuit.Environment;
+                    wv.cameraTransform = cam.transform;
+                    wv.postProcessing = Settings.postProcessing;
+                    wv.Bind(circuit.gameObject);
+                    if (circuit.Environment != null) circuit.Environment.ambienceVolume = Settings.masterVolume * 0.5f;
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogException(e);
+                if (menuWorld != null) Destroy(menuWorld);
+                menuWorld = null;
+            }
+            backdropLoading = false;
+            if (showroom != null) PlaceShowroom();
+            menuView?.EndBoot();
+        }
+
+        bool WantsBackdrop => !Application.isMobilePlatform && Settings.menuBackdrop && Settings.environmentDetail >= 1;
+
+        void DestroyMenuWorld()
+        {
+            if (menuWorld != null) Destroy(menuWorld);
+            menuWorld = null;
         }
 
         // --- Data --------------------------------------------------------------------------
@@ -229,13 +394,18 @@ namespace Apex.Game
             ResetMenuLighting();
             if (showroom != null) return;
             showroom = new GameObject("Showroom");
-            var floor = new GameObject("Floor");
-            floor.transform.SetParent(showroom.transform, false);
-            floor.transform.localScale = new Vector3(14f, 0.05f, 14f);
-            floor.transform.localPosition = new Vector3(0f, -0.05f, 0f);
-            floor.AddComponent<MeshFilter>().sharedMesh = CarBuilder.PrimitiveMesh(PrimitiveType.Cylinder);
-            floor.AddComponent<MeshRenderer>().sharedMaterial = ApexMaterials.Get("Asphalt");
+            MenuStage.Build(showroom.transform);
+            PlaceShowroom();
             RebuildShowroomCar();
+            if (WantsBackdrop && menuWorld == null && !backdropLoading) StartCoroutine(BuildMenuBackdrop());
+            else if (!backdropLoading) menuView?.EndBoot();
+        }
+
+        /// <summary>Stage on the water off Ortaköy when the Istanbul backdrop stands, else at the origin.</summary>
+        void PlaceShowroom()
+        {
+            menuViewHeading = menuWorld != null ? MenuStage.BosphorusViewHeading : 0f;
+            showroom.transform.SetPositionAndRotation(menuWorld != null ? MenuStage.BosphorusStage : Vector3.zero, Quaternion.Euler(0f, menuViewHeading, 0f));
         }
 
         void RebuildShowroomCar()
@@ -248,6 +418,8 @@ namespace Apex.Game
             showroomCar.enabled = false;
             showroomCar.transform.SetParent(showroom.transform, false);
             showroomCar.transform.localPosition = new Vector3(0f, showroomCar.setup.cogHeight, 0f);
+            // Three-quarter front view towards the menu camera.
+            showroomCar.transform.localRotation = Quaternion.Euler(0f, 145f, 0f);
             for (int i = 0; i < 4; i++)
             {
                 var m = showroomCar.setup.MountPosition(i, out float sc);
@@ -257,10 +429,17 @@ namespace Apex.Game
 
         void UpdateShowroomCamera()
         {
+            if (showroom == null) return;
+            if (sm.Current == GameState.MainMenu && !settingsOpen)
+            {
+                MenuStage.MenuCamera(cam, showroom.transform, menuViewHeading, Time.unscaledTime, Settings.reducedMotion);
+                return;
+            }
             float t = Time.unscaledTime * 0.12f;
             float dist = sm.Current == GameState.Garage ? 6f : 7.5f;
-            var pos = new Vector3(Mathf.Sin(t) * dist, 2.0f, Mathf.Cos(t) * dist);
-            cam.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(new Vector3(0f, 0.3f, 0f) - pos));
+            var c = showroom.transform.position;
+            var pos = c + new Vector3(Mathf.Sin(t) * dist, 2.0f, Mathf.Cos(t) * dist);
+            cam.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(c + new Vector3(0f, 0.3f, 0f) - pos));
             cam.fieldOfView = 45f;
         }
 
@@ -342,6 +521,7 @@ namespace Apex.Game
             if (showroom != null) Destroy(showroom);
             showroom = null;
             showroomCar = null;
+            DestroyMenuWorld();
             world = new GameObject("World");
             EnvironmentBuilder.Quality = Settings.environmentDetail;
             SurfaceTextures.UseUltra = Settings.ultraTextures;
@@ -449,6 +629,8 @@ namespace Apex.Game
                 BuildShowroom();
             }
             if (to == GameState.Garage) RebuildShowroomCar();
+            if (to == GameState.MainMenu) RefreshMenu();
+            menuView?.SetVisible(to == GameState.MainMenu);
         }
 
         // --- Timing events ----------------------------------------------------------------
@@ -553,6 +735,10 @@ namespace Apex.Game
             }
             Career.xp += res.xpGained;
             res.levelAfter = Career.Level;
+            double km = pe.timer.completedLaps.Count * Race.Circuit.Geometry.Length / 1000.0;
+            string sessionName = Race.Type == SessionType.Race ? "Rennen" : Race.Type == SessionType.Qualifying ? "Qualifying" : kind == SessionKind.TimeTrial ? "Zeitfahren" : "Training";
+            Career.RecordSession(Race.Circuit.Definition.name, sessionName, pe.position, d.entries.Count, startPosition - pe.position, pe.BestLap, km,
+                Race.Type == SessionType.Race && pe.finished);
             if (kind == SessionKind.Championship && Race.Type == SessionType.Race)
             {
                 foreach (var e in d.Standings)
@@ -617,6 +803,25 @@ namespace Apex.Game
                 case GameState.TrackSelect:
                 case GameState.Garage:
                     UpdateShowroomCamera();
+                    if (sm.Current == GameState.MainMenu && menuView != null)
+                    {
+                        bool overlay = settingsOpen || helpOpen;
+                        if (!overlay && menuOverlayLast) RefreshMenu();   // settings may have changed volume, motion, team
+                        menuOverlayLast = overlay;
+                        menuView.SetVisible(!overlay);
+                        if (!overlay)
+                        {
+                            menuView.Tick(Time.unscaledDeltaTime, navUp, navDown, navConfirm);
+                            if (input.PausePressed && menuView.Back()) break;
+                        }
+                        else if (input.PausePressed)
+                        {
+                            MenuBack();
+                            RefreshMenu();
+                            break;
+                        }
+                        break;
+                    }
                     if (input.PausePressed) MenuBack();
                     break;
                 case GameState.Results:

@@ -44,14 +44,17 @@ namespace Apex.Game
 
         void OnGUI()
         {
+            var ev = Event.current;
+            if (Time.frameCount <= swallowClickFrame + 1 && (ev.type == EventType.MouseUp || ev.type == EventType.MouseDown)) ev.Use();
             uiScale = Screen.height / 1080f * Settings.hudScale;
             GUI.matrix = Matrix4x4.Scale(new Vector3(uiScale, uiScale, 1f));
             virtualSize = new Vector2(Screen.width / uiScale, Screen.height / uiScale);
             switch (sm.Current)
             {
                 case GameState.MainMenu:
+                    // The main menu is the UI Toolkit view (MainMenuView); the IMGUI one is only the fallback.
                     if (settingsOpen) DrawSettings();
-                    else DrawMainMenu();
+                    else if (menuView == null) DrawMainMenu();
                     break;
                 case GameState.TrackSelect:
                     if (setupMode == SetupMode.Championship) DrawChampionship();
@@ -519,6 +522,8 @@ namespace Apex.Game
                         s.environmentDetail = p.environmentDetail;
                         s.ultraTextures = p.ultraTextures;
                     } },
+                new Row { label = "Menükulisse Istanbul (PC, ab nächstem Menü)", value = () => Application.isMobilePlatform ? "– (Mobil)" : OnOff(s.menuBackdrop),
+                    change = d => s.menuBackdrop = !s.menuBackdrop },
                 new Row { label = "Umgebungsdetails (ab nächster Session)",
                     value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : s.environmentDetail == 2 ? "Hoch" : "Extrem (PC)",
                     change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), GraphicsPreset.EnvironmentLevels) },
