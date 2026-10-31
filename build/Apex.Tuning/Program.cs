@@ -575,6 +575,70 @@ else if (mode == "trace")
         if (wetTrace) { sm.trackWetness = 0.6f; sm.FitTires(TireCompound.Intermediate); }
     });
 }
+else if (mode == "cafe-heights")
+{
+    // Height check of Ortaköy's café furniture against the terrain under the nearest house front.
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/bosphorus_a.json"));
+    var bed = new CircuitTestBed(def);
+    var field = new Apex.Environment.TerrainField(bed.g, def);
+    var clr = new TrackClearance(bed.surface);
+    var data = Apex.Environment.CityData.FromJson(File.ReadAllText(root + "City/bosphorus_a.json"));
+    var osm = new Apex.Environment.OsmCity(data, field, clr, def, null, 1);
+    var life = new Apex.Environment.CityLife(data, field, clr, osm, 1, 0, 0);
+    var diffs = new System.Collections.Generic.List<(float d, float x, float z, float y, float g)>();
+    foreach (var p in life.props)
+    {
+        if (p.kind != (int)Apex.Environment.CityLife.Prop.CafeSet) continue;
+        float best = float.MaxValue, gnd = 0f;
+        string nm = "";
+        foreach (var b in osm.buildings)
+            for (int i = 0; i < b.outline.Count; i++)
+            {
+                var a0 = b.outline[i]; var a1 = b.outline[(i + 1) % b.outline.Count];
+                var pp = new System.Numerics.Vector2(p.position.X, p.position.Z);
+                var ab = a1 - a0;
+                float tt = Math.Clamp(System.Numerics.Vector2.Dot(pp - a0, ab) / MathF.Max(ab.LengthSquared(), 1e-6f), 0f, 1f);
+                float dd = System.Numerics.Vector2.DistanceSquared(pp, a0 + ab * tt);
+                if (dd < best) { best = dd; gnd = b.level[i]; nm = $"{b.name}/{b.classical}/front {b.front[i]} d {MathF.Sqrt(dd):F1}"; }
+            }
+        diffs.Add((p.position.Y - gnd, p.position.X, p.position.Z, p.position.Y, gnd));
+        if (MathF.Abs(p.position.Y - gnd) > 1f) Console.WriteLine($"   off {p.position.Y - gnd:F2} at {p.position.X:F0},{p.position.Z:F0} nearest {nm}");
+    }
+    diffs.Sort((a, b) => MathF.Abs(b.d).CompareTo(MathF.Abs(a.d)));
+    if (diffs.Count > 0)
+    {
+        var w = diffs[0];
+        foreach (var b in osm.buildings)
+        {
+            bool near = false;
+            foreach (var q in b.outline) near |= (q.X - w.x) * (q.X - w.x) + (q.Y - w.z) * (q.Y - w.z) < 15f * 15f;
+            if (!near) continue;
+            Console.WriteLine($"building '{b.name}' ground {b.ground + 0.6f:F2} corners: " + string.Join(" ", b.outline.Select(q => $"({q.X:F0},{q.Y:F0}:{field.Height(q.X, q.Y):F1})")));
+        }
+    }
+    foreach (var d in diffs.Take(12)) Console.WriteLine($"{d.d,6:F2} m at {d.x:F0},{d.z:F0}: prop {d.y:F2}, street level of the nearest facade {d.g:F2}");
+    int over1 = diffs.Count(d => MathF.Abs(d.d) > 1f), over04 = diffs.Count(d => MathF.Abs(d.d) > 0.4f);
+    Console.WriteLine($"{diffs.Count} tables, |diff| > 1 m: {over1}, > 0.4 m: {over04}");
+}
+else if (mode == "terrain-line")
+{
+    // Terrain field heights along a line: terrain-line <track> x0 z0 x1 z1 [step]
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/" + args[1] + ".json"));
+    var g = TrackGeometry.FromDefinition(def);
+    var field = new Apex.Environment.TerrainField(g, def);
+    float x0 = float.Parse(args[2], inv), z0 = float.Parse(args[3], inv), x1 = float.Parse(args[4], inv), z1 = float.Parse(args[5], inv);
+    float step = args.Length > 6 ? float.Parse(args[6], inv) : 10f;
+    float len = MathF.Sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0));
+    for (float t = 0; t <= len; t += step)
+    {
+        float x = x0 + (x1 - x0) * t / len, z = z0 + (z1 - z0) * t / len;
+        float td = field.TrackDistance(x, z, 200f, out _);
+        Console.WriteLine($"{x,7:F0} {z,7:F0}  h {field.Height(x, z),6:F2}  water {field.IsWater(x, z)}  track dist {td,6:F1}");
+    }
+}
 else if (mode == "clearance-buildings")
 {
     // OSM buildings the track's keep-out envelope displaces (OsmCity rule: every corner and edge midpoint at least

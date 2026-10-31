@@ -21,6 +21,7 @@
   - Flachdach mit Brüstung und Wassertanks; Walmdach bei vierseitigen Grundrissen.
 - **Rendering:** Chunks von 192 m mit zwei LOD-Stufen.
 - **Abstände:** Gebäude halten 3 m Abstand zur Rennfläche (Test `TheRealCityStandsBesideTheTrackNotOnIt`).
+- **Hang:** Jede Fassadenseite beginnt seit 2026-10-31 auf ihrem eigenen Straßenniveau (Gelände 1,5 m vor der Fassade, `Building.level`); die Wände reichen bis zum tiefsten Eckpunkt. Vorher lagen die Läden auf der Bergseite unter dem Gehweg.
 
 ## 3. Straßen (`StreetNetwork`)
 Straßen sind rein visuell: kein Collider, nicht befahrbar.

@@ -1,4 +1,4 @@
-# Ortaköy-Referenzabschnitt – Priorität B (Architektur und Straßenleben)
+# Ortaköy-Referenzabschnitt – Priorität B (Architektur) und C (Menschen, Tiere)
 
 **Stand:** 2026-10-31.
 
@@ -72,6 +72,41 @@ Die Vorschau nutzt eine vereinfachte Fassadentextur und Licht. Sie zeigt Lage un
 - **Gelände:** In steilen Gassen kann ein Schirm wegen der Geländeinterpolation etwas zu hoch oder zu tief stehen; in Unity prüfen.
 - **Nicht gemessen:** Draw Calls und Frame-Kosten. Das Relief der ganzen Stadt hat jetzt ~389.000 statt 318.000 Dreiecke (Stufe 2).
 
+## Priorität C: Menschen, Zuschauer, Tiere (seit 2026-10-31)
+
+| Detail | Umfang (Stufe Hoch, Test) | Code |
+|---|---|---|
+| Stehende Zuschauer hinter den Barrieren: Muallim Naci Cd., Platz mit Kehre, Palanga-Anfahrt | 3.065 (Stufe Mittel ~60 % davon); 45 % mit türkischer Handfahne, rot-weiße Kleidung überwiegt; jubeln, wenn Autos vorbeifahren | `TracksideCrowd`, `CrowdComponent` |
+| Sitzende Gäste an den Café-Tischen | 153 (etwa einer je Tisch), dem Tisch zugewandt | `CityLife.guests`, `SeatedPerson` |
+| Straßenkatzen (sitzend oder liegend; rotgetigert, schwarz, grau, weiß) | 21, neben den Café-Tischen | `CityLife.cats`, `Cat` |
+
+**Regeln, getestet in `CityLifeStaysOffTheRacingSurfaceAndMoves`:**
+- **Zuschauer:**
+  - stehen 1,2–8 m hinter der Barrierenlinie, nach hinten lichter werdend
+  - nie im Wasser, in einem Haus oder auf einem Café-Tisch, nie in Tribünen- oder Eventflächen
+  - nie zwischen zwei Fahrbahnen; die Mittelzone gehört zur Rennfläche
+- **Gäste und Katzen:** nur im Viertel, nie in einem Haus, mehr als 2 m von der Rennfläche entfernt.
+- Die bestehenden Tribünen, Fußgänger, der Stadtverkehr, die Fähren und Möwen bleiben unverändert.
+
+**Höhenkorrektur der Fassaden (betrifft die ganze Stadt):**
+- **Bisher:** Ein Gebäude setzte seine Ladenzeile auf den niedrigsten Eckpunkt seines Grundrisses. Am Ortaköy-Hang (Muallim Naci ~10 m, Platz ~6,5 m) lagen Läden, Türen und Schilder auf der Bergseite dadurch bis zu 4 m unter dem Gehweg.
+- **Jetzt:** Jede Fassadenseite beginnt auf dem Gelände 1,5 m vor ihr (`OsmCity.Building.level`). Das gilt für die Textur und für das Relief. Die Wände reichen wie bisher bis zum tiefsten Punkt, auf der Talseite entsteht ein Sockel.
+- **Wirkung in Ortaköy:** 49 Ladenfronten liegen jetzt höher.
+- **Café-Tische:** Von den Tischen, die höchstens 6 m vor einer Fassade stehen, weichen nur noch 4 um mehr als 1 m vom Straßenniveau dieser Fassade ab, vorher 54 von 145. Die übrigen stehen auf offenen Plätzen.
+- **Prüfmodus:** `cd build/Apex.Tuning && dotnet run -c Release -- cafe-heights`.
+
+**Vorschau** (mit Gelände; `--frontage 2075,960`):
+- `docs/img/ortakoy_people_muallim_naci.jpg`: Zuschauer an der Muallim Naci aus Höhe der Verfolgerkamera
+- `docs/img/ortakoy_people_square.jpg`: Kehre auf dem Platz
+- `docs/img/ortakoy_people_overview.jpg`: Übersicht
+- `docs/img/ortakoy_people_cafe.jpg`: Café-Gäste
+
+**Grenzen:**
+- Zuschauer, Gäste und Katzen sind einfache Low-Poly-Figuren (Kastenformen), gedacht für Entfernungen ab etwa 15 m.
+- Gäste und Katzen bewegen sich nicht.
+- Die Zuschauer haben nur die Tribünenanimation (leichtes Wiegen, Springen beim Vorbeifahren, Fahnenschwenken).
+- Draw-Call- und Frame-Kosten der 3.000 Zuschauer sind nicht gemessen. Sie werden instanziert gezeichnet, in Gruppen nach Farbe und 80-m-Zelle.
+
 ## Fehlende Assets und Produktionsplan
 Ergänzt den Plan in `docs/ORTAKOY_VERTICAL_SLICE_PLAN.md`. Keine Käufe oder Aufträge ohne Freigabe.
 
@@ -82,5 +117,6 @@ Ergänzt den Plan in `docs/ORTAKOY_VERTICAL_SLICE_PLAN.md`. Keine Käufe oder Au
 | Schilder in Handwerksqualität (Leuchtkästen, Blechschilder, Neonschrift) | Atlas mit Systemschrift | handgestaltete Schilder mit Gebrauchsspuren, Normal-Map, Emission | intern (Grafik) oder Auftrag | 1–2 Wochen |
 | Fahnen mit Stoffbewegung | statische Bahnen | Vertex-Shader-Wind (wie Monumentalfahne) für Balkonfahnen | intern | 2–3 Tage |
 | Café-Möbel, Simitwagen, Kumpir-Stände, Silberschmuck-Auslagen | Low-Poly | 10–15 Props, PBR | Fab/Megascans (Lizenz prüfen) oder Auftrag | 1–2 Wochen |
-| Menschen an Tischen, Verkäufer | keine | sitzende und stehende Animationen | Teil von Priorität C | – |
+| Menschen (Zuschauer, Café-Gäste, Verkäufer) | Low-Poly-Kastenfiguren, Tribünen-Animation | 6–8 Charaktermodelle mit LODs, Kleidungsvarianten, Animationen (stehen, jubeln, sitzen, gehen, Fahne schwenken) | Auftrag oder Marktplatz (Lizenz prüfen); Mocap-Bibliothek | 3–5 Wochen |
+| Katzen, Möwen am Boden, Hunde | Low-Poly-Katzen (statisch) | 2 Katzenmodelle mit Idle-Animationen (putzen, schlafen, laufen) | Auftrag oder Marktplatz | 1–2 Wochen |
 | Pflaster der Gassen (Kopfstein) | Asphalt-/Gehwegmaterial | CC0-Kopfsteinscan | Poly Haven (CC0) | 1 Tag |

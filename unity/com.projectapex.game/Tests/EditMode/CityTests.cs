@@ -92,9 +92,35 @@ namespace Apex.Tests
                 Assert.That(city.InsideBuilding(p.position.X, p.position.Z, 0.8f), Is.False, "café table inside a house");
                 Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap + 1f));
             }
-            TestContext.WriteLine($"Ortaköy: {cafes} café tables, {carts} simit carts");
+            TestContext.WriteLine($"Ortaköy: {cafes} café tables, {carts} simit carts, {life.guests.Count} guests, {life.cats.Count} cats");
             Assert.That(cafes, Is.GreaterThan(60), "café tables in the bazaar lanes");
             Assert.That(carts, Is.GreaterThan(2));
+            Assert.That(life.guests.Count, Is.InRange(cafes * 0.6, cafes * 1.6), "about one guest per table");
+            foreach (var gst in life.guests)
+            {
+                Assert.That(Vector2.Distance(new Vector2(gst.position.X, gst.position.Z), centre), Is.LessThan(StreetFronts.OrtakoyRadius + 1f));
+                Assert.That(clear.Margin(gst.position.X, gst.position.Z), Is.GreaterThan(CityLife.TrackGap));
+            }
+            Assert.That(life.cats.Count, Is.GreaterThan(10), "Istanbul's street cats");
+            foreach (var cat in life.cats)
+            {
+                Assert.That(city.InsideBuilding(cat.position.X, cat.position.Z, 0f), Is.False, "cat inside a house");
+                Assert.That(clear.Margin(cat.position.X, cat.position.Z), Is.GreaterThan(CityLife.TrackGap));
+            }
+            // Standing fans behind the barriers of the Ortaköy section.
+            var crowd = new TracksideCrowd(TrackGeometry.FromDefinition(TestData.Circuit("bosphorus_a")), clear, field, city, life.props, centre, StreetFronts.OrtakoyRadius, 2);
+            TestContext.WriteLine($"Ortaköy trackside crowd: {crowd.fans.Count} fans");
+            Assert.That(crowd.fans.Count, Is.GreaterThan(400), "spectators along Muallim Naci Cd., the square and the Palanga climb");
+            foreach (var f in crowd.fans)
+            {
+                float m = clear.Margin(f.position.X, f.position.Z);
+                Assert.That(m, Is.InRange(TracksideCrowd.MinBehind - 0.01f, TracksideCrowd.MaxBehind + 0.01f), "fans stand 1.2-8 m behind the barrier");
+                Assert.That(field.IsWater(f.position.X, f.position.Z), Is.False);
+                Assert.That(city.InsideBuilding(f.position.X, f.position.Z, 0.3f), Is.False, "fan inside a house");
+                foreach (var p in life.props)
+                    if (p.kind == (int)CityLife.Prop.CafeSet)
+                        Assert.That(Vector2.Distance(new Vector2(p.position.X, p.position.Z), new Vector2(f.position.X, f.position.Z)), Is.GreaterThan(0.9f), "fan on a café table");
+            }
             foreach (var p in life.parked) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
         }
 

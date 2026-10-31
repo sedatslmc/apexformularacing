@@ -127,13 +127,15 @@ namespace Apex.Game
             string wall = Facade(b.style);
             Vector3 W(int i, float y) => new Vector3(o[i % n].X, y, o[i % n].Y);
             float u = (o[0].X * 0.37f + o[0].Y * 0.11f) % tileW;
-            float vb = -0.6f / tileH, vt = (y1 - y0 - 0.6f) / tileH;
             for (int i = 0; i < n; i++)
             {
                 var a = W(i, 0f); var c = W(i + 1, 0f);
                 var edge = c - a;
                 float len = edge.magnitude;
                 if (len < 0.05f) continue;
+                // The texture's shop row starts at this facade's own street level (OsmCity.Building.level).
+                float street = b.level != null ? b.level[i] : y0 + 0.6f;
+                float vb = (y0 - street) / tileH, vt = (y1 - street) / tileH;
                 // Counter-clockwise footprint (x right, z up): the outside is to the right of the edge.
                 var outward = new Vector3(edge.z, 0f, -edge.x) / len;
                 B(wall).QuadFacing(Up(a, y0), Up(c, y0), Up(c, y1), Up(a, y1),
@@ -214,9 +216,8 @@ namespace Apex.Game
             if (level <= 0 || b.front == null || b.classical != OsmCity.NotClassical) return;
             var o = b.outline;
             int n = o.Count;
-            float y0 = b.ground + 0.6f, fh = CityLayout.FloorHeight, tileW = BayWidth * TileBays;
-            int floors = Mathf.FloorToInt((b.height - 0.6f) / fh);
-            if (floors < 2) return;
+            float fh = CityLayout.FloorHeight, tileW = BayWidth * TileBays, roofY = b.ground + 0.6f + b.height;
+            if (Mathf.FloorToInt((b.height - 0.6f) / fh) < 2) return;
             int seed = Hash((int)(o[0].X * 7.1f), (int)(o[0].Y * 3.3f));
             int kind = seed % 10;                     // 0-2 balconies, 4-5 cumba (older low-rise), else plain
             bool balconies = kind < 3 && !b.historic;
@@ -237,6 +238,10 @@ namespace Apex.Game
                 float uEdge = u;
                 u += len;
                 if (!b.front[i] || len < 6f) continue;
+                // Storeys of this facade from its own street level (on a slope the uphill side has fewer).
+                float y0 = b.level != null ? b.level[i] : b.ground + 0.6f;
+                int floors = Mathf.FloorToInt((roofY - y0 - 0.6f) / fh);
+                if (floors < 2) continue;
                 var dir = edge / len;
                 var outward = new Vector3(edge.z, 0f, -edge.x) / len;
                 var q = Quaternion.LookRotation(outward);
@@ -725,6 +730,57 @@ namespace Apex.Game
                 B(shirt).Tube(new Vector3(0.22f * side, 1.46f, 0f), new Vector3(0.24f * side, 0.9f, -0.16f * s * side), 0.05f, 5, true);
             B(Skin).Box(new Vector3(0f, 1.6f, 0.01f), new Vector3(0.18f, 0.22f, 0.2f));
             B(DarkSteel).Box(new Vector3(0f, 1.72f, -0.01f), new Vector3(0.19f, 0.06f, 0.21f));   // hair
+        }
+
+        /// <summary>
+        /// Person sitting on a café chair: origin on the ground under the seat (seat height 0.45 m), facing +z (the
+        /// table); thighs forward, shins down, forearms on the table edge.
+        /// </summary>
+        public static void SeatedPerson(Parts B, string shirt, string trousers)
+        {
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var hip = new Vector3(0.1f * side, 0.5f, -0.02f);
+                var knee = new Vector3(0.11f * side, 0.52f, 0.36f);
+                var foot = new Vector3(0.11f * side, 0.05f, 0.42f);
+                B(trousers).Tube(hip, knee, 0.075f, 6, true);
+                B(trousers).Tube(knee, foot, 0.06f, 6, true);
+                B(Tyre).Box(foot + new Vector3(0f, -0.01f, 0.06f), new Vector3(0.1f, 0.08f, 0.24f));
+                // Upper arm down from the shoulder, forearm forward to the table.
+                var shoulder = new Vector3(0.22f * side, 1.06f, -0.04f);
+                var elbow = new Vector3(0.24f * side, 0.8f, 0.08f);
+                B(shirt).Tube(shoulder, elbow, 0.05f, 5, true);
+                B(shirt).Tube(elbow, new Vector3(0.16f * side, 0.8f, 0.36f), 0.045f, 5, true);
+            }
+            B(shirt).Box(new Vector3(0f, 0.8f, -0.06f), new Vector3(0.36f, 0.6f, 0.22f), Quaternion.Euler(4f, 0f, 0f));
+            B(Skin).Box(new Vector3(0f, 1.22f, -0.03f), new Vector3(0.18f, 0.22f, 0.2f));
+            B(DarkSteel).Box(new Vector3(0f, 1.34f, -0.05f), new Vector3(0.19f, 0.06f, 0.21f));   // hair
+        }
+
+        public static string CatCoat(int i) => "CatCoat" + i;
+
+        /// <summary>Street cat (about 0.45 m long), origin on the ground, facing +z: sitting upright or lying curled.</summary>
+        public static void Cat(Parts B, CityLife.CatPose pose, string coat)
+        {
+            if (pose == CityLife.CatPose.Sitting)
+            {
+                B(coat).Box(new Vector3(0f, 0.09f, -0.04f), new Vector3(0.17f, 0.16f, 0.22f));                                  // haunches
+                B(coat).Box(new Vector3(0f, 0.19f, 0.03f), new Vector3(0.12f, 0.2f, 0.11f), Quaternion.Euler(-18f, 0f, 0f));      // chest
+                B(coat).Box(new Vector3(0f, 0.33f, 0.07f), new Vector3(0.11f, 0.09f, 0.09f));                                   // head
+                B(coat).Tube(new Vector3(0f, 0.02f, -0.14f), new Vector3(0.12f, 0.02f, 0.02f), 0.018f, 4, true);                // tail round the paws
+                foreach (float x in new[] { -0.035f, 0.035f })
+                    B(coat).TriangleFacing(new Vector3(x - 0.025f, 0.37f, 0.07f), new Vector3(x + 0.025f, 0.37f, 0.07f), new Vector3(x, 0.42f, 0.07f),
+                        Vector2.zero, Vector2.right, Vector2.up, Vector3.forward);
+            }
+            else
+            {
+                B(coat).Box(new Vector3(0f, 0.06f, 0f), new Vector3(0.17f, 0.11f, 0.32f));                                     // body
+                B(coat).Box(new Vector3(0.02f, 0.08f, 0.19f), new Vector3(0.1f, 0.08f, 0.09f), Quaternion.Euler(0f, 15f, 0f));    // head on the paws
+                B(coat).Tube(new Vector3(-0.06f, 0.02f, -0.15f), new Vector3(-0.1f, 0.02f, 0.08f), 0.018f, 4, true);            // tail
+                foreach (float x in new[] { -0.01f, 0.05f })
+                    B(coat).TriangleFacing(new Vector3(x - 0.02f, 0.115f, 0.2f), new Vector3(x + 0.02f, 0.115f, 0.2f), new Vector3(x, 0.155f, 0.2f),
+                        Vector2.zero, Vector2.right, Vector2.up, Vector3.forward);
+            }
         }
 
         /// <summary>Gull, 1 m wingspan at the origin heading +z; wings form a shallow V (flap by scaling y).</summary>
