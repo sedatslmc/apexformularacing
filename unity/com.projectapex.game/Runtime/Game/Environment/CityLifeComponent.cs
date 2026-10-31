@@ -82,7 +82,9 @@ namespace Apex.Game
             foreach (var p in life.props)
             {
                 var prop = (CityLife.Prop)p.kind;
-                AddStatic(KindFor("Prop" + p.kind, B => EnvironmentGeometry.StreetProp(B, prop)), V(p.position), p.yaw);
+                // Café parasols come in the awning colours (one mesh per colour).
+                int variant = prop == CityLife.Prop.CafeSet ? p.variant % EnvironmentGeometry.Awnings : 0;
+                AddStatic(KindFor("Prop" + p.kind + "_" + variant, B => EnvironmentGeometry.StreetProp(B, prop, variant)), V(p.position), p.yaw);
             }
             foreach (var p in life.parked) AddStatic(VehicleKind(p.kind, p.variant, true), V(p.position), p.yaw);
             foreach (var b in statics)

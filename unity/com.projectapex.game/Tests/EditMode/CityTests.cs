@@ -81,6 +81,20 @@ namespace Apex.Tests
             foreach (var sg in life.signals)
                 Assert.That(clear.Margin(sg.position.X, sg.position.Z), Is.GreaterThan(CityLife.TrackGap), "traffic light on the track");
             foreach (var p in life.props) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
+            // Ortaköy's bazaar lanes: café tables and simit carts, in the quarter only and never inside a building.
+            var centre = city.OrtakoyCentre.Value;
+            int cafes = 0, carts = 0;
+            foreach (var p in life.props)
+            {
+                if (p.kind != (int)CityLife.Prop.CafeSet && p.kind != (int)CityLife.Prop.SimitCart) continue;
+                if (p.kind == (int)CityLife.Prop.CafeSet) cafes++; else carts++;
+                Assert.That(Vector2.Distance(new Vector2(p.position.X, p.position.Z), centre), Is.LessThan(StreetFronts.OrtakoyRadius));
+                Assert.That(city.InsideBuilding(p.position.X, p.position.Z, 0.8f), Is.False, "café table inside a house");
+                Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap + 1f));
+            }
+            TestContext.WriteLine($"Ortaköy: {cafes} café tables, {carts} simit carts");
+            Assert.That(cafes, Is.GreaterThan(60), "café tables in the bazaar lanes");
+            Assert.That(carts, Is.GreaterThan(2));
             foreach (var p in life.parked) Assert.That(clear.Margin(p.position.X, p.position.Z), Is.GreaterThan(CityLife.TrackGap));
         }
 

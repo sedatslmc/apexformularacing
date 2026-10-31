@@ -25,6 +25,19 @@ if (Array.IndexOf(args, "--flag") >= 0)
         for (int i = 0; i < w; i++) { int k = (j * w + i) * 4; fs.WriteByte(px[k]); fs.WriteByte(px[k + 1]); fs.WriteByte(px[k + 2]); }
     return;
 }
+if (Array.IndexOf(args, "--sign-catalog") >= 0)
+{
+    // Shop sign catalog (StreetFronts.Catalog) as JSON for tools/signs/build_sign_atlas.py.
+    var items = new List<string>();
+    foreach (var sg in Apex.Environment.StreetFronts.Catalog)
+        items.Add("  {\"text\": " + System.Text.Json.JsonSerializer.Serialize(sg.text) + ", \"subtitle\": " + System.Text.Json.JsonSerializer.Serialize(sg.subtitle) +
+                  $", \"board\": [{sg.board.r}, {sg.board.g}, {sg.board.b}], \"letters\": [{sg.letters.r}, {sg.letters.g}, {sg.letters.b}]}}");
+    File.WriteAllText(Path.Combine(outDir, "sign_catalog.json"),
+        $"{{\"columns\": {Apex.Environment.StreetFronts.AtlasColumns}, \"rows\": {Apex.Environment.StreetFronts.AtlasRows}, \"signs\": [\n" + string.Join(",\n", items) + "\n]}\n",
+        new UTF8Encoding(false));
+    Console.WriteLine($"wrote sign_catalog.json ({Apex.Environment.StreetFronts.Catalog.Length} signs)");
+    return;
+}
 if (Array.IndexOf(args, "--art") >= 0)
 {
     // Event emblem (on grey) and the İznik tile (2x2, to check the seams) as binary PPMs.
@@ -442,6 +455,23 @@ if (Array.IndexOf(args, "--environment") >= 0)
                 EnvironmentGeometry.FootprintBuilding(Wb, b, true);
                 EnvironmentGeometry.FacadeOrnaments(Wb, b, 2);
             }
+            // Street furniture of the window (benches, flag poles, Ortaköy's café tables and simit carts).
+            var life = new Apex.Environment.CityLife(data, field, new Apex.Tracks.TrackClearance(rs), osm, 1, 0, 0);
+            int nProps = 0;
+            foreach (var pr in life.props)
+            {
+                if ((pr.position.X - fx) * (pr.position.X - fx) + (pr.position.Z - fz) * (pr.position.Z - fz) > 140f * 140f) continue;
+                nProps++;
+                var kind = (Apex.Environment.CityLife.Prop)pr.kind;
+                int variant = kind == Apex.Environment.CityLife.Prop.CafeSet ? pr.variant % EnvironmentGeometry.Awnings : 0;
+                var tmp = new Dictionary<string, MeshBuilder>();
+                EnvironmentGeometry.StreetProp(k => tmp.TryGetValue(k, out var mb) ? mb : tmp[k] = new MeshBuilder(), kind, variant);
+                float cy = MathF.Cos(pr.yaw), sy = MathF.Sin(pr.yaw);
+                // Yaw about +y (Unity: local +z goes to (sin yaw, 0, cos yaw)); Append writes vertices as given.
+                foreach (var kv in tmp)
+                    Wb(kv.Key).Append(kv.Value, v => new Vector3(v.x * cy + v.z * sy + pr.position.X - fx, v.y + pr.position.Y, -v.x * sy + v.z * cy + pr.position.Z - fz));
+            }
+            Console.WriteLine($"{nProps} street props in the window");
             var sbw = new StringBuilder();
             int vbw = 1;
             foreach (var kv in win)

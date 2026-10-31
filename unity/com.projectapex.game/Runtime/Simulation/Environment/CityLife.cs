@@ -21,7 +21,7 @@ namespace Apex.Environment
     /// </summary>
     public sealed class CityLife
     {
-        public enum Prop { Bench, Bin, Bollard, Planter, BusShelter, FlagPole }
+        public enum Prop { Bench, Bin, Bollard, Planter, BusShelter, FlagPole, CafeSet, SimitCart }
         public enum Vehicle { Car, Taxi, Van, Bus, Scooter }
 
         public struct Placed
@@ -152,6 +152,7 @@ namespace Apex.Environment
                     else if (s.highway != "steps") walkPaths.Add(Lift(run, StreetNetwork.Lift + 0.03f));
                 }
             }
+            if (quality >= 1 && city != null && city.OrtakoyCentre.HasValue) Cafes(data, city.OrtakoyCentre.Value);
             Populate(walkPaths, null, pedestrians, pedestrianBudget, 1.1f, 1.6f, 6, rng);
             Populate(drivePaths, driveLanes, vehicles, vehicleBudget, 8f, 14f, 0, rng);
             BuildRoads(drivePaths, driveLanes);
@@ -251,6 +252,49 @@ namespace Apex.Environment
                     next += spacing * (0.7f + 0.6f * (float)rng.NextDouble());
                 }
                 run0 += seg;
+            }
+        }
+
+        /// <summary>
+        /// Ortaköy's bazaar lanes (the pedestrian streets within <see cref="StreetFronts.OrtakoyRadius"/> of the mosque):
+        /// café tables with two chairs and a parasol along the house fronts, leaving the middle of the lane to walk,
+        /// and now and then a simit cart. Own random stream, so the rest of the city does not change.
+        /// </summary>
+        void Cafes(CityData data, Vector2 centre)
+        {
+            var rng = new Random(1453);
+            foreach (var s in data.streets)
+            {
+                if (s.highway != "pedestrian" && s.highway != "living_street") continue;
+                bool near = false;
+                foreach (var q in s.points) near |= Vector2.Distance(q, centre) < StreetFronts.OrtakoyRadius;
+                if (!near) continue;
+                float width = s.width > 0f ? MathF.Min(s.width, 12f) : CityData.DefaultWidth(s.highway);
+                float lateral = width * 0.5f - 0.7f;
+                foreach (var run in ClearRuns(Resample(s.points, 3f), width * 0.5f))
+                {
+                    float next = 2f + 3f * (float)rng.NextDouble(), run0 = 0f;
+                    for (int i = 0; i + 1 < run.Count; i++)
+                    {
+                        float seg = Vector2.Distance(run[i], run[i + 1]);
+                        while (next <= run0 + seg)
+                        {
+                            var d = Dir(run, i);
+                            var right = new Vector2(d.Y, -d.X);
+                            float side = rng.NextDouble() < 0.5 ? -1f : 1f;
+                            var p = run[i] + d * (next - run0) + right * (lateral * side);
+                            var kind = rng.NextDouble() < 0.07 ? Prop.SimitCart : Prop.CafeSet;
+                            if (Vector2.Distance(p, centre) < StreetFronts.OrtakoyRadius && Free(p, kind == Prop.SimitCart ? 1.2f : 1.0f))
+                                props.Add(new Placed
+                                {
+                                    position = new Vector3(p.X, field.Height(p.X, p.Y) + StreetNetwork.Lift + 0.03f, p.Y),
+                                    yaw = MathF.Atan2(d.X, d.Y), kind = (int)kind, variant = rng.Next(4),
+                                });
+                            next += 5f + 3f * (float)rng.NextDouble();
+                        }
+                        run0 += seg;
+                    }
+                }
             }
         }
 

@@ -224,6 +224,8 @@ namespace Apex.Game
             bool metalRail = (seed >> 5) % 2 == 0;
             int awning = (seed >> 7) % Awnings;
             string solid = FacadeSolid(b.style);
+            // Ortaköy reference section: entrances and window sills (elsewhere from level 2 on the near relief).
+            bool detail = b.ortakoy || level >= 3;
             float u = (o[0].X * 0.37f + o[0].Y * 0.11f) % tileW;   // same running u as FootprintBuilding
             for (int i = 0; i < n; i++)
             {
@@ -249,9 +251,23 @@ namespace Apex.Game
                 {
                     float t = bays[k];
                     int h = Hash(seed + i * 131, k);
-                    // Shops: an awning over each ground-floor bay of a shop building, sometimes on other street fronts too.
-                    if (b.shop || h % 5 == 0)
-                        B(Awning(awning)).Box(P(t, y0 + 2.6f, 0.62f), new Vector3(3f, 0.06f, 1.35f), q * Quaternion.Euler(18f, 0f, 0f));
+                    // Shops: awning, sign board with a Turkish trade name and the box of the rolled-up shutter over
+                    // the ground-floor bays of shop buildings and some other street fronts (most in Ortaköy).
+                    bool shopBay = StreetFronts.IsShopBay(seed, i, k, b.shop, b.ortakoy) && !(cumba && k == mid && bays.Count >= 2);
+                    if (shopBay)
+                    {
+                        B(Awning((awning + StreetFronts.Hash(seed + i, k / 2)) % Awnings)).Box(P(t, y0 + 2.6f, 0.62f), new Vector3(3f, 0.06f, 1.35f), q * Quaternion.Euler(18f, 0f, 0f));
+                        ShopSign(B, P, dir, outward, t, y0 + 3.3f, StreetFronts.SignFor(seed, i, k, b.ortakoy));
+                        if (detail) B(LandmarkGeometry.Lead).Box(P(t, y0 + 2.42f, 0.14f), new Vector3(3.0f, 0.26f, 0.26f), q);   // shutter box
+                    }
+                    else if (detail && k == mid)
+                    {
+                        // Entrance of the house: panelled door in a stone surround under a small canopy.
+                        B(solid).Box(P(t, y0 + 1.2f, 0.04f), new Vector3(1.6f, 2.55f, 0.08f), q);
+                        B(Door).QuadFacing(P(t - 0.6f, y0 + 0.02f, 0.09f), P(t + 0.6f, y0 + 0.02f, 0.09f), P(t + 0.6f, y0 + 2.3f, 0.09f), P(t - 0.6f, y0 + 2.3f, 0.09f),
+                            Vector2.zero, Vector2.right, Vector2.one, Vector2.up, outward);
+                        B(Concrete).Box(P(t, y0 + 2.62f, 0.45f), new Vector3(1.9f, 0.09f, 0.9f), q);
+                    }
                     if (cumba && k == mid && bays.Count >= 2)
                     {
                         float top = y0 + floors * fh - 0.3f, bottom = y0 + fh;
@@ -295,9 +311,57 @@ namespace Apex.Game
                         }
                         if (level >= 2 && hf % 20 == 1)
                             B(Tank).Box(P(t + 1.25f, fb + (balcony ? 1.6f : 0.55f), balcony ? 0.2f : 0.22f), new Vector3(0.8f, 0.55f, 0.32f), q);
+                        // Stone window sill under the painted one of the facade texture (sill line 0.58-0.78 m).
+                        if (detail && !balcony)
+                            B(solid).Box(P(t, fb + 0.74f, 0.09f), new Vector3(1.7f, 0.08f, 0.18f), q);
+                    }
+                }
+                // Turkish flags hung vertically from a balcony railing or under a window (crescent and star at the top).
+                if (StreetFronts.FlagFront(seed, i, b.ortakoy))
+                {
+                    int count = 1 + StreetFronts.Hash(seed, i + 3) % 2;
+                    for (int f2 = 0; f2 < count; f2++)
+                    {
+                        var (bay, floor) = StreetFronts.FlagSpot(seed, i, f2, bays.Count, floors);
+                        if (floor >= floors || floor % TileBays == 0 || (cumba && bay == mid && bays.Count >= 2)) continue;
+                        float t = bays[bay], fb = y0 + floor * fh;
+                        bool onBalcony = balconies && Hash(Hash(seed + i * 131, bay), floor) % 10 < 5;
+                        // A window flag on the first floor would hang in front of a shop sign.
+                        if (!onBalcony && floor == 1 && StreetFronts.IsShopBay(seed, i, bay, b.shop, b.ortakoy)) continue;
+                        HangingFlag(B, P, dir, outward, t, onBalcony ? fb + 1.08f : fb + 0.7f, onBalcony ? 1.12f : 0.2f, !onBalcony);
                     }
                 }
             }
+        }
+
+        public const string ShopSignAtlas = "ShopSign", Door = "Door";
+
+        /// <summary>Sign board over a shop: a dark frame and the atlas cell of the sign on its face.</summary>
+        static void ShopSign(Parts B, System.Func<float, float, float, Vector3> P, Vector3 dir, Vector3 outward, float t, float y, int sign)
+        {
+            float w = StreetFronts.BoardWidth, h = StreetFronts.BoardHeight;
+            B(LandmarkGeometry.Lead).Box(P(t, y, 0.05f), new Vector3(w + 0.08f, h + 0.08f, 0.1f), Quaternion.LookRotation(outward));
+            var (u0, v0, u1, v1) = StreetFronts.Uv(sign);
+            B(ShopSignAtlas).QuadFacing(P(t - w * 0.5f, y - h * 0.5f, 0.105f), P(t + w * 0.5f, y - h * 0.5f, 0.105f), P(t + w * 0.5f, y + h * 0.5f, 0.105f), P(t - w * 0.5f, y + h * 0.5f, 0.105f),
+                new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), outward);
+        }
+
+        /// <summary>
+        /// Turkish flag hung vertically (G = 0.9 m wide, 1.35 m long): the hoist with the crescent and star at the top,
+        /// the cloth in three slightly bulging strips; window flags hang from a short rod.
+        /// </summary>
+        static void HangingFlag(Parts B, System.Func<float, float, float, Vector3> P, Vector3 dir, Vector3 outward, float t, float top, float off, bool rod)
+        {
+            const float g = 0.9f, len = 1.35f;
+            float[] bulge = { 0f, 0.05f, 0.015f, 0.06f };
+            for (int s = 0; s < 3; s++)
+            {
+                float ya = top - len * s / 3f, yb = top - len * (s + 1) / 3f;
+                float ua = s / 3f, ub = (s + 1) / 3f;   // texture u runs from the hoist (top) along the flag
+                B(BalconyFlag).QuadFacing(P(t - g * 0.5f, yb, off + bulge[s + 1]), P(t + g * 0.5f, yb, off + bulge[s + 1]), P(t + g * 0.5f, ya, off + bulge[s]), P(t - g * 0.5f, ya, off + bulge[s]),
+                    new Vector2(ub, 0f), new Vector2(ub, 1f), new Vector2(ua, 1f), new Vector2(ua, 0f), outward);
+            }
+            if (rod) B(LandmarkGeometry.Lead).Tube(P(t - g * 0.6f, top + 0.02f, off), P(t + g * 0.6f, top + 0.02f, off), 0.015f, 4, true);
         }
 
         /// <summary>Tiled hip roof over a four-cornered footprint (ridge along the longer pair of sides).</summary>
@@ -475,10 +539,47 @@ namespace Apex.Game
         public const string Headlight = "CarHeadlight", Taillight = "CarTaillight";
 
         /// <summary>Street furniture by <see cref="CityLife.Prop"/>; +z faces the street.</summary>
-        public static void StreetProp(Parts B, CityLife.Prop kind)
+        public static void StreetProp(Parts B, CityLife.Prop kind, int variant = 0)
         {
             switch (kind)
             {
+                case CityLife.Prop.CafeSet:
+                {
+                    // Round café table, two chairs along the lane, a parasol in one of the awning colours.
+                    B(DarkSteel).Tube(Vector3.zero, new Vector3(0f, 0.72f, 0f), 0.03f, 6, false);
+                    B(DarkSteel).Tube(new Vector3(0f, 0f, 0f), new Vector3(0f, 0.03f, 0f), 0.22f, 8, true);
+                    B(Wood).Tube(new Vector3(0f, 0.72f, 0f), new Vector3(0f, 0.75f, 0f), 0.34f, 10, true);
+                    foreach (float z in new[] { -0.55f, 0.55f })
+                    {
+                        float zs = Mathf.Sign(z);
+                        B(Wood).Box(new Vector3(0f, 0.45f, z), new Vector3(0.42f, 0.04f, 0.42f));
+                        B(Wood).Box(new Vector3(0f, 0.68f, z + zs * 0.2f), new Vector3(0.42f, 0.42f, 0.03f));
+                        B(DarkSteel).Box(new Vector3(0f, 0.22f, z), new Vector3(0.36f, 0.44f, 0.36f));
+                    }
+                    B(DarkSteel).Tube(new Vector3(0f, 0.75f, 0f), new Vector3(0f, 2.35f, 0f), 0.022f, 6, false);
+                    var apex = new Vector3(0f, 2.4f, 0f);
+                    const int seg = 8;
+                    for (int k = 0; k < seg; k++)
+                    {
+                        float a0 = k * Mathf.PI * 2f / seg, a1 = (k + 1) * Mathf.PI * 2f / seg;
+                        var r0 = new Vector3(Mathf.Cos(a0) * 1.05f, 2.02f, Mathf.Sin(a0) * 1.05f);
+                        var r1 = new Vector3(Mathf.Cos(a1) * 1.05f, 2.02f, Mathf.Sin(a1) * 1.05f);
+                        B(Awning(variant % Awnings)).TriangleFacing(r1, r0, apex, Vector2.zero, Vector2.right, new Vector2(0.5f, 1f), Vector3.up + (r0 + r1) * 0.2f);
+                    }
+                    break;
+                }
+                case CityLife.Prop.SimitCart:
+                {
+                    // Red simit cart: glazed display case on a box body, two wheels and a handle.
+                    B(Awning(0)).Box(new Vector3(0f, 0.75f, 0f), new Vector3(0.75f, 0.6f, 1.3f));
+                    B(Glass).Box(new Vector3(0f, 1.32f, 0f), new Vector3(0.7f, 0.55f, 1.2f));
+                    B(LandmarkGeometry.Lead).Box(new Vector3(0f, 1.63f, 0f), new Vector3(0.8f, 0.06f, 1.35f));
+                    foreach (float x in new[] { -0.42f, 0.42f })
+                        B(DarkSteel).Tube(new Vector3(x, 0.32f, 0.25f), new Vector3(x * 1.12f, 0.32f, 0.25f), 0.3f, 10, true);
+                    B(DarkSteel).Tube(new Vector3(-0.3f, 0.95f, -0.65f), new Vector3(0.3f, 0.95f, -0.65f), 0.02f, 4, true);
+                    B(DarkSteel).Box(new Vector3(0f, 0.25f, -0.55f), new Vector3(0.06f, 0.5f, 0.06f));
+                    break;
+                }
                 case CityLife.Prop.Bench:
                     for (int k = 0; k < 4; k++) B(Wood).Box(new Vector3(0f, 0.45f, -0.18f + k * 0.12f), new Vector3(1.8f, 0.04f, 0.1f));
                     for (int k = 0; k < 3; k++) B(Wood).Box(new Vector3(0f, 0.62f + k * 0.13f, -0.3f), new Vector3(1.8f, 0.1f, 0.03f), Quaternion.Euler(-12f, 0f, 0f));

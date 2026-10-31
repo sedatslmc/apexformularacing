@@ -212,6 +212,8 @@ namespace Apex.Environment
             /// <summary>0 flat roof with parapet, 1 tiled hip roof (small, simple footprints).</summary>
             public int roof;
             public bool historic, shop;
+            /// <summary>Within <see cref="StreetFronts.OrtakoyRadius"/> of the Ortaköy Mosque (shop mix, more flags).</summary>
+            public bool ortakoy;
             public string name;
             /// <summary>Built as an in-house landmark model, not as a generic block (see <see cref="ClassicalKind"/>).</summary>
             public int classical;
@@ -281,6 +283,9 @@ namespace Apex.Environment
         public readonly List<Building> buildings = new List<Building>();
         public readonly List<CityLayout.Tree> trees = new List<CityLayout.Tree>();
         public int removedTrack, removedWater, removedReserved;
+        readonly Vector2? ortakoyCentre;
+        /// <summary>The Ortaköy Mosque (centre of the quarter's reference detail), if the circuit has it.</summary>
+        public Vector2? OrtakoyCentre => ortakoyCentre;
 
         /// <summary>Distance a building keeps from the racing envelope (behind barrier, pavement).</summary>
         public const float BuildingClearance = 3f;
@@ -295,6 +300,8 @@ namespace Apex.Environment
             this.field = field;
             this.clearance = clearance;
             reserved = LandmarkModelAreas(def);
+            var mosque = def.FindLandmark("ortakoy_mosque");
+            if (mosque != null) ortakoyCentre = new Vector2(mosque.east, mosque.north);
             if (extraReserved != null) reserved.AddRange(extraReserved);
             foreach (var b in data.buildings) TryBuilding(b, def);
             DemoteStrayDependencies(data);
@@ -432,6 +439,7 @@ namespace Apex.Environment
                 roof = roof,
                 historic = historic,
                 shop = b.amenity.Length > 0 || b.type == "commercial" || b.type == "retail",
+                ortakoy = ortakoyCentre.HasValue && Vector2.Distance(c, ortakoyCentre.Value) < StreetFronts.OrtakoyRadius,
                 name = b.name,
             });
         }
