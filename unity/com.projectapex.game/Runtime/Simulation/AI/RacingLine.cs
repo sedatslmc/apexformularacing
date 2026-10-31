@@ -108,14 +108,7 @@ namespace Apex.AI
             int n = geometry.Count;
             const float g = 9.81f;
             float ds = geometry.Spacing;
-            for (int i = 0; i < n; i++)
-            {
-                float k = 0f;
-                for (int o = -2; o <= 2; o++) k = MathF.Max(k, MathF.Abs(curvature[((i + o) % n + n) % n]));
-                float denom = k - Mu * DownforcePerMass;
-                gripSpeed[i] = denom <= 1e-5f ? 400f : MathF.Min(400f, MathF.Sqrt(Mu * g / denom));
-            }
-            BrakingPass(gripSpeed);
+            GripProfile(Mu, gripSpeed);
             for (int i = 0; i < n; i++) speed[i] = MathF.Min(MaxSpeed, gripSpeed[i]);
             for (int pass = 0; pass < 2; pass++)
                 for (int i = 0; i < n; i++)
@@ -127,7 +120,43 @@ namespace Apex.AI
                 }
         }
 
-        void BrakingPass(float[] profile)
+        /// <summary>Cornering and braking limit (m/s) per sample for a friction coefficient mu.</summary>
+        void GripProfile(float mu, float[] profile)
+        {
+            int n = geometry.Count;
+            const float g = 9.81f;
+            for (int i = 0; i < n; i++)
+            {
+                float k = 0f;
+                for (int o = -2; o <= 2; o++) k = MathF.Max(k, MathF.Abs(curvature[((i + o) % n + n) % n]));
+                float denom = k - mu * DownforcePerMass;
+                profile[i] = denom <= 1e-5f ? 400f : MathF.Min(400f, MathF.Sqrt(mu * g / denom));
+            }
+            BrakingPass(profile, mu);
+        }
+
+        readonly System.Collections.Generic.Dictionary<int, float[]> scaledGrip = new System.Collections.Generic.Dictionary<int, float[]>();
+
+        /// <summary>
+        /// Grip-limited speed (m/s) with the tyre grip scaled by <paramref name="gripScale"/> (wet track), from
+        /// a profile recomputed with the lower friction (quantised to 1/40, cached). Unlike scaling the dry
+        /// profile by sqrt(grip), this keeps the downforce physics: at the lower corner speed there is less
+        /// downforce too, so aero-loaded corners and corners in a braking zone lose more than sqrt(grip).
+        /// </summary>
+        public float GripSpeedAt(float distance, float gripScale)
+        {
+            int key = (int)MathF.Round(ApexMath.Clamp(gripScale, 0.1f, 1f) * 40f);
+            if (key >= 40) return GripSpeedAt(distance);
+            if (!scaledGrip.TryGetValue(key, out var prof))
+            {
+                prof = new float[geometry.Count];
+                GripProfile(Mu * key / 40f, prof);
+                scaledGrip[key] = prof;
+            }
+            return prof[geometry.IndexAt(distance)];
+        }
+
+        void BrakingPass(float[] profile, float mu)
         {
             int n = geometry.Count;
             const float g = 9.81f;
@@ -140,7 +169,7 @@ namespace Apex.AI
                     int i = n - 1 - step;
                     float v = profile[(i + 1) % n];
                     // Friction circle: braking gets what the cornering at this point leaves of the grip.
-                    float aTotal = Mu * (g + DownforcePerMass * v * v);
+                    float aTotal = mu * (g + DownforcePerMass * v * v);
                     float aLat = v * v * MathF.Abs(curvature[i]);
                     float aLong = MathF.Sqrt(MathF.Max(0f, aTotal * aTotal - aLat * aLat));
                     float decel = MathF.Max(1f, aLong * 0.85f + g * geometry.GradeAt(geometry.Distances[i]));

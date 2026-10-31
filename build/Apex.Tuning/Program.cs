@@ -557,6 +557,8 @@ else if (mode == "trace")
         if (done || d < from || d > to) return;
         var s = rig.sim;
         float pitch = MathF.Asin(rig.Forward.Y) * 57.3f, roll = MathF.Asin(rig.Right.Y) * 57.3f;
+        var pr = bed.g.Project(rig.position);
+        Console.Write($"lat {pr.lateral,5:F1}/{bed.g.Widths[pr.index] * 0.5f:F2} ");
         Console.WriteLine($"{d,7:F1} v {rig.velocity.Length() * 3.6f,5:F0} (line {bed.line.SpeedAt(d) * 3.6f:F0}) vy {rig.velocity.Y,6:F2} pitch {pitch,5:F2} roll {roll,5:F2} grade {bed.g.GradeAt(d) * 100:F1}% " +
             $"thr {s.throttle:F2} brk {s.brake:F2} st {s.steer,5:F2} comp {s.wheels[0].compression * 1000,3:F0}/{s.wheels[1].compression * 1000,3:F0}/{s.wheels[2].compression * 1000,3:F0}/{s.wheels[3].compression * 1000,3:F0} mm " +
             $"wheels {string.Join("/", rig.wheelParts)} clearance {rig.MinClearance * 1000,4:F0} mm ({rig.ClearancePart}) body {rig.BodyContacts} slipF {s.wheels[0].slipAngle:F3} grip {s.tires.Average(t => t.GripMultiplier(s.trackWetness)):F3} usage {MathF.Max(MathF.Abs(s.wheels[0].slipAngle), MathF.Abs(s.wheels[1].slipAngle)) / s.tireFront.slipAnglePeak:F2}");
@@ -566,7 +568,38 @@ else if (mode == "trace")
     bool kb = Environment.GetEnvironmentVariable("APEX_KEYBOARD") != null;
     float assist = float.Parse(Environment.GetEnvironmentVariable("APEX_ASSIST") ?? "1", inv);
     int tcl = int.Parse(Environment.GetEnvironmentVariable("APEX_TC") ?? "2");
-    bed.Drive(d0, l0, to - d0 + 50f, 200f, pace: pace, digitalInput: kb, configure: sm => { sm.steeringAssist = assist; sm.tractionLevel = tcl; });
+    bool wetTrace = Environment.GetEnvironmentVariable("APEX_WET") != null;
+    bed.Drive(d0, l0, to - d0 + 50f, 200f, pace: pace, digitalInput: kb, configure: sm =>
+    {
+        sm.steeringAssist = assist; sm.tractionLevel = tcl;
+        if (wetTrace) { sm.trackWetness = 0.6f; sm.FitTires(TireCompound.Intermediate); }
+    });
+}
+else if (mode == "clearance-buildings")
+{
+    // OSM buildings the track's keep-out envelope displaces (OsmCity rule: every corner and edge midpoint at least
+    // 3 m outside the barrier lines), within a box: clearance-buildings <track> [x0 x1 z0 z1].
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string id = args[1];
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/" + id + ".json")));
+    var clr = new TrackClearance(bed.surface);
+    float[] box = args.Length > 5 ? args.Skip(2).Take(4).Select(a => float.Parse(a, inv)).ToArray() : new[] { -1e9f, 1e9f, -1e9f, 1e9f };
+    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(root + "City/bosphorus_a.json"));
+    foreach (var b in doc.RootElement.GetProperty("buildings").EnumerateArray())
+    {
+        var o = b.GetProperty("outline").EnumerateArray().Select(p => (x: p[0].GetSingle(), z: p[1].GetSingle())).ToList();
+        float cx = o.Average(p => p.x), cz = o.Average(p => p.z);
+        if (cx < box[0] || cx > box[1] || cz < box[2] || cz > box[3]) continue;
+        float m = float.MaxValue;
+        for (int i = 0; i < o.Count; i++)
+        {
+            var q = o[(i + 1) % o.Count];
+            m = MathF.Min(m, MathF.Min(clr.Margin(o[i].x, o[i].z), clr.Margin((o[i].x + q.x) * 0.5f, (o[i].z + q.z) * 0.5f)));
+        }
+        if (m < 6f)
+            Console.WriteLine($"{(m < 3f ? "REMOVED" : "kept   ")} {m,6:F2} m  {b.GetProperty("id").GetString(),-11} {b.GetProperty("type").GetString(),-12} hist='{b.GetProperty("historic").GetString()}' amen='{b.GetProperty("amenity").GetString()}' {b.GetProperty("name").GetString()} @ {cx:F0},{cz:F0}");
+    }
 }
 else if (mode == "validate-road")
 {
@@ -818,9 +851,25 @@ else if (mode == "keyboard6")
     bed.setupFactory = () => SetupWithOverrides(spec);
     Console.WriteLine($"| Profil | Runde | Dreher | von der Strecke | Ereignisse |");
     Console.WriteLine("|---|---|---|---|---|");
+    // APEX_KB_TRACE=from,to,profile: per-step state of that profile between two raw distances, every pass.
+    string kbTrace = Environment.GetEnvironmentVariable("APEX_KB_TRACE");
     foreach (var (name, tc, abs, assist) in new[] { ("Einsteiger", 3, true, 1f), ("Ausgewogen", 2, true, 0.5f), ("Profi", 1, true, 0f) })
     {
         var (d0, l0) = bed.GridSlot(0);
+        bed.trace = null;
+        if (kbTrace != null && kbTrace.Split(',')[2] == name)
+        {
+            var parts = kbTrace.Split(',');
+            float tf = float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture), tt = float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture);
+            int step = 0;
+            bed.trace = (d, rig) =>
+            {
+                if (d < tf || d > tt || step++ % 12 != 0) return;
+                var s = rig.sim;
+                var pr = bed.g.Project(rig.position);
+                Console.WriteLine($"t {rig.time,6:F1} d {d,7:F1} lat {pr.lateral,5:F1} v {rig.velocity.Length() * 3.6f,4:F0} thr {s.throttle:F2} brk {s.brake:F2} st {s.steer,5:F2} yawrate {rig.angularVelocity.Y,5:F2} slipF {s.wheels[0].slipAngle,6:F3} slipR {s.wheels[2].slipAngle,6:F3} wheels {string.Join("/", rig.wheelParts)} grade {bed.g.GradeAt(d) * 100:F1}%");
+            };
+        }
         var r = bed.Drive(d0, l0, 0f, 420f, laps: 2, pace: 0.95f, digitalInput: true, configure: sim =>
         {
             sim.tractionLevel = tc; sim.assistAbs = abs; sim.steeringAssist = assist; sim.speedSensitiveSteering = true;

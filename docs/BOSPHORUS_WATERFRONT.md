@@ -101,3 +101,62 @@ Bewertung:
   - Der Bosporus ist dort zu einem Drittel im Bild, nicht zur Hälfte.
 
 Karten: `docs/img/waterfront_hairpin_variants.jpg` (Vergleich), `docs/img/waterfront_square_free.jpg` (Freiraum des Platzes).
+
+## 5. R20 Platz-Nord – Umsetzung (2026-10-31)
+**Status:** implementiert; automatisch getestet (Simulation, Kollisionsfläche, KI- und Tastaturrunden). **In Unity noch nicht gefahren.**
+
+- **Dateien:**
+  - `Resources/Tracks/bosphorus_a.json` = Bosphorus Grand Prix mit R20.
+  - `Resources/Tracks/bosphorus_a_classic.json` = die bisherige Strecke mit der Ortaköy-Kehre, unverändert. Sie ist in der Rennauswahl als „Bosphorus Grand Prix (klassische Ortaköy-Kehre)" wählbar und nutzt dieselbe Stadt (`city_id`).
+  - Rücksprung auf die alte Strecke als Hauptkurs: `python3 tools/geo/build_track_a.py --layout classic` erzeugt sie bitgenau neu.
+- **Erzeugung:** `tools/geo/ortakoy_r20.py` (Linie, Breiten, Kurven) und `build_track_a.py --layout r20` (Standard).
+- **Kennzahlen:** 8,16 km, 16 Kurven, KI-Runde 142,0 s (vorher 130,8 s).
+  - Tastatur: Runde 143,7–143,9 s trocken, 160,9–161,0 s nass, in allen drei Profilen ohne Dreher und ohne Abflug.
+
+**Linienführung, gegenüber der Studie nachgeschärft:**
+- **Abzweig:** Die Strecke verlässt die Çırağan Cd. 40 m früher, noch auf der Geraden. Dadurch ist die Muallim-Naci-Kurve eine einzige gleichmäßige Rechtskurve mit R ≈ 137 m, ohne Gegenschwenk.
+- **Rückweg:** Er läuft in einem sanften Bogen (R > 110 m) über die Fläche der alten Kehre in die Palanga-Steigung.
+  - Eine Zwischenfassung hatte dort ein S mit R ≈ 35 m auf 11 % Steigung, an dem sich trockene Tastaturrunden drehten.
+- **Engstelle:** Beide Fahrbahnen liegen so weit nördlich, wie die Straße erlaubt.
+  - Fahrbahnen 9,5 m, 1 m Auslauf zur Mittelwand.
+  - Barriere an der Südseite 0,3 m neben der Fahrbahn.
+- **Kerbs:** Die Muallim-Naci-Kurve hat keine (`"kerbs": false` in der Kurvenliste). Sie wird unter Vollbremsung gefahren, und ein Kerb an der Mittelwand brachte das Auto dort aus dem Gleichgewicht.
+
+**Gebäude** (geprüft mit `Apex.Tuning clearance-buildings`, gleiche Regel wie im Spiel: 3 m hinter der Barriere):
+
+| Gruppe | Gebäude |
+|---|---|
+| Weichen zusätzlich zur alten Strecke | 2 kleine Gebäude an der Nordseite der Muallim Naci (OSM 415084314, 415091034; 59 + 65 m²), beide aus der freigegebenen Liste |
+| Weichen wie schon bei der alten Kehre | die Bebauung im Kehrenbereich (u. a. 1414612661/2/3, 415085111/2) |
+| Bleiben stehen | Etz-Ahayim-Synagoge (4,7 m Luft), die Wohnhäuser an der Südseite (3,7 m) und der Eckblock an der Platzeinfahrt (4,0 m) |
+
+  Eine Zwischenfassung hätte diese drei Gebäude verdrängt; das ist korrigiert. Moschee und Küste sind unberührt.
+
+**Höhenprofil:**
+- **Entwurf:** neu mit `vertical_alignment.py` gegen die Fahrzeuggrenzen; die Grenzen sind nach dem Umbau zweimal neu erzeugt.
+- **Ortaköy-Fenster:** Dort gilt auch für Vollgas die halbe Grenze, für Kuppen genauso streng wie für Wannen. Das Raster wird als C2-Spline ausgewertet.
+- **Spurkopplung:** Wo die Spuren zusammenlaufen, setzt die Höhenkopplung weich ein (bis 30 cm bei 17 m Achsabstand, 5 cm ab 13 m).
+- **Ergebnis `validate-road`:**
+  - 0 kritisch; im neuen Abschnitt keine Warnung
+  - 5 knappe Wannen-Warnungen auf alten Abschnitten, je bis 11 % über der Grenze (alte Strecke: 4, bis 54 %)
+  - Kollisionsfläche 0,0 mm vom Entwurf
+
+**KI im Regen (Simulation, betrifft alle Strecken):**
+- **Bisher:** Die KI skalierte ihr trockenes Kurventempo im Regen mit √Grip. Das überschätzt Kurven, die von Abtrieb leben, weil bei weniger Tempo auch weniger Abtrieb wirkt.
+- **Jetzt:** Sie rechnet im Regen ein eigenes Profil mit dem nassen Reibwert (`RacingLine.GripSpeedAt(d, grip)`). Nass-Runden werden dadurch etwas langsamer und stabiler.
+
+**KI beim Überholen (Simulation, betrifft alle Strecken):**
+- **Kein Überholversuch in Straßenkurven:** Die KI beginnt keinen Überholversuch, wenn in den nächsten ~1,5 s eine Kurve der Straße selbst enger als R 200 m folgt; das gilt auch, wenn die Ideallinie die Kurve gerade schneidet.
+  - Grund: Im KI-Rennen startete ein Auto vor der Muallim-Naci-Kurve einen Überholversuch außen und schob 6 m über den Rand.
+- **Pfad-Tempolimit:** Beim Überholen vergleicht die KI ihre Spur auch mit der Ideallinie ~1 s voraus. Bleibt sie dort außen, gilt das Tempolimit des eigenen Pfads.
+- **Nebenwirkung:** In schnellen Straßenknicken wird künftig seltener überholt. Ergebnis im Test: auf `bosphorus_a` 0,0 m über den Rand; auf dem Archivkurs `bosphorus_gp` 1,3 m statt 0,3 m (Grenze 3 m).
+
+**Streckenposten:** Sie stehen auf der Seite mit mehr Auslauf, wenn die bevorzugte Seite keinen Platz hat (vorher landete einer auf der 0,3-m-Fassadenseite).
+
+**Automatische Prüfung:** 185/185 Tests grün, `tools/verify.sh` OK.
+
+**Nicht geprüft (braucht Unity):**
+- Optik, Kamerablicke, Barrieren und Möbel am Platz
+- echte Fahrt mit Tastatur, Gamepad und Lenkrad
+- Bildrate
+- **Karte:** `docs/img/waterfront_r20_final.png` (alte und neue Linie, Barrierenlinien, verdrängte und geschützte Gebäude).

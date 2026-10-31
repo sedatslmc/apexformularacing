@@ -72,7 +72,7 @@ def design(s_ref, h_ref, L, limits_csv, pairs=(), log=print):
     """Quadratic programme: min 1/2 |h - r|^2 + LAMBDA/2 |D2 h|^2 + LAMBDA3/2 |D3 h|^2  s.t.  grade and curvature bounds.
 
     `pairs` = (s_a, s_b) lap distances that lie side by side on the same street (both legs of a
-    shared road); their heights are tied to within PAIR_TOL.
+    shared road); their heights are tied to within PAIR_TOL, or a tolerance given as a third element.
     Solved with ADMM (the OSQP iteration) on row-scaled constraints; one dense factorisation."""
     n = int(round(L / STEP))
     ds = L / n
@@ -87,14 +87,15 @@ def design(s_ref, h_ref, L, limits_csv, pairs=(), log=print):
     hi = [np.ones(n), kg / np.maximum(kc, kg)]
     if len(pairs):
         E = np.zeros((len(pairs), n))
-        for k, (sa, sb) in enumerate(pairs):
+        tol = np.array([p[2] if len(p) > 2 else PAIR_TOL for p in pairs])
+        for k, (sa, sb) in enumerate(p[:2] for p in pairs):
             for sv, sign in ((sa, 1.0), (sb, -1.0)):
                 x = (sv % L) / ds
                 i = int(x) % n
                 t = x - int(x)
                 E[k, i] += sign * (1 - t)
                 E[k, (i + 1) % n] += sign * t
-        rows.append(E / PAIR_TOL)
+        rows.append(E / tol[:, None])
         lo.append(-np.ones(len(pairs)))
         hi.append(np.ones(len(pairs)))
     C = np.vstack(rows)
@@ -127,14 +128,32 @@ def design(s_ref, h_ref, L, limits_csv, pairs=(), log=print):
     viol = max(((-k) / kc).max(), (k / kg).max(), (np.abs(gr) / GRADE_MAX).max())
     if len(pairs):
         pv = np.abs(E @ h).max()
+        viol_pairs = (np.abs(E @ h) / tol).max()
         log(f"  {len(pairs)} side-by-side pairs, largest height difference {pv * 100:.1f} cm")
-        viol = max(viol, pv / PAIR_TOL)
+        viol = max(viol, viol_pairs)
     log(f"  result after {it} iterations: grade max {np.abs(gr).max() * 100:.2f} %, crest R min {1 / max((-k).max(), 1e-9):.0f} m, "
         f"sag R min {1 / max(k.max(), 1e-9):.0f} m, worst use of a limit {viol * 100:.1f} %, height {h.min():.1f}..{h.max():.1f} m "
         f"(reference {r.min():.1f}..{r.max():.1f} m), deviation max {np.abs(h - r).max():.2f} m, rms {np.sqrt(np.mean((h - r) ** 2)):.2f} m")
     if viol > 1.01:
         raise SystemExit("vertical alignment: constraints not met")
     return s, h, r
+
+
+def evaluate_c2(s_grid, h_grid, L, s):
+    """Profile height at lap distances s: periodic cubic spline through the design grid (C2). Its curvature is
+    linear between the nodes, so it never exceeds the designed node curvatures (the C1 Hermite form can
+    overshoot next to a change of curvature)."""
+    h = np.asarray(h_grid, float)
+    n = len(h)
+    ds = L / n
+    # Second derivatives M of the periodic spline on the uniform grid: M[i-1] + 4 M[i] + M[i+1] = 6 D2h[i].
+    A = 4 * np.eye(n) + np.roll(np.eye(n), 1, axis=1) + np.roll(np.eye(n), -1, axis=1)
+    M = np.linalg.solve(A, 6 * (np.roll(h, -1) - 2 * h + np.roll(h, 1)) / ds ** 2)
+    x = np.asarray(s, float) % L
+    i = (x // ds).astype(int) % n
+    j = (i + 1) % n
+    t = (x - i * ds) / ds
+    return (1 - t) * h[i] + t * h[j] + ds ** 2 / 6 * (((1 - t) ** 3 - (1 - t)) * M[i] + (t ** 3 - t) * M[j])
 
 
 def evaluate(s_grid, h_grid, L, s):

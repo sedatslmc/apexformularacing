@@ -330,6 +330,8 @@ namespace Apex.Tracks
             public bool right;
             public float angleDeg;
             public float minRadius;
+            /// <summary>Authored corners can be street bends without kerbs.</summary>
+            public bool noKerbs;
         }
 
         /// <summary>Detects corners as same-sign curvature runs above a threshold
@@ -342,7 +344,7 @@ namespace Apex.Tracks
             foreach (var c in def.corners)
             {
                 int idx = IndexAt(c.distance);
-                list.Add(new Corner { index = idx, right = c.right, angleDeg = c.angle, minRadius = 1f / MathF.Max(MathF.Abs(Curvatures[idx]), 1e-4f) });
+                list.Add(new Corner { index = idx, right = c.right, angleDeg = c.angle, minRadius = 1f / MathF.Max(MathF.Abs(Curvatures[idx]), 1e-4f), noKerbs = !c.kerbs });
             }
             return list;
         }

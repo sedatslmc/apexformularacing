@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Builds the circuit file for approved Variant A (phase 4) from data/geo/track_plan_A.json.
 
+Layouts (--layout): "r20" (default, approved 2026-10-31) writes Resources/Tracks/bosphorus_a.json with the Ortaköy
+R20 routing past Ortaköy Square (ortakoy_r20.py); "classic" writes Resources/Tracks/bosphorus_a_classic.json with the
+earlier Ortaköy hairpin at the end of Çırağan Cd. (kept for comparison and as a way back).
+
 Writes unity/.../Resources/Tracks/bosphorus_a.json in the existing CircuitDefinition
 format: points [east, north, elevation, width, run-off left, run-off right] in the unrotated local frame of
 tools/geo/dem_tools.py (true north = +z), the drivable height profile (tools/geo/vertical_alignment.py), widths
@@ -17,9 +21,11 @@ import dem_tools as dem
 
 ROOT = dem.ROOT
 PLAN = os.path.join(ROOT, "data/geo/track_plan_A.json")
-OUT = os.path.join(ROOT, "unity/com.projectapex.game/Runtime/Resources/Tracks/bosphorus_a.json")
+TRACKS = os.path.join(ROOT, "unity/com.projectapex.game/Runtime/Resources/Tracks")
 LEAD = 300.0       # points start this far before the start/finish line
-LIMITS = os.path.join(ROOT, "data/geo/bosphorus_a_limits.csv")   # build/Apex.Tuning: dotnet run -- limits bosphorus_a <csv>
+# Vehicle limits per layout (build/Apex.Tuning: dotnet run -- limits <track id> <csv>); regenerate after layout changes.
+LIMITS = {"r20": os.path.join(ROOT, "data/geo/bosphorus_a_limits.csv"),
+          "classic": os.path.join(ROOT, "data/geo/bosphorus_a_classic_limits.csv")}
 SPACING = 10.0
 
 LANDMARKS = [
@@ -97,8 +103,56 @@ def height_grid(cell=100.0):
             "source": "Copernicus DEM GLO-30, 5th percentile per cell (street level)"}
 
 
-def main():
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--layout", choices=["r20", "classic"], default="r20")
+    ap.add_argument("--limits", help="vehicle-limits CSV to use instead of the layout's own (first pass after a layout change)")
+    args = ap.parse_args(argv)
     plan = json.load(open(PLAN))
+    for i, c in enumerate(plan["corners"]):
+        c["name"] = CORNER_NAMES[i]
+    ease, parallel, escapes = list(EASE), list(PARALLEL), list(ESCAPES)
+    n_plan, dn = len(plan["points"]), 0
+    r20 = args.layout == "r20"
+    if r20:
+        import ortakoy_r20
+        plan, s0, s1, dl = ortakoy_r20.apply(plan)
+        for c in plan["corners"]:
+            c.setdefault("name", c["street"])
+
+        def shift(a, b):
+            return (a + dl, b + dl) if a > s1 else (a, b)
+        dn = len(plan["points"]) - n_plan       # Yıldız easing lies after the splice: same points, new indices
+        parallel = [shift(a, b) for a, b in parallel]
+        # The Ortaköy escape road ended at the old hairpin; it now ends where the new section begins.
+        escapes = [((a, min(b, s0)) if b > s0 and a < s0 else shift(a, b)) + (side, m) for a, b, side, m in escapes if not (s0 <= a <= s1)]
+        print(f"R20: section {s0:.0f}..{s1:.0f} m replaced, length change {dl:+.0f} m")
+    track_id = "bosphorus_a" if r20 else "bosphorus_a_classic"
+    out_path = os.path.join(TRACKS, track_id + ".json")
+    limits = args.limits or LIMITS[args.layout]
+    if r20:
+        # The approach to Ortaköy is braked from full speed, but the profile must also suit a car that is still
+        # flat out there (late braking, slipstream): the vehicle limits of the fastest sample for 200 m.
+        import csv
+        import tempfile
+        rows = list(csv.DictReader(open(limits)))
+        fast = max(rows, key=lambda r: float(r["speed"]))
+        for r in rows:
+            if s0 - 80.0 <= float(r["lap_s"]) <= s0 + 120.0:
+                # Half the full-speed limit: the design grid is interpolated onto the denser Ortaköy points and the
+                # game's height spline, which adds small curvature peaks between grid nodes.
+                r["speed"] = fast["speed"]
+                # Crests as tight as sags: a sharp (legal) crest node between sag-limited stretches makes the
+                # game's height spline overshoot into the sag limit next to it.
+                r["max_crest"] = str(float(fast["max_sag"]) * 0.5)
+                r["max_sag"] = str(float(fast["max_sag"]) * 0.5)
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False)
+        w = csv.DictWriter(tmp, fieldnames=["lap_s", "speed", "max_crest", "max_sag"])
+        w.writeheader()
+        w.writerows(rows)
+        tmp.close()
+        limits = tmp.name
     pts = plan["points"]                       # every 10 m from the start line (5 m resample, [::2])
     prof_s = plan["profile"]["s"]
     n = len(pts)
@@ -110,8 +164,9 @@ def main():
 
     import numpy as np
     arr = np.array(pts, float)
-    for a, b, w in EASE:
-        i0, i1 = int(a / SPACING), int(b / SPACING)
+    for a, b, w in ease:
+        # Point indices as in the approved plan (a / SPACING); the R20 section changes the point count before it.
+        i0, i1 = int(a / SPACING) + dn, int(b / SPACING) + dn
         for _ in range(8):
             sm = arr.copy()
             for i in range(i0, i1):
@@ -134,12 +189,13 @@ def main():
     # other leg (centrelines < 20 m apart) so both carriageways have one height.
     pairs = []
     for i in range(n):
-        if not any(a <= arc[i] <= b for a, b in PARALLEL[:1]):
+        r20_leg = r20 and ortakoy_r20.is_parallel(*pts[i]) and arc[i] < (s0 + s1 + dl) * 0.5
+        if not (any(a <= arc[i] <= b for a, b in parallel[:1]) or r20_leg):
             continue
         best, bj = 1e9, -1
         for j in range(n):
             along = abs(arc[i] - arc[j])
-            if min(along, L - along) < 300:
+            if min(along, L - along) < (150 if r20_leg else 300):
                 continue
             dd = math.dist(pts[i], pts[j])
             if dd < best:
@@ -149,9 +205,16 @@ def main():
             pa, pb = pts[bj], pts[(bj + 1) % n]
             seg = math.dist(pa, pb)
             t = max(0.0, min(1.0, ((pts[i][0] - pa[0]) * (pb[0] - pa[0]) + (pts[i][1] - pa[1]) * (pb[1] - pa[1])) / max(seg * seg, 1e-9)))
-            pairs.append((arc[i], (arc[bj] + t * seg) % L))
-    grid_s, grid_h, _ = va.design(prof_s, plan["profile"]["street"], L, LIMITS, pairs)
-    heights = va.evaluate(grid_s, grid_h, L, np.array(arc))
+            if r20_leg:
+                # Where the Ortaköy carriageways converge (centrelines 13-17 m apart) the tie eases in, so the
+                # profile does not kink where it starts.
+                pairs.append((arc[i], (arc[bj] + t * seg) % L, va.PAIR_TOL + 0.25 * min(1.0, max(0.0, (best - 13.0) / 4.0))))
+            else:
+                pairs.append((arc[i], (arc[bj] + t * seg) % L))
+    grid_s, grid_h, _ = va.design(prof_s, plan["profile"]["street"], L, limits, pairs)
+    heights = (va.evaluate_c2 if r20 else va.evaluate)(grid_s, grid_h, L, np.array(arc))
+    if os.environ.get("APEX_DUMP_GRID"):
+        np.savez(os.environ["APEX_DUMP_GRID"], grid_s=grid_s, grid_h=grid_h, arc=np.array(arc), heights=heights, pairs=np.array(pairs), L=L)
     # Raw (file) distance of the start line: arc length of the k points before it.
     lead = L - arc[n - k]
     for idx in order:
@@ -161,11 +224,21 @@ def main():
             if w["from"] - 5 <= s <= w["to"] + 5:
                 width = 13.0
         left = right = RUNOFF_DEFAULT
-        for a, b in PARALLEL:
+        for a, b in parallel:
             if a <= s <= b:
                 width = PARALLEL_WIDTH
                 left = 0.5
-        for a, b, side, m in ESCAPES:
+        if r20 and s0 <= s <= s1 + dl:
+            # Ortaköy: 10 m on the square, carriageways of 9.5 m with a shared median wall (1 m run-off to it
+            # between the façades of Muallim Naci Cd., where cars brake hard).
+            x, z = pts[idx]
+            width, left, right = 10.0, RUNOFF_DEFAULT, RUNOFF_DEFAULT
+            if ortakoy_r20.is_parallel(x, z):
+                width, left = PARALLEL_WIDTH, 0.5
+            if ortakoy_r20.is_narrow(x, z):
+                width, left, right = PARALLEL_WIDTH, 1.0, 0.6
+            right = max(right, ortakoy_r20.exit_runoff(x, z))
+        for a, b, side, m in escapes:
             if a <= s <= b:
                 ramp = min(1.0, (s - a) / 40.0, (b - s) / 20.0)
                 v = RUNOFF_DEFAULT + (m - RUNOFF_DEFAULT) * max(0.0, ramp)
@@ -174,11 +247,13 @@ def main():
                 else:
                     left = max(left, v)
         x, z = pts[idx]
+        if r20 and s0 <= s <= s1 + dl and ortakoy_r20.facade_runoff(x, z) is not None:
+            right = min(right, ortakoy_r20.facade_runoff(x, z))
         rows.append([round(x, 2), round(z, 2), round(float(heights[idx]), 5), width, round(left, 2), round(right, 2)])
     sec = [round(((b + lead) % L) / L, 4) for b in plan["sectors"]]
     data = {
-        "id": "bosphorus_a",
-        "name": "Bosphorus Grand Prix",
+        "id": track_id,
+        "name": "Bosphorus Grand Prix" if r20 else "Bosphorus Grand Prix (klassische Ortaköy-Kehre)",
         "description": "Temporär gesperrter Stadtkurs in Istanbul entlang realer Straßen (Variante A): Dolmabahçe, Beşiktaş, "
                        "Çırağan, Ortaköy, Palanga, Yıldız, Barbaros, Akaretler, Bayıldım, Kabataş. Straßenachsen © OpenStreetMap-Mitwirkende "
                        "(ODbL), Gelände Copernicus DEM. Breiten und Kreuzungen für das Rennen angepasst.",
@@ -190,10 +265,10 @@ def main():
         "points": rows,
         "pit": {"side": -1, "entry": round(lead - 170), "exit": round(lead + 230), "box_start": round(lead - 90),
                 "box_spacing": 9, "speed_limit_kmh": 80},
-        "corner_names": CORNER_NAMES,
+        "corner_names": [c["name"] for c in plan["corners"]],
         # Approved corners: raw distance of the apex (file distance = lap distance + LEAD) and direction.
-        "corners": [{"name": CORNER_NAMES[i], "distance": round((c["s"] + lead) % L, 1), "right": c["dir"] == "rechts",
-                     "angle": c["angle"]} for i, c in enumerate(plan["corners"])],
+        "corners": [dict({"name": c["name"], "distance": round((c["s"] + lead) % L, 1), "right": c["dir"] == "rechts",
+                          "angle": c["angle"]}, **({"kerbs": False} if c.get("kerbs") is False else {})) for c in plan["corners"]],
         "sightlines": [],
         "shoreline": [],   # from the OSM coastline below
         "geo": {
@@ -231,8 +306,10 @@ def main():
     data["geo"]["shoreline_asia"] = osm_land.shoreline(masses, "asia", 4200.0, 1500.0, -2.0, zs)
     data["geo"]["land_source"] = "OSM coastline (tools/geo/osm_land.py), © OpenStreetMap contributors, ODbL 1.0"
     data["geo"]["height_grid"] = height_grid()
-    json.dump(data, open(OUT, "w"), ensure_ascii=False, indent=1)
-    print(f"{OUT}: {len(rows)} points, length ≈ {L} m, sectors {data['sector_fractions']}, shore {len(data['shoreline'])} / {len(data['geo']['shoreline_asia'])}")
+    if not r20:
+        data["city_id"] = "bosphorus_a"    # same real city data as the main layout
+    json.dump(data, open(out_path, "w"), ensure_ascii=False, indent=1)
+    print(f"{out_path}: {len(rows)} points, length ≈ {L} m, sectors {data['sector_fractions']}, shore {len(data['shoreline'])} / {len(data['geo']['shoreline_asia'])}")
 
 
 if __name__ == "__main__":

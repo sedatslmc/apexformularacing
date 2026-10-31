@@ -59,12 +59,12 @@ namespace Apex.Game
                 else Debug.LogWarning($"Monumental flag site {fx:F0},{fz:F0} is not clear of the circuit; not placed.");
             }
             // The real city (OSM footprints, streets, green) where the circuit has city data; generic blocks beyond it.
-            var cityText = Resources.Load<TextAsset>("City/" + def.id);
+            var cityText = Resources.Load<TextAsset>("City/" + def.cityId);
             CityData cityData = null;
             if (cityText != null)
             {
                 try { cityData = CityData.FromJson(cityText.text); }
-                catch (System.Exception e) { Debug.LogError("[Apex] Invalid city data " + def.id + ": " + e.Message); }
+                catch (System.Exception e) { Debug.LogError("[Apex] Invalid city data " + def.cityId + ": " + e.Message); }
             }
             OsmCity osm = null;
             if (cityData != null) Safe("OSM city data", () => osm = new OsmCity(cityData, field, ci.Clearance, def, reserved, q));

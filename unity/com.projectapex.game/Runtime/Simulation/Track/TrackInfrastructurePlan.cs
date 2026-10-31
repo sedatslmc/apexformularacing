@@ -114,6 +114,7 @@ namespace Apex.Tracks
             kerbs.height = new float[n];
             foreach (var c in corners)
             {
+                if (c.noKerbs) continue;
                 float r = c.minRadius;
                 // Fast corners: low wide kerbs; slow corners: more pronounced ones, but never higher than the
                 // car's body clearance at the front axle minus a margin (BodyCollider: 35 mm at rest), so a car
@@ -199,7 +200,9 @@ namespace Apex.Tracks
         }
 
         /// <summary>Preferred side unless the barrier there is a median (too little room for a post).</summary>
-        int PostSide(int i, int preferred) => RunoffAt(i, preferred) >= 1.2f ? preferred : -preferred;
+        /// <summary>Preferred side when it has room for a post, otherwise the side with more run-off.</summary>
+        int PostSide(int i, int preferred) =>
+            RunoffAt(i, preferred) >= 1.2f || RunoffAt(i, preferred) >= RunoffAt(i, -preferred) ? preferred : -preferred;
 
         void BuildGates()
         {

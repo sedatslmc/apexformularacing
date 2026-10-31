@@ -63,8 +63,9 @@ namespace Apex.Environment
                 float mid = (start + end) * 0.5f;
                 pitLength = end - start;
                 float s = side > 0 ? 1f : -1f;
-                // Pit building: track-side face 1 m behind the outer pit wall; local +x away from the track.
-                g.FrameAt(g.Wrap(mid), out var p, out var f, out _, side * (g.WidthAt(mid) * 0.5f + pitOuter + 1f));
+                // Pit building: track-side face 1.5 m behind the outer pit wall (the straight curves slightly, so the
+                // building's ends come a little closer to the lane than its middle); local +x away from the track.
+                g.FrameAt(g.Wrap(mid), out var p, out var f, out _, side * (g.WidthAt(mid) * 0.5f + pitOuter + 1.5f));
                 float yaw = Yaw(f) + (side > 0 ? 0f : 180f);
                 pitBuilding = new Placement { position = p, yaw = yaw };
                 pitBuilding.placed = Clear(pitBuilding, PitDepth * 0.5f, 0f, PitDepth * 0.5f, pitLength * 0.5f, mid);

@@ -15,6 +15,8 @@ namespace Apex.Tracks
         public string name = "";
         public string description = "";
         public string direction = "";
+        /// <summary>Real-city data (Resources/City/&lt;cityId&gt;): an alternative layout of the same circuit shares it.</summary>
+        public string cityId = "";
         /// <summary>Event identity for branding (e.g. "bosphorus"); empty = generic circuit dressing.</summary>
         public string identity = "";
         public float defaultWidth = 13f;
@@ -61,6 +63,8 @@ namespace Apex.Tracks
             public string name = "";
             public float distance, angle;
             public bool right;
+            /// <summary>False for a street bend without kerbs (JSON "kerbs": false), e.g. one taken under braking.</summary>
+            public bool kerbs = true;
         }
 
         public readonly List<CornerMark> corners = new List<CornerMark>();
@@ -143,9 +147,11 @@ namespace Apex.Tracks
                 description = Str(root, "description"),
                 direction = Str(root, "direction"),
                 identity = Str(root, "identity"),
+                cityId = Str(root, "city_id"),
                 defaultWidth = Num(root, "default_width", 13f),
                 startLineDistance = Num(root, "start_line_distance", 0f),
             };
+            if (def.cityId.Length == 0) def.cityId = def.id;
             if (root.TryGetValue("sector_fractions", out var sf) && sf is List<object> sfl && sfl.Count > 0)
             {
                 def.sectorFractions = new float[sfl.Count];
@@ -181,6 +187,7 @@ namespace Apex.Tracks
                         {
                             name = Str(cd, "name"), distance = Num(cd, "distance", 0f), angle = Num(cd, "angle", 90f),
                             right = cd.TryGetValue("right", out var rv) && rv is bool rb && rb,
+                            kerbs = !(cd.TryGetValue("kerbs", out var kv) && kv is bool kb && !kb),
                         });
             if (root.TryGetValue("corner_names", out var cn) && cn is List<object> cnl)
                 foreach (var c in cnl) def.cornerNames.Add(c as string ?? "");
