@@ -55,6 +55,16 @@ namespace UnityEngine.Rendering.Universal
         public ColorParameter colorFilter;
     }
     public sealed class WhiteBalance : VolumeComponent { public ClampedFloatParameter temperature, tint; }
+    public enum MotionBlurMode { CameraOnly, CameraAndObjects }
+    public enum MotionBlurQuality { Low, Medium, High }
+    public sealed class MotionBlurModeParameter : VolumeParameter<MotionBlurMode> { public MotionBlurModeParameter(MotionBlurMode value, bool overrideState = false) { } }
+    public sealed class MotionBlurQualityParameter : VolumeParameter<MotionBlurQuality> { public MotionBlurQualityParameter(MotionBlurQuality value, bool overrideState = false) { } }
+    public sealed class MotionBlur : VolumeComponent
+    {
+        public MotionBlurModeParameter mode;
+        public MotionBlurQualityParameter quality;
+        public ClampedFloatParameter intensity, clamp;
+    }
     public sealed class Vignette : VolumeComponent
     {
         public ColorParameter color;

@@ -20,12 +20,31 @@ namespace Apex.Game
     /// </summary>
     public static class EnvironmentBuilder
     {
-        /// <summary>0 = low (mobile), 1 = medium, 2 = high; set from the settings before building.</summary>
+        /// <summary>0 = low (mobile), 1 = medium, 2 = high, 3 = extreme (PC: more life, further); set from the settings
+        /// before building. Geometry detail uses 0..2; 3 raises budgets and draw distances.</summary>
         public static int Quality = 1;
 
         const float WaterY = -0.4f;
         /// <summary>Tower wash spot: illuminance intensity / d² gives ~0.6 on the legs 60 m up (night exposure).</summary>
         const float BridgeWashIntensity = 2200f;
+        /// <summary>Façade floodlights (same units as the bridge wash: about 4 at the façade, ten times a lit road).</summary>
+        const float MosqueWashIntensity = 1100f, EsmaWashIntensity = 600f;
+
+        /// <summary>A night-only spot light from `from` aimed at `to` (no shadows), switched with the city lights.</summary>
+        static void Floodlight(Transform parent, EnvironmentInstance env, Vector3 from, Vector3 to, Color colour, float intensity, float angle)
+        {
+            var go = new GameObject("Floodlight");
+            go.transform.SetParent(parent, false);
+            go.transform.position = from;
+            go.transform.rotation = Quaternion.LookRotation((to - from).normalized);
+            var l = go.AddComponent<Light>();
+            l.type = LightType.Spot;
+            l.spotAngle = angle;
+            l.range = Vector3.Distance(from, to) * 2.5f + 10f;
+            l.color = colour;
+            l.shadows = LightShadows.None;
+            env.AddRealLight(l, intensity);
+        }
         const float ChunkSize = 384f;
 
         public static EnvironmentInstance Build(CircuitInstance ci, Transform parent)
@@ -74,15 +93,17 @@ namespace Apex.Game
             var allLots = new List<CityLayout.Lot>(city.lots);
             if (osm != null)
             {
-                Safe("OSM buildings", () => BuildOsmCity(root.transform, osm));
+                Safe("OSM buildings", () => BuildOsmCity(root.transform, osm, env));
                 Safe("streets", () => BuildStreets(root.transform, new StreetNetwork(cityData, field, ci.Clearance, q)));
                 CityLife life = null;
                 Safe("city life", () =>
                 {
-                    life = new CityLife(cityData, field, ci.Clearance, osm, q, q == 0 ? 300 : q == 1 ? 900 : 1600, q == 0 ? 80 : q == 1 ? 160 : 240);
-                    BuildCityLife(root.transform, life, q);
+                    // Extreme (PC, Quality 3): more people and traffic, drawn further.
+                    bool extreme = Quality >= 3;
+                    life = new CityLife(cityData, field, ci.Clearance, osm, q, extreme ? 2600 : q == 0 ? 300 : q == 1 ? 900 : 1600, extreme ? 360 : q == 0 ? 80 : q == 1 ? 160 : 240);
+                    BuildCityLife(root.transform, life, extreme ? 3 : q);
                 });
-                if (osm.OrtakoyCentre.HasValue) Safe("trackside crowd", () => BuildTracksideCrowd(root.transform, env, ci, osm, life, q, reserved));
+                if (osm.OrtakoyCentre.HasValue) Safe("trackside crowd", () => BuildTracksideCrowd(root.transform, env, ci, osm, life, Mathf.Clamp(Quality, 0, 3), reserved));
                 allLots.AddRange(osm.AsLots());
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
@@ -184,7 +205,7 @@ namespace Apex.Game
 
         static void BuildWaterAndFarLand(Transform root, EnvironmentInstance env, TerrainField field, CircuitDefinition def, float cx, float cz)
         {
-            float extent = Quality >= 2 ? 7200f : Quality == 1 ? 6400f : 5600f;
+            float extent = Quality >= 3 ? 9000f : Quality >= 2 ? 7200f : Quality == 1 ? 6400f : 5600f;
             var far = new MeshBuilder();
             EnvironmentGeometry.FarTerrain(far, field, cx, cz, extent);
             var parts = new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.FarGround] = far };
@@ -331,8 +352,8 @@ namespace Apex.Game
             var go = new GameObject("CityLife");
             go.transform.SetParent(root, false);
             var c = go.AddComponent<CityLifeComponent>();
-            c.drawDistance = q == 0 ? 150f : q == 1 ? 250f : 350f;
-            c.shadowDistance = q == 0 ? 0f : q == 1 ? 80f : 140f;
+            c.drawDistance = q == 0 ? 150f : q == 1 ? 250f : q == 2 ? 350f : 520f;
+            c.shadowDistance = q == 0 ? 0f : q == 1 ? 80f : q == 2 ? 140f : 220f;
             c.Setup(life);
             Debug.Log($"[Apex] City life: {life.props.Count} props, {life.parked.Count} parked cars, {life.pedestrians.Count} pedestrians, {life.vehicles.Count} vehicles.");
         }
@@ -363,7 +384,7 @@ namespace Apex.Game
         /// The palaces on their OSM footprints with modelled classical facades (LandmarkGeometry.ClassicalBuilding),
         /// the dome over Dolmabahçe's ceremonial hall, and the clock tower; each building with three LODs.
         /// </summary>
-        static void BuildClassical(Transform root, OsmCity osm)
+        static void BuildClassical(Transform root, OsmCity osm, EnvironmentInstance env)
         {
             var palaceRoot = new GameObject("Palaces").transform;
             palaceRoot.SetParent(root, false);
@@ -404,6 +425,18 @@ namespace Apex.Game
                 {
                     float h = b.height;
                     PlaceDetailed(palaceRoot, "osm_classical_" + s, name, h, g => g.BrickShellYali(local, h, s), pos, 0f, PalaceLods);
+                    // Night: warm uplights on the brick from the quay and street side (High and above).
+                    if (Quality >= 2)
+                        for (int i = 0; i < b.outline.Count; i++)
+                        {
+                            var a0 = b.outline[i]; var a1 = b.outline[(i + 1) % b.outline.Count];
+                            var e = a1 - a0;
+                            if (e.Length() < 12f) continue;
+                            var m = (a0 + a1) * 0.5f;
+                            var outward = new Vector3(e.Y, 0f, -e.X) / e.Length();
+                            var at = new Vector3(m.X, b.ground + 0.6f + h * 0.55f, m.Y);
+                            Floodlight(palaceRoot, env, at + outward * 7f - Vector3.up * (h * 0.55f - 0.5f), at, new Color(1f, 0.8f, 0.55f), EsmaWashIntensity, 55f);
+                        }
                 }
                 else if (b.classical == OsmCity.ClockTower)
                 {
@@ -452,13 +485,13 @@ namespace Apex.Game
         }
 
         /// <summary>The OSM buildings in chunks with two LODs (detailed: cornices, parapets, roof tanks).</summary>
-        static void BuildOsmCity(Transform root, OsmCity osm)
+        static void BuildOsmCity(Transform root, OsmCity osm, EnvironmentInstance env)
         {
             var cityRoot = new GameObject("RealCity").transform;
             cityRoot.SetParent(root, false);
             var chunks = new Dictionary<(int, int), List<OsmCity.Building>>();
             const float size = 192f;
-            BuildClassical(root, osm);
+            BuildClassical(root, osm, env);
             foreach (var b in osm.buildings)
             {
                 if (b.classical != OsmCity.NotClassical) continue;
@@ -671,6 +704,20 @@ namespace Apex.Game
                         pos += Quaternion.Euler(0f, yaw, 0f) * LandmarkGeometry.OrtakoyHallOffset;
                         pos.y = Mathf.Max(field.Height(pos.x, pos.z), 1.6f);
                         PlaceDetailed(lmRoot, l.id, l.name, l.height, g => g.OrtakoyMosqueDetailed(), pos, yaw, OrtakoyLods);
+                        // Night: the mosque floodlit warm white from the terrace (three free hall facades, the
+                        // pavilion front and the dome), as on the Bosphorus at night. High and above.
+                        if (Quality >= 2)
+                        {
+                            var rot = Quaternion.Euler(0f, yaw, 0f);
+                            var warm = new Color(1f, 0.88f, 0.7f);
+                            foreach (var (from, to) in new[]
+                            {
+                                (new Vector3(0f, 0.5f, 19f), new Vector3(0f, 11f, 10.6f)), (new Vector3(19f, 0.5f, 0f), new Vector3(10.6f, 11f, 0f)),
+                                (new Vector3(-19f, 0.5f, 0f), new Vector3(-10.6f, 11f, 0f)), (new Vector3(0f, 0.5f, -33f), new Vector3(0f, 7f, -19.8f)),
+                                (new Vector3(13f, 0.5f, 13f), new Vector3(0f, 26f, 0f)),
+                            })
+                                Floodlight(lmRoot, env, pos + rot * from, pos + rot * to, warm, MosqueWashIntensity, 70f);
+                        }
                         break;
                     }
                     case "dolmabahce":
@@ -772,7 +819,7 @@ namespace Apex.Game
             crowdGo.transform.SetParent(wf, false);
             var crowd = crowdGo.AddComponent<CrowdComponent>();
             crowd.env = env;
-            float fill = Quality == 0 ? 0.35f : Quality == 1 ? 0.6f : 0.9f;
+            float fill = Quality == 0 ? 0.35f : Quality == 1 ? 0.6f : Quality == 2 ? 0.9f : 1f;
             for (int i = 0; i < seats.Count; i++)
                 if ((LandModel.Hash(i, 3) * 0.5f + 0.5f) < fill) crowd.Add(seats[i].pos, seats[i].yaw, LandModel.Hash(i, 9));
             // Paddock and hospitality behind the garages.
@@ -1079,7 +1126,7 @@ namespace Apex.Game
             gulls.Setup(Combine(new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.Gull] = mb }, "Gull", out var mats), mats[0]);
             var def = ci.Definition;
             var field = ci.Terrain;
-            int count = Quality == 0 ? 10 : 22;
+            int count = Quality == 0 ? 10 : Quality >= 3 ? 36 : 22;
             // Over the water off the start/finish and Ortaköy.
             var centres = new List<Vector3>();
             foreach (var id in new[] { "besiktas_pier", "ortakoy_mosque", "ciragan" })

@@ -34,6 +34,7 @@ namespace Apex.Game
         WhiteBalance white;
         Bloom bloom;
         Vignette vignette;
+        MotionBlur motionBlur;
         Volume volume;
 #endif
         bool active;
@@ -53,6 +54,12 @@ namespace Apex.Game
             vignette = profile.Add<Vignette>(true);
             vignette.color.Override(Color.black);
             vignette.smoothness.Override(0.45f);
+            // Camera motion blur (High and above, the player can switch it off): blur from the camera's own motion,
+            // so the track and city streak at speed while the car in front of the chase camera stays sharp.
+            motionBlur = profile.Add<MotionBlur>(true);
+            motionBlur.mode.Override(MotionBlurMode.CameraOnly);
+            motionBlur.clamp.Override(0.05f);
+            ApplyMotionBlur();
             volume = gameObject.AddComponent<Volume>();
             volume.isGlobal = true;
             volume.priority = 10f;
@@ -85,6 +92,23 @@ namespace Apex.Game
             bloom.scatter.Override(g.bloomScatter);
             bloom.highQualityFiltering.Override(GraphicsQuality.Current.bloomHighQuality);
             vignette.intensity.Override(g.vignette);
+            ApplyMotionBlur();
+#endif
+        }
+
+        /// <summary>Player's motion blur switch (Settings.motionBlur); the strength comes from the graphics tier.</summary>
+        public static bool MotionBlurEnabled = true;
+
+        /// <summary>Re-applies the tier's motion blur (after a tier or settings change).</summary>
+        public void ApplyMotionBlur()
+        {
+#if APEX_URP
+            if (motionBlur == null) return;
+            var p = GraphicsQuality.Current;
+            float k = MotionBlurEnabled ? p.motionBlur : 0f;
+            motionBlur.active = k > 0f;
+            motionBlur.intensity.Override(k);
+            motionBlur.quality.Override((MotionBlurQuality)Mathf.Clamp(p.motionBlurQuality, 0, 2));
 #endif
         }
 

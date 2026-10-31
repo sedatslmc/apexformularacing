@@ -59,8 +59,10 @@ namespace Apex.Core
         public bool leftHanded;
         public bool speedInMph;
         public float hudScale = 1f;
-        /// <summary>Environment density: 0 = low (mobile), 1 = medium, 2 = high.</summary>
+        /// <summary>Environment density: 0 = low (mobile), 1 = medium, 2 = high, 3 = extreme (PC).</summary>
         public int environmentDetail = 1;
+        /// <summary>Camera motion blur at the tier's strength (High and above); off = no blur.</summary>
+        public bool motionBlur = true;
         /// <summary>URP post-processing (tonemapping, colour grade, bloom, FXAA); only offered with URP.</summary>
         public bool postProcessing = true;
         /// <summary>A/B comparison: the player's car uses the setup and input from before the October 2026
@@ -108,7 +110,7 @@ namespace Apex.Core
             changed |= ClampField(ref brakeBiasFront, 0.5f, 0.65f);
             changed |= ClampInt(ref tractionLevel, 0, 3);
             changed |= ClampInt(ref steeringAssistLevel, 0, 2);
-            changed |= ClampInt(ref environmentDetail, 0, 2);
+            changed |= ClampInt(ref environmentDetail, 0, GraphicsPreset.EnvironmentLevels - 1);
             changed |= ClampInt(ref graphicsTier, -1, GraphicsPreset.TierCount - 1);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
             {
