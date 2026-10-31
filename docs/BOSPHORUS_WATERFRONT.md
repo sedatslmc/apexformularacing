@@ -145,6 +145,16 @@ Karten: `docs/img/waterfront_hairpin_variants.jpg` (Vergleich), `docs/img/waterf
 - **Bisher:** Die KI skalierte ihr trockenes Kurventempo im Regen mit √Grip. Das überschätzt Kurven, die von Abtrieb leben, weil bei weniger Tempo auch weniger Abtrieb wirkt.
 - **Jetzt:** Sie rechnet im Regen ein eigenes Profil mit dem nassen Reibwert (`RacingLine.GripSpeedAt(d, grip)`). Nass-Runden werden dadurch etwas langsamer und stabiler.
 
+**KI beim Überholen (Simulation, betrifft alle Strecken):**
+- **Kein Überholversuch in Straßenkurven:** Die KI beginnt keinen Überholversuch, wenn in den nächsten ~1,5 s eine Kurve der Straße selbst enger als R 200 m folgt; das gilt auch, wenn die Ideallinie die Kurve gerade schneidet.
+  - Grund: Im KI-Rennen startete ein Auto vor der Muallim-Naci-Kurve einen Überholversuch außen und schob 6 m über den Rand.
+- **Pfad-Tempolimit:** Beim Überholen vergleicht die KI ihre Spur auch mit der Ideallinie ~1 s voraus. Bleibt sie dort außen, gilt das Tempolimit des eigenen Pfads.
+- **Nebenwirkung:** In schnellen Straßenknicken wird künftig seltener überholt. Ergebnis im Test: auf `bosphorus_a` 0,0 m über den Rand; auf dem Archivkurs `bosphorus_gp` 1,3 m statt 0,3 m (Grenze 3 m).
+
+**Streckenposten:** Sie stehen auf der Seite mit mehr Auslauf, wenn die bevorzugte Seite keinen Platz hat (vorher landete einer auf der 0,3-m-Fassadenseite).
+
+**Automatische Prüfung:** 185/185 Tests grün, `tools/verify.sh` OK.
+
 **Nicht geprüft (braucht Unity):**
 - Optik, Kamerablicke, Barrieren und Möbel am Platz
 - echte Fahrt mit Tastatur, Gamepad und Lenkrad

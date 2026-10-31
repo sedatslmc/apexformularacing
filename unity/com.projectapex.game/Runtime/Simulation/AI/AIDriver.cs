@@ -209,8 +209,13 @@ namespace Apex.AI
                 float upcoming = 0f;
                 for (float s2 = 0f; s2 <= 80f; s2 += 10f) upcoming = MathF.Max(upcoming, MathF.Abs(line.curvature[g.IndexAt(d + s2)]));
                 bool straight = upcoming < 1f / 300f;
+                // No pass into a bend of the road itself within the next ~1.5 s, however the racing line cuts it: a
+                // street kink taken under braking leaves no room for a car beside the line.
+                bool roadBendAhead = false;
+                for (float s2 = 0f; s2 <= MathF.Max(80f, v * 1.5f); s2 += 10f)
+                    roadBendAhead |= MathF.Abs(g.CurvatureAt(d + s2)) > 1f / 200f;
                 bool wantsPass = !noOvertaking && (closing > 1f || nearestGap < 18f) && personality.aggression > 0.15f
-                                 && (straight || closing > 10f * (1.3f - personality.aggression));
+                                 && !(roadBendAhead && v > 40f) && (straight || closing > 10f * (1.3f - personality.aggression));
                 if (wantsPass && passCommit <= 0f)
                 {
                     // Pick the side with more room next to the car ahead.
@@ -275,6 +280,9 @@ namespace Apex.AI
             // no longer applies: limit speed by the curvature of the path actually driven
             // (centreline radius shifted by the lateral offset), including braking for it.
             float offLine = MathF.Max(MathF.Abs(TargetLateral - line.OffsetAt(d)), MathF.Abs(proj.lateral - line.OffsetAt(d)));
+            // Passing or alongside, the car holds its lane: compare with where the line will be in about a second
+            // too (a pass on the outside starts on the line at turn-in but cannot follow it to the apex).
+            if (Intent != "line") offLine = MathF.Max(offLine, MathF.Abs(TargetLateral - line.OffsetAt(d + MathF.Max(20f, v))));
             if (offLine > 1.5f)
                 wantSpeed = MathF.Min(wantSpeed, PathSpeedLimit(d, MathF.Max(MathF.Abs(TargetLateral), MathF.Abs(proj.lateral)) * MathF.Sign(TargetLateral), v));
             // Understeering: lift/brake until the fronts grip again.

@@ -200,7 +200,9 @@ namespace Apex.Tracks
         }
 
         /// <summary>Preferred side unless the barrier there is a median (too little room for a post).</summary>
-        int PostSide(int i, int preferred) => RunoffAt(i, preferred) >= 1.2f ? preferred : -preferred;
+        /// <summary>Preferred side when it has room for a post, otherwise the side with more run-off.</summary>
+        int PostSide(int i, int preferred) =>
+            RunoffAt(i, preferred) >= 1.2f || RunoffAt(i, preferred) >= RunoffAt(i, -preferred) ? preferred : -preferred;
 
         void BuildGates()
         {
