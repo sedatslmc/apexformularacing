@@ -57,3 +57,47 @@ Karte: `docs/img/waterfront_coast_before_after.jpg` (oben vorher, unten nachher)
 - **Ausgeschlossen:** Eine erste Variante mit zwei Fahrbahnen hätte 13 Gebäude geschnitten, darunter die **Etz-Ahayim-Synagoge**. Diese Linienführung ist verworfen.
 
 Der Vorschlag „Meydan-Kehre“ (Variante A) und die Untersuchung der Kurvenradien folgen in Abschnitt 4. Umgesetzt wird erst nach Freigabe.
+
+## 4. Ortaköy-Haarnadel – Radiusvergleich (Plan, nicht umgesetzt)
+Grundidee (Variante A, vom PO grundsätzlich befürwortet):
+- **Linienführung:** Die Strecke verlässt die Çırağan Cd. über die Muallim Naci Cd., biegt rechts auf den Ortaköy-Platz ab, wendet dort in einer Linkskehre und kehrt parallel dazu zurück. Danach mündet sie wie heute in die Palanga-Steigung.
+- **Korrektur gegenüber der ersten Skizze:** Der Hinweg nutzt die westliche Spur nach Süden, der Rückweg die östliche. Nur so kreuzen sich die Spuren an der Platzeinfahrt nicht.
+
+Jede Variante habe ich als vollständige Streckendatei mit den Projektwerkzeugen geprüft (`Apex.Tuning corners`, `lap`, `validate-road`, temporäre Dateien, nicht eingecheckt). Die Sicht ist aus der Chase-Kamera gerechnet: 6 m hinter und 2,2 m über dem Auto, 75° Blickfeld, verdeckt durch die OSM-Gebäudehöhen. Die Prozentwerte geben den Anteil der Positionen auf dem Platz und in der Kehre an.
+
+| | heute (Kehre Çırağan/Palanga) | R 10 Süd (am Ufer) | R 15 Süd (am Ufer) | **R 20 Nord (Platz)** | R 25 Nord (Platz) |
+|---|---|---|---|---|---|
+| Scheitel-Speed (KI) | 62 km/h | 33 km/h | 41 km/h | 42 km/h Einfahrt, 47 km/h Kehre | 48 / 54 km/h |
+| Lenkeinschlag | 40 % | **100 %** (Anschlag) | 91 % | 69 % | 55 % |
+| Bremsen vor der Platz-Einfahrt | – | 330 → 50 km/h auf 233 m | dito | 330 → 42 km/h auf 244 m | dito |
+| Runde (KI, fliegend) | 130,8 s | 148,1 s | 148,7 s | 143,2 s | 144,0 s |
+| Länge | 7,63 km | 8,29 km | 8,31 km | 8,15 km | 8,17 km |
+| Bosporus im Bild (Platz/Kehre) | 0 % | 49 % | 52 % | 34 % | 32 % |
+| Moschee im Bild (Platz/Kehre) | 0 % | 21 % | 25 % | 20 % | 22 % |
+| Brückenpylon im Bild (Anfahrt Muallim Naci) | 0 % | 70 % | 70 % | 70 % | 70 % |
+| Abstand zu Gebäuden | – | Rückweg schneidet Ostbebauung (30–40 m) | schneidet Moschee-Ecke und Ostbebauung | ≥ 4,5 m, Moschee ~55 m | Barriere direkt an Fassaden |
+| Kollisionsfläche / KI-Runde | ok | ok / gültig | ok / gültig | ok / gültig | ok / gültig |
+
+Für alle Varianten gilt:
+- **Breiten:**
+  - Muallim Naci Cd. (Engstelle): 2 × 9 m mit 0,3 m Auslauf zur Mittelbarriere, Spurachsen ≥ 14,8 m auseinander
+  - Platz: 10 m Fahrbahnbreite
+  - Kollisionsfläche ohne Überschneidung: 0,0 mm Abweichung vom Entwurf
+- **Eingriffe:** 4 kleine, nicht denkmalgeschützte Gebäude an der Nordseite der Muallim Naci (zusammen 293 m²). Moschee, Etz-Ahayim-Synagoge, alle historischen Gebäude und die Küste bleiben unberührt.
+- **Kurven:** Die Ortaköy-Kehre entfällt. Neu sind Muallim-Naci-Knick, Meydan-Einfahrt, Meydan-Kehre und Meydan-Ausfahrt: 13 → 16 Kurven. Die Länge liegt dann über der bisherigen Vorgabe von 7,5–7,8 km; der Test wird angepasst.
+- **Höhenprofil:** Das Profil der Studie ist provisorisch. Bei der Umsetzung entwirft es `vertical_alignment.py` gegen die Fahrzeuggrenzen, wie beim Rest der Strecke. Die Kuppe am Palanga-Anschluss wird dabei entschärft.
+- **KI und Checkpoints:** Die Ideallinie wird aus der Geometrie neu berechnet (`RacingLine`). Die Sektorgrenzen sind Rundenanteile und verschieben sich mit. Die Kurvenliste in `build_track_a.py` wird ergänzt.
+
+Bewertung:
+- **R 10 Süd:** Die Kehre steht am Lenkanschlag, eine Parkhauskurve. Abgelehnt.
+- **R 15 Süd:** die beste Wassersicht, aber der Fahrbahnrand schneidet die Moschee und die Ostbebauung. In dieser Form nicht machbar.
+- **R 25 Nord:** Die Barrieren stehen ohne Abstand an den Fassaden. Zu knapp.
+- **R 20 Nord (empfohlen):** Die Kehre nutzt die offene Nordfläche des Platzes mit ≥ 4,5 m Luft und lässt Moschee, Südplatz und Ufer frei. Dort ist Platz für Zuschauer mit Fahnen vor Moschee und Bosporus. Fahrerisch:
+  - starkes Bremsen (330 → 42 km/h) vor der Platz-Einfahrt, mit dem Brückenpylon im Bild
+  - präzises Einlenken rechts, dann eine lange, 69 % eingeschlagene Linkskehre
+  - Beschleunigen bergauf zurück auf die Muallim Naci
+- **Schwächen der Empfehlung:**
+  - Einfahrt und Kehre sind ein zusammenhängender langsamer Komplex (42–47 km/h). Das ist langsamer als die heutige Kehre (62 km/h), aber auf Monaco-Niveau.
+  - Der Bosporus ist dort zu einem Drittel im Bild, nicht zur Hälfte.
+
+Karten: `docs/img/waterfront_hairpin_variants.jpg` (Vergleich), `docs/img/waterfront_square_free.jpg` (Freiraum des Platzes).
