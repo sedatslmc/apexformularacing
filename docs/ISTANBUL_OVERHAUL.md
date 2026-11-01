@@ -8,7 +8,7 @@
   - **Im Unity-Editor nicht geprüft.** Die Bilder sind three.js-Vorschauen der Spielgeometrie, keine Unity-Aufnahmen.
 - **Phasen 3–6:** geplant (Abschnitt 4).
 
-**Git-Checkpoint:** Tag `checkpoint-pre-istanbul-overhaul` auf `main` (Merge von PR #25).
+**Git-Checkpoint:** `main` bei Commit `8a3377a` (Merge von PR #25), dem Stand vor dieser Überarbeitung. Das lokale Tag `checkpoint-pre-istanbul-overhaul` ließ sich über den Proxy nicht hochladen.
 
 ## 1. Technische Bestandsaufnahme (Phase 1)
 
