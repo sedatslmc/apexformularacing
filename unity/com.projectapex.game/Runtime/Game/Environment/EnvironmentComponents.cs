@@ -810,3 +810,57 @@ namespace Apex.Game
         }
     }
 }
+
+namespace Apex.Game
+{
+    /// <summary>
+    /// Drives the golden-hour window glint (EnvironmentBuilder.BuildSunGlint): per group of walls of one direction
+    /// and tile, the glint strength from GoldenHour.Glint for the current sun (WeatherVisuals.CurrentLight) and the
+    /// direction to the camera. Groups without glint are disabled, so the layer costs nothing by day and at night.
+    /// </summary>
+    public sealed class SunGlintComponent : MonoBehaviour
+    {
+        public float trueNorth = float.NaN;
+        readonly System.Collections.Generic.List<(MeshRenderer r, Vector3 normal, Vector3 centre)> groups = new System.Collections.Generic.List<(MeshRenderer, Vector3, Vector3)>();
+        MaterialPropertyBlock block;
+        static readonly int GlintId = Shader.PropertyToID("_GlintColor");
+        float next;
+
+        public void Add(MeshRenderer r, Vector3 normal, Vector3 centre) => groups.Add((r, normal, centre));
+
+        void Update()
+        {
+            // 10 Hz is enough: the glint follows the camera's position, not its rotation.
+            if (Time.unscaledTime < next) return;
+            next = Time.unscaledTime + 0.1f;
+            var cam = Camera.main;
+            if (cam == null || !WeatherVisuals.HasLight) { SetAll(false); return; }
+            var l = WeatherVisuals.CurrentLight;
+            float low = Apex.Environment.GoldenHour.LowSun(l.elevation);
+            if (low <= 0f) { SetAll(false); return; }
+            if (block == null) block = new MaterialPropertyBlock();
+            var s = Apex.Environment.GoldenHour.SunDirection(l.azimuthTrue, l.elevation, trueNorth);
+            var p = cam.transform.position;
+            foreach (var (r, n, c) in groups)
+            {
+                if (r == null) continue;
+                var to = p - c;
+                float dist = to.magnitude;
+                if (dist < 1f) { r.enabled = false; continue; }
+                to /= dist;
+                float g = Apex.Environment.GoldenHour.Glint(new System.Numerics.Vector3(n.x, n.y, n.z), new System.Numerics.Vector3(to.x, to.y, to.z), s, l.elevation, WeatherVisuals.CurrentCloud);
+                if (g < 0.004f) { r.enabled = false; continue; }
+                var col = Apex.Environment.GoldenHour.GlintColour(l, g);
+                // The shader takes linear colour (Vector property, no gamma conversion).
+                block.SetVector(GlintId, new Vector4(Mathf.GammaToLinearSpace(col.r), Mathf.GammaToLinearSpace(col.g), Mathf.GammaToLinearSpace(col.b), 0f));
+                r.SetPropertyBlock(block);
+                r.enabled = true;
+            }
+        }
+
+        void SetAll(bool on)
+        {
+            foreach (var (r, _, _) in groups) if (r != null && r.enabled != on) r.enabled = on;
+        }
+    }
+}

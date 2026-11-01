@@ -239,7 +239,7 @@ Dazu kommen für alle Familien weiterhin die Fassadendetails aus Teil 1: Fallroh
 - **Synthetische Geräusche:** Horn und Möwe sind Platzhalter. Echte Aufnahmen mit freier Lizenz wären besser und kämen in `docs/ASSET_LICENSES.md`.
 - **Noch nicht umgesetzt:**
   - Bugwellen und Kielwasser der Schiffe
-  - Licht der goldenen Stunde
+  - Licht der goldenen Stunde (inzwischen umgesetzt, `docs/LIGHTING_AND_GRAPHICS.md` Abschnitt 6)
   - Tribünen-Ereignisse (Mexican Wave, Pyro)
 
 ## 2f. Phase 6: Tests, Sichtachsen, Leistung
@@ -326,5 +326,5 @@ cd tools/carrender && APEX_PAGE=env.html APEX_VIEWS='name|eye|target|fov|&tod=go
    - Barrieren und Zaun der Dolmabahçe Caddesi.
    - Prüfung aus Verfolger-, Cockpit- und TV-Sicht (Vorschau; Unity-Prüfung durch dich).
 4. **Übertragung:** Gebäudefamilien mit Balkonen, Erkern, Klimageräten und Markisen; Flaggenverteilung; Ufertypen (historisch, urban, natürlich); Infrastruktur-Abgleich; Sektor-Charaktere.
-5. **Atmosphäre:** Zuschauerzonen, Boote, Flaggenwind und Geräusche umgesetzt (Abschnitt 2e). Offen: Licht der goldenen Stunde, Kielwasser.
+5. **Atmosphäre:** Zuschauerzonen, Boote, Flaggenwind und Geräusche umgesetzt (Abschnitt 2e). Goldene Stunde (glühende Fenster, Dunst je Blickrichtung): implementiert und getestet, siehe `docs/LIGHTING_AND_GRAPHICS.md` Abschnitt 6, im Editor nicht gesehen. Offen: Kielwasser.
 6. **Tests und Leistung:** Fahrbarkeit, KI, Sichtachsen und Messwerkzeug umgesetzt (Abschnitt 2f). Offen: Messreihe in Unity auf PC und Mobil, danach gezielte Optimierung.

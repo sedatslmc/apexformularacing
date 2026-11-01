@@ -766,6 +766,21 @@ else if (mode == "coast-audit")
             Console.WriteLine($"{k.Item1 * 100,5},{k.Item2 * 100,5}  {a.h0,7:0.0} {a.h15,6:0.0} {a.h40,6:0.0} {a.dem,6:0.0}  {a.td,8:0} {a.ty,8:0.0}");
     }
 }
+else if (mode == "golden")
+{
+    // Golden-hour effects (GoldenHour): glint of a west-facing wall seen from 1.5 km west, haze colour by view angle, haze range.
+    var view = System.Numerics.Vector3.Normalize(new System.Numerics.Vector3(-1500f, -40f, -150f));
+    var west = new System.Numerics.Vector3(-1f, 0f, 0f);
+    foreach (Apex.Weather.TimeOfDay t in Enum.GetValues(typeof(Apex.Weather.TimeOfDay)))
+    {
+        var l = Apex.Environment.SkyModel.Get(t);
+        var s = Apex.Environment.GoldenHour.SunDirection(l.azimuthTrue, l.elevation, 0f);
+        float g = Apex.Environment.GoldenHour.Glint(west, view, s, l.elevation, 0f);
+        var hz = Apex.Environment.GoldenHour.HazeRange(l.elevation, 0f, 0f, true);
+        Console.WriteLine($"{t,-11} sun {l.elevation,5:0.0}  low-sun {Apex.Environment.GoldenHour.LowSun(l.elevation):0.00}  glint {g:0.00} colour {Apex.Environment.GoldenHour.GlintColour(l, g)}  haze {hz.start:0}-{hz.end:0} m");
+        Console.WriteLine($"            haze toward sun {Apex.Environment.GoldenHour.Haze(l, 0.98f, 0f)}  side {Apex.Environment.GoldenHour.Haze(l, 0f, 0f)}  away {Apex.Environment.GoldenHour.Haze(l, -0.95f, 0f)}");
+    }
+}
 else if (mode == "sight")
 {
     // Sightlines from the cockpit (Apex.Environment.DriverSight): sight distance around the lap and what ends it,

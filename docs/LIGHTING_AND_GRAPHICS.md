@@ -156,6 +156,54 @@ T1-Abschnitt aus dem Rennstrecken-Kit mit den CC0-Materialien, Verfolgerperspekt
 cd build/Apex.Tuning && dotnet run -c Release -- sky-json GoldenHour     # JSON für kit.html &sky=
 ```
 
+## 6. Goldene Stunde: Effekte der tiefen Sonne (`GoldenHour`, 2026-11-01)
+Ergänzt das physikalische Licht aus Abschnitt 1 um die drei Dinge, die Istanbuls Abendlicht ausmachen.
+
+1. **Glühende Fenster am asiatischen Ufer:**
+   - **Effekt:** Die nach Westen zeigenden Fenster von Üsküdar spiegeln die Abendsonne und leuchten vom europäischen Ufer aus golden.
+   - **Rechnung:** Reflexion r = 2(n·s)n − s. Die Scheiben einer Stadt stehen nicht in einer Ebene, deshalb ist das Spiegelbild eine breite Keule (Exponent 6, etwa ±25°).
+   - **Abschwächung:** mit der Wurzel des Einfallswinkels und mit der Bewölkung (bei Vollbewölkung −90 %).
+   - **Zeitfenster:** setzt unter 22° Sonnenhöhe ein und wirkt voll unter 12°.
+   - **Umsetzung:**
+     - Eine additive Schicht (`Apex/SunGlint`, neuer Shader) liegt über den Wänden der mittleren und fernen Stadt, die zur Abendsonne zeigen.
+     - Grundlage ist dieselbe Fenstertextur, mit einer Glasmaske, in der jede Scheibe eine eigene Helligkeit hat.
+     - Die Wände sind nach Richtung (10°) und 1-km-Kachel gruppiert. `SunGlintComponent` setzt je Gruppe zehnmal pro Sekunde die Stärke aus Sonnenstand und Richtung zur Kamera.
+     - Tagsüber und nachts sind alle Gruppen abgeschaltet.
+     - Der Shader beachtet den Schatten der Hauptlichtquelle und blendet im Dunst auf null aus statt auf die Nebelfarbe.
+   - **Werte** (westseitige Wand, aus 1,5 km Westen gesehen):
+
+     | Tageszeit | Stärke | Farbe (sRGB, HDR) |
+     |---|---|---|
+     | goldene Stunde | 0,81 | (2,6, 2,2, 1,5) |
+     | Dämmerung | 0,96 | (3,1, 2,0, 0,6) |
+     | Tag und Nacht | 0 | – |
+
+2. **Dunst je Blickrichtung:**
+   - **Effekt:** Gegen die tiefe Sonne streut das Aerosol über dem Bosporus nach vorn (Mie-Streuung, Henyey–Greenstein, g = 0,72). Der Dunst leuchtet dort golden und bleibt auf der Gegenseite blaugrau.
+   - **Umsetzung:** `WeatherVisuals` setzt die Nebelfarbe in jedem Bild aus dem Winkel zwischen Kamera und Sonne.
+   - **Werte:**
+     - goldene Stunde: zur Sonne (1,00, 0,88, 0,62), seitlich (0,78, 0,75, 0,70), abgewandt (0,77, 0,74, 0,71)
+     - Mittag und Nacht: unverändert
+3. **Dunstweite:**
+   - Bei tiefer Sonne ist der Lichtweg durch die Luft länger. Der Nebel reicht dann von 320 bis 5200 m statt von 600 bis 8000 m. Das asiatische Ufer in 1–2 km Entfernung bleibt sichtbar, die Hügel dahinter versinken früher.
+   - Regen wie bisher: 60 bis 900 m.
+
+**Tests:** `GoldenHourTests` (3 Tests).
+
+**Werkzeug:** `cd build/Apex.Tuning && dotnet run -c Release -- golden` gibt alle Werte je Tageszeit aus.
+
+**Im Unity-Editor zu prüfen (nicht gesehen):**
+- **Shader:** Kompiliert `Apex/SunGlint` unter URP 17? Falls nicht, entsteht keine Glanzschicht und es gibt sonst keine Folgen.
+- **Stärke:** Wirkt das Glühen zu stark oder fleckig? Dann `GoldenHour.GlintPeak` (3,2) bzw. `GlintLobe` (6) anpassen.
+- **Kanten:** Sitzt die Schicht sauber auf den Fenstern, ohne Z-Fighting? Sie liegt 8 cm vor der Wand und hat einen Tiefen-Offset.
+- **Dunst:** Wirkt der goldene Dunst beim Blick nach Westen zu hell oder zu weiß? Dann die Mischung in `GoldenHour.Haze` anpassen.
+- **Kurze Sichtweite:** Ist der Wechsel der Nebelfarbe beim schnellen Drehen der Kamera sichtbar? Dann dämpfen.
+
+**Bekannte Grenzen:**
+- Die nahe OSM-Stadt am europäischen Ufer hat keine Glanzschicht, nur die generische mittlere und ferne Stadt.
+- Berghänge hinter dem Ufer schatten die Fenster nur innerhalb der Schattendistanz ab (≤ 600 m).
+- Es gibt weiterhin keine Lichtstrahlen (God Rays); URP bietet sie nicht ohne eigenen Effekt.
+
 ## 5. Im Unity-Editor zu prüfen
 1. **Tageszeiten:** Goldene Stunde, Tag und Dämmerung aus Verfolger- und TV-Kamera.
    - Wirken die Schatten bei tiefer Sonne zu hell? Dann `SkyModel.Adaptation` (0,6) senken.

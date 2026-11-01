@@ -24,6 +24,10 @@ namespace Apex.Game
         /// <summary>Settings switch for the URP post-processing volume (applied live).</summary>
         public bool postProcessing = true;
         SkyModel.Lighting light;
+        /// <summary>The lighting last applied and its cloud cover (golden-hour glint, haze).</summary>
+        public static SkyModel.Lighting CurrentLight { get; private set; }
+        public static float CurrentCloud { get; private set; }
+        public static bool HasLight { get; private set; }
         float lightCloud = -1f, reflectedCloud = -1f, reflectedWet = -1f, reflectedArtificial = -1f;
         PostFxStack postFx;
         EnvironmentReflections reflections;
@@ -96,6 +100,9 @@ namespace Apex.Game
         {
             light = SkyModel.Get(timeOfDay, cloud);
             lightCloud = cloud;
+            CurrentLight = light;
+            CurrentCloud = cloud;
+            HasLight = true;
             if (sun != null)
             {
                 // The light shines away from the source: yaw = source azimuth + 180°. A sun closer than 2° to the
@@ -155,6 +162,8 @@ namespace Apex.Game
             rain.Play();
         }
 
+        void OnDestroy() => HasLight = false;
+
         void LateUpdate()
         {
             if (weather == null) return;
@@ -172,8 +181,17 @@ namespace Apex.Game
                 reflectedArtificial = artificial;
                 reflections.Invalidate();
             }
-            RenderSettings.fogStartDistance = Mathf.Lerp(600f, 60f, rainI);
-            RenderSettings.fogEndDistance = Mathf.Lerp(environment != null ? 8000f : 3500f, 900f, rainI);
+            // Haze: closer at low sun (longer air path), golden towards the sun and blue-grey away from it.
+            var (fogStart, fogEnd) = GoldenHour.HazeRange(light.elevation, cloud, rainI, environment != null);
+            RenderSettings.fogStartDistance = fogStart;
+            RenderSettings.fogEndDistance = fogEnd;
+            if (cameraTransform != null && timeOfDay != TimeOfDay.Night)
+            {
+                var sd = GoldenHour.SunDirection(light.azimuthTrue, light.elevation, trueNorthBearing);
+                var f = cameraTransform.forward;
+                float cosView = f.x * sd.X + f.y * sd.Y + f.z * sd.Z;
+                RenderSettings.fogColor = ToColor(GoldenHour.Haze(light, cosView, cloud));
+            }
             if (postFx != null)
             {
                 postFx.SetEnabled(postProcessing);
