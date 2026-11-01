@@ -80,6 +80,8 @@ namespace Apex.Tracks
         public readonly List<BrakeBoard> brakeBoards = new List<BrakeBoard>();
         /// <summary>TV camera towers (scaffold with a camera platform) behind the barrier at the slowest corners.</summary>
         public readonly List<Post> tvTowers = new List<Post>();
+        /// <summary>Viewing spots for standing spectators: the apex of every heavily braked corner (overtaking places).</summary>
+        public readonly List<Post> viewingSpots = new List<Post>();
         public static readonly int[] BoardMetres = { 150, 100, 50 };
         /// <summary>Boards only where the approach is braked by at least this much (m/s, ~90 km/h).</summary>
         public const float BoardBraking = 25f;
@@ -207,6 +209,7 @@ namespace Apex.Tracks
                 // inside the previous corner (less than 60 m after its apex).
                 if (approachSpeed - cornerSpeed > BoardBraking)
                 {
+                    viewingSpots.Add(new Post { distance = g.Wrap(apex), side = outside, corner = ci });
                     float turnIn = TurnIn(c);
                     float prevApex = ci > 0 ? g.Distances[sorted[ci - 1].index] : g.Distances[sorted[sorted.Count - 1].index] - g.Length;
                     foreach (int m in BoardMetres)

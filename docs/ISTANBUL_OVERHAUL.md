@@ -9,7 +9,8 @@
 - **Phase 3, Referenzzone Dolmabahçe:** implementiert und getestet (Abschnitt 2b). Im Unity-Editor nicht geprüft.
 - **Phase 4, erster Teil (Infrastruktur, Ufertypen, Gebäudedetails):** implementiert und getestet (Abschnitt 2c). Im Unity-Editor nicht geprüft.
 - **Phase 4, zweiter Teil (Gebäudefamilien):** implementiert und getestet (Abschnitt 2d). Im Unity-Editor nicht geprüft.
-- **Phasen 5 und 6:** geplant (Abschnitt 4).
+- **Phase 5, Atmosphäre (Zuschauerzonen, Boote, Flaggenwind, Hörner und Möwen):** implementiert und getestet (Abschnitt 2e). Im Unity-Editor nicht geprüft, nicht gehört.
+- **Phase 6:** geplant (Abschnitt 4).
 
 **Git-Checkpoint:** `main` bei Commit `8a3377a` (Merge von PR #25), dem Stand vor dieser Überarbeitung. Das lokale Tag `checkpoint-pre-istanbul-overhaul` ließ sich über den Proxy nicht hochladen.
 
@@ -195,6 +196,50 @@ Dazu kommen für alle Familien weiterhin die Fassadendetails aus Teil 1: Fallroh
 - **Fehlt noch:** Fensterrahmen als Geometrie, Alterung und Schmutzspuren sowie eine eigene Holzverschalungs-Textur. Das Holzhaus nutzt das Fenstermuster der Putzfassade in Holzfarben.
 - **Anteile:** aus einer Regel, nicht aus einem Gebäudekataster. OSM kennt das Baujahr für diesen Ausschnitt nicht.
 
+## 2e. Phase 5: Atmosphäre
+### Was gebaut ist
+- **Zuschauerzonen außerhalb von Ortaköy** (`SpectatorZones`, `TrackInfrastructurePlan.viewingSpots`):
+  - Jede stark angebremste Kurve wird ein Aussichtspunkt. Das sind alle Kurven, in denen die Ideallinie mehr als 25 m/s abbaut (9 auf `bosphorus_a`).
+  - Um den Scheitel entsteht eine Zone mit 85 m Radius. Zonen überlappen nicht und liegen außerhalb der Ortaköy-Menge.
+  - Anzahl der Zonen nach Qualitätsstufe: Mobil 0, mittel 3, hoch 6, maximal 10.
+  - Die Fans stehen wie in Ortaköy 1,2–8 m hinter der Barriere. Ein Rauschfeld mit 7 m Körnung bildet Gruppen mit Lücken dazwischen statt einer gleichmäßigen Reihe.
+  - Bei Qualität 2 stehen in den Zonen 3273 Fans; ohne Gruppen wären es 5926.
+- **Fotografen:** etwa 4 % der Fans. Sie springen nicht mit, tragen keine Handflagge und halten eine Kamera vor dem Gesicht. Die Kamera ist ein eigenes Mesh, passend zu Größe und Blickrichtung der Figur. Bei Qualität 2 sind es 128.
+- **Bosporusverkehr** (`MarineTraffic`):
+  - Neu ist ein Ausflugsschiff auf der Route „Boğaz turu“ von Eminönü zur Brücke (`LandmarkGeometry.TourBoat`, 28 m, blaues Band, Sonnendach).
+  - Dazu kommen zwei Motorboot-Runden vor Ortaköy und Çırağan (`MotorBoat`, 9 m). Alle Punkte liegen mit mindestens 30 m Abstand auf dem Wasser.
+  - Auf Mobil gibt es keine Motorboote.
+- **Flaggen im Wind** (`FlagWave`, `FlagWindComponent`):
+  - Die Balkon- und Fensterflaggen sind ein eigenes Objekt, abgetrennt von den statischen Fassaden.
+  - Die Tuchfläche schwingt von der Aufhängung zum freien Ende aus der Fassade heraus, mit Ausschlag und Frequenz nach Windstärke und eigener Phase je Flagge.
+  - Aktualisiert wird höchstens mit 20 Hz, nur bis 220 m Entfernung und nur wenn sichtbar.
+- **Geräusche** (`AmbienceEvents`, `AmbienceComponent`):
+  - Ein entferntes Schiffshorn ertönt alle 35–90 s, Möwenschreie alle 6–18 s.
+  - Beide sind synthetisch erzeugt, also keine Aufnahmen und keine Fremdlizenz.
+  - Sie sind nur zu hören, wo der Wasseranteil der Ambience über 0,15 liegt, und werden leiser, je weniger Wasser es gibt.
+
+### Tests
+- `SpectatorZonesStandInGroupsAtTheBrakingCorners`:
+  - Mobil hat keine Zonen; bei Qualität 2 gibt es 3–6.
+  - Keine Überlappung und nichts in Ortaköy.
+  - Kein Fan steht im Wasser, in einem Haus oder vor der Barriere.
+  - Die Gruppen ergeben weniger Fans als die gleichmäßige Verteilung.
+  - Der Fotografenanteil liegt unter 10 %.
+- `FlagsHangFromTheHoistAndSwingMoreInStrongerWind` und `ShipHornsAndGullsAreOccasionalAndOnlyByTheWater`.
+- `FerriesAndShipsStayOnTheWater`, erweitert um Ausflugsschiff und Motorboote.
+
+### Ehrlich: nicht geprüft und offen
+- **Unity:** nichts davon ist im Editor gesehen oder gehört.
+  - Offen ist, ob die Flaggen-Vertexanimation flüssig wirkt.
+  - Offen ist, ob Horn und Möwen im Mix zu laut sind.
+  - Offen ist, was die rund 4500 Zuschauer bei Qualität 2 kosten: Die Matrizen werden pro Bild auf der CPU berechnet, Ortaköy eingeschlossen.
+- **Keine Vorschaubilder für Phase 5:** Zuschauer, Boote in Bewegung und Flaggenwind entstehen erst zur Laufzeit in Unity, und die three.js-Vorschau zeigt nur statische Geometrie.
+- **Synthetische Geräusche:** Horn und Möwe sind Platzhalter. Echte Aufnahmen mit freier Lizenz wären besser und kämen in `docs/ASSET_LICENSES.md`.
+- **Noch nicht umgesetzt:**
+  - Bugwellen und Kielwasser der Schiffe
+  - Licht der goldenen Stunde
+  - Tribünen-Ereignisse (Mexican Wave, Pyro)
+
 ## 3. Werkzeuge
 ```sh
 cd build/Apex.Tuning
@@ -213,5 +258,5 @@ cd tools/carrender && APEX_PAGE=env.html APEX_VIEWS='name|eye|target|fov|&tod=go
    - Barrieren und Zaun der Dolmabahçe Caddesi.
    - Prüfung aus Verfolger-, Cockpit- und TV-Sicht (Vorschau; Unity-Prüfung durch dich).
 4. **Übertragung:** Gebäudefamilien mit Balkonen, Erkern, Klimageräten und Markisen; Flaggenverteilung; Ufertypen (historisch, urban, natürlich); Infrastruktur-Abgleich; Sektor-Charaktere.
-5. **Atmosphäre:** Zuschauer, Fähren-Routen, Licht der goldenen Stunde, Audio.
+5. **Atmosphäre:** Zuschauerzonen, Boote, Flaggenwind und Geräusche umgesetzt (Abschnitt 2e). Offen: Licht der goldenen Stunde, Kielwasser.
 6. **Tests und Leistung:** Fahrbarkeit, KI, Sichtachsen, Profiling in Unity auf PC und Mobil (nur mit Unity-Messung als Zahl).

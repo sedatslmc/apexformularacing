@@ -160,6 +160,10 @@ namespace Apex.Tests
             var routes = MarineRoute.ForCircuit(def, field.land);
             Assert.That(routes.Count, Is.GreaterThanOrEqualTo(4));
             Assert.That(routes.Exists(r => r.name.StartsWith("Beşiktaş")), Is.True);
+            // Phase 5: a tour boat along the European shore and motor boats circling off Ortaköy / Çırağan.
+            Assert.That(routes.Exists(r => r.vesselKind == MarineRoute.VesselTourBoat), Is.True);
+            Assert.That(routes.FindAll(r => r.vesselKind == MarineRoute.VesselMotorBoat).Count, Is.InRange(1, 2));
+            Assert.That(routes.Count, Is.LessThanOrEqualTo(10), "no exaggerated number of ships");
             foreach (var r in routes)
             {
                 for (double t = 0; t < r.CycleTime; t += 2.0)

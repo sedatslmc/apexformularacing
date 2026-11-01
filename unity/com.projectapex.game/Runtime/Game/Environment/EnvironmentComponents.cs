@@ -270,7 +270,7 @@ namespace Apex.Game
         {
             public int colour;
             public Vector3 centre;
-            public readonly List<(Vector3 pos, Quaternion rot, float scale, float phase)> people = new List<(Vector3, Quaternion, float, float)>();
+            public readonly List<(Vector3 pos, Quaternion rot, float scale, float phase, bool still)> people = new List<(Vector3, Quaternion, float, float, bool)>();
             public Matrix4x4[] matrices, flagMatrices;
         }
 
@@ -284,7 +284,12 @@ namespace Apex.Game
         /// <summary>Share of spectators waving a small Turkish hand flag.</summary>
         public float handFlagShare = 0.22f;
 
-        public void Add(Vector3 pos, float yawDeg, float rnd)
+        /// <summary>Standing height (m) and facing (degrees) of a spectator, shared with props attached to them.</summary>
+        public static float Height(float rnd) => 1.62f + Mathf.Abs(rnd) * 0.25f;
+        public static float Facing(float yawDeg, float rnd) => yawDeg + rnd * 20f;
+
+        /// <param name="still">photographers: no jumping and no hand flag (their camera is a static mesh)</param>
+        public void Add(Vector3 pos, float yawDeg, float rnd, bool still = false)
         {
             int colour = Mathf.Abs((int)(rnd * 1000f)) % ShirtColours.Length;
             // Fans in red and white are the majority.
@@ -296,7 +301,7 @@ namespace Apex.Game
                 batches.Add(b);
                 open[key] = b;
             }
-            b.people.Add((pos, Quaternion.Euler(0f, yawDeg + rnd * 20f, 0f), 1.62f + Mathf.Abs(rnd) * 0.25f, rnd * 40f));
+            b.people.Add((pos, Quaternion.Euler(0f, Facing(yawDeg, rnd), 0f), Height(rnd), rnd * 40f, still));
         }
 
         void Start()
@@ -325,7 +330,7 @@ namespace Apex.Game
             foreach (var b in batches)
             {
                 int flags = 0;
-                foreach (var p in b.people) if (HasFlag(p.phase)) flags++;
+                foreach (var p in b.people) if (!p.still && HasFlag(p.phase)) flags++;
                 b.flagMatrices = new Matrix4x4[flags];
                 b.matrices = new Matrix4x4[b.people.Count];
                 var c = Vector3.zero;
@@ -347,7 +352,8 @@ namespace Apex.Game
                 int f = 0;
                 for (int i = 0; i < b.people.Count; i++)
                 {
-                    var (pos, rot, scale, phase) = b.people[i];
+                    var (pos, rot, scale, phase, still) = b.people[i];
+                    if (still) { b.matrices[i] = Matrix4x4.TRS(pos, rot, Vector3.one * scale); continue; }
                     float idle = Mathf.Sin(t * 1.3f + phase) * 0.02f;
                     float jump = Mathf.Max(0f, Mathf.Sin(t * 7.5f + phase)) * 0.22f * excite;
                     b.matrices[i] = Matrix4x4.TRS(pos + Vector3.up * (idle + jump), rot, Vector3.one * scale);
@@ -596,7 +602,59 @@ namespace Apex.Game
     {
         public EnvironmentInstance env;
         public Func<Vector3, float> enclosure;
-        AudioSource water, crowd, city, windSrc;
+        AudioSource water, crowd, city, windSrc, oneShot;
+        AudioClip horn, gull1, gull2;
+        float nextHorn, nextGull;
+        readonly System.Random rng = new System.Random(1453);
+
+        /// <summary>Distant ship's horn: two low tones (a fifth apart) with harmonics, slow attack, 2.6 s.</summary>
+        static float[] Horn(int rate)
+        {
+            int n = (int)(rate * 2.6f);
+            var d = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                float t = i / (float)rate;
+                float env = Mathf.Clamp01(t / 0.25f) * Mathf.Clamp01((2.6f - t) / 0.6f);
+                float s = 0f;
+                foreach (float f in new[] { 98f, 147f })
+                    for (int h = 1; h <= 4; h++) s += Mathf.Sin(2f * Mathf.PI * f * h * t) / (h * 1.6f);
+                d[i] = s * env * 0.22f;
+            }
+            return d;
+        }
+
+        /// <summary>Gull cry: a falling, slightly rough chirp repeated two or three times.</summary>
+        static float[] Gull(int rate, int calls, int seed)
+        {
+            var r = new System.Random(seed);
+            float call = 0.28f, gap = 0.12f;
+            int n = (int)(rate * calls * (call + gap));
+            var d = new float[n];
+            for (int c = 0; c < calls; c++)
+            {
+                float f0 = 2200f + (float)r.NextDouble() * 400f, f1 = 1300f + (float)r.NextDouble() * 300f;
+                int start = (int)(rate * c * (call + gap));
+                double ph = 0;
+                for (int i = 0; i < call * rate && start + i < n; i++)
+                {
+                    float t = i / (float)rate;
+                    float f = Mathf.Lerp(f0, f1, t / call);
+                    ph += 2.0 * Mathf.PI * f / rate;
+                    float env = Mathf.Sin(Mathf.PI * t / call);
+                    float rough = 1f + 0.35f * Mathf.Sin(2f * Mathf.PI * 70f * t);
+                    d[start + i] = (float)Math.Sin(ph) * env * rough * 0.18f;
+                }
+            }
+            return d;
+        }
+
+        static AudioClip Clip(string name, float[] data, int rate)
+        {
+            var clip = AudioClip.Create(name, data.Length, 1, rate, false);
+            clip.SetData(data, 0);
+            return clip;
+        }
 
         AudioSource Source(string name, float[] data, int rate)
         {
@@ -649,6 +707,16 @@ namespace Apex.Game
             crowd = Source("Amb_Crowd", Noise(rate, 6f, 2200f, 250f, t => 0.7f + 0.3f * Mathf.Sin(t * 1.3f) + 0.2f * Mathf.Sin(t * 3.7f), 23), rate);
             city = Source("Amb_City", Noise(rate, 6f, 180f, 25f, t => 0.85f + 0.15f * Mathf.Sin(t * 0.5f), 37), rate);
             windSrc = Source("Amb_Wind", Noise(rate, 6f, 4000f, 900f, t => 0.6f + 0.4f * Mathf.Sin(t * 0.33f), 41), rate);
+            var go = new GameObject("Amb_OneShots");
+            go.transform.SetParent(transform, false);
+            oneShot = go.AddComponent<AudioSource>();
+            oneShot.spatialBlend = 0f;
+            oneShot.playOnAwake = false;
+            horn = Clip("Amb_ShipHorn", Horn(rate), rate);
+            gull1 = Clip("Amb_Gull1", Gull(rate, 3, 5), rate);
+            gull2 = Clip("Amb_Gull2", Gull(rate, 2, 9), rate);
+            nextHorn = Time.time + AmbienceEvents.NextInterval(AmbienceEvents.Kind.ShipHorn, rng.NextDouble());
+            nextGull = Time.time + AmbienceEvents.NextInterval(AmbienceEvents.Kind.Gull, rng.NextDouble());
         }
 
         void Update()
@@ -668,6 +736,77 @@ namespace Apex.Game
             crowd.volume = Mathf.Lerp(crowd.volume, mix.crowd * 0.6f * crowdBoost * vol, k);
             city.volume = Mathf.Lerp(city.volume, mix.city * 0.3f * vol, k);
             windSrc.volume = Mathf.Lerp(windSrc.volume, mix.wind * Mathf.Clamp01(env.WindSpeed / 10f) * 0.4f * vol, k);
+            // Occasional horns and gulls where the water can be heard.
+            if (oneShot != null && Time.time >= nextHorn)
+            {
+                float v = AmbienceEvents.Volume(AmbienceEvents.Kind.ShipHorn, mix.water) * vol;
+                if (v > 0.001f) oneShot.PlayOneShot(horn, v);
+                nextHorn = Time.time + AmbienceEvents.NextInterval(AmbienceEvents.Kind.ShipHorn, rng.NextDouble());
+            }
+            if (oneShot != null && Time.time >= nextGull)
+            {
+                float v = AmbienceEvents.Volume(AmbienceEvents.Kind.Gull, mix.water) * vol;
+                if (v > 0.001f) oneShot.PlayOneShot(rng.NextDouble() < 0.5 ? gull1 : gull2, v);
+                nextGull = Time.time + AmbienceEvents.NextInterval(AmbienceEvents.Kind.Gull, rng.NextDouble());
+            }
+        }
+    }
+}
+
+namespace Apex.Game
+{
+    /// <summary>
+    /// Balcony and window flags of one city chunk swinging in the shared wind (FlagWave). The vertices are moved on
+    /// the CPU, only while the chunk is visible and within <see cref="Range"/> of the camera, at up to 20 Hz.
+    /// </summary>
+    public sealed class FlagWindComponent : UnityEngine.MonoBehaviour
+    {
+        public EnvironmentInstance env;
+        public const float Range = 220f;
+        UnityEngine.Mesh mesh;
+        UnityEngine.Vector3[] basePos, normals, work;
+        float[] u, phase;
+        UnityEngine.Renderer rend;
+        float next;
+
+        void Start()
+        {
+            var mf = GetComponent<UnityEngine.MeshFilter>();
+            rend = GetComponent<UnityEngine.Renderer>();
+            if (mf == null || mf.sharedMesh == null) { enabled = false; return; }
+            mesh = UnityEngine.Object.Instantiate(mf.sharedMesh);
+            mesh.MarkDynamic();
+            mf.sharedMesh = mesh;
+            basePos = mesh.vertices;
+            normals = mesh.normals;
+            var uv = mesh.uv;
+            work = new UnityEngine.Vector3[basePos.Length];
+            u = new float[basePos.Length];
+            phase = new float[basePos.Length];
+            for (int i = 0; i < basePos.Length; i++)
+            {
+                u[i] = uv.Length > i ? uv[i].x : 0f;
+                var w = transform.TransformPoint(basePos[i]);
+                phase[i] = Apex.Environment.FlagWave.Phase(w.x, w.z);
+            }
+        }
+
+        void Update()
+        {
+            if (mesh == null || rend == null || !rend.isVisible || UnityEngine.Time.time < next) return;
+            var cam = UnityEngine.Camera.main;
+            if (cam == null || (rend.bounds.ClosestPoint(cam.transform.position) - cam.transform.position).sqrMagnitude > Range * Range) return;
+            next = UnityEngine.Time.time + 0.05f;
+            float wind = env != null ? env.WindSpeed : 5f;
+            double t = UnityEngine.Time.timeSinceLevelLoad;
+            for (int i = 0; i < basePos.Length; i++)
+            {
+                var n = normals[i];
+                var side = new UnityEngine.Vector3(n.z, 0f, -n.x);
+                work[i] = basePos[i] + n * Apex.Environment.FlagWave.Out(u[i], t, wind, phase[i]) + side * Apex.Environment.FlagWave.Side(u[i], t, wind, phase[i]);
+            }
+            mesh.vertices = work;
+            mesh.RecalculateBounds();
         }
     }
 }

@@ -389,16 +389,40 @@ namespace Apex.Game
         /// </summary>
         static void BuildTracksideCrowd(Transform root, EnvironmentInstance env, CircuitInstance ci, OsmCity osm, CityLife life, int q, List<CityLayout.Reserved> reserved)
         {
-            var crowd = new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, life != null ? life.props : null,
-                osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q, reserved);
-            if (crowd.fans.Count == 0) return;
+            var fans = new List<TracksideCrowd.Fan>();
+            var props = life != null ? life.props : null;
+            var crowd = new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, props, osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q, reserved);
+            fans.AddRange(crowd.fans);
+            int ortakoy = fans.Count;
+            // Viewing zones at the heavily braked corners elsewhere on the lap: standing fans in groups.
+            foreach (var z in SpectatorZones.Centres(ci.Geometry, ci.Infrastructure, osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q))
+                fans.AddRange(new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, props, z, SpectatorZones.Radius, q, reserved, SpectatorZones.GroupScale).fans);
+            if (fans.Count == 0) return;
             var go = new GameObject("TracksideCrowd");
             go.transform.SetParent(root, false);
             var c = go.AddComponent<CrowdComponent>();
             c.env = env;
             c.handFlagShare = 0.45f;
-            foreach (var f in crowd.fans) c.Add(V(f.position), f.yaw * Mathf.Rad2Deg, f.rnd);
-            Debug.Log($"[Apex] Trackside crowd (Ortaköy): {crowd.fans.Count} fans.");
+            // Photographers: no cheering, a camera in front of the face.
+            var cameras = new MeshBuilder();
+            int photographers = 0;
+            foreach (var f in fans)
+            {
+                if (f.photographer)
+                {
+                    // Same height and facing as the instanced figure: body and lens at eye level, in front of the face.
+                    var p = V(f.position);
+                    float h = CrowdComponent.Height(f.rnd), yaw = CrowdComponent.Facing(f.yaw * Mathf.Rad2Deg, f.rnd) * Mathf.Deg2Rad;
+                    var fwd = new Vector3(Mathf.Sin(yaw), 0f, Mathf.Cos(yaw));
+                    var eye = p + Vector3.up * (0.88f * h);
+                    cameras.Box(eye + fwd * (0.075f * h + 0.06f), new Vector3(0.14f, 0.1f, 0.12f), Quaternion.LookRotation(fwd));
+                    cameras.Box(eye + fwd * (0.075f * h + 0.18f), new Vector3(0.08f, 0.08f, 0.14f), Quaternion.LookRotation(fwd));
+                    photographers++;
+                }
+                c.Add(V(f.position), f.yaw * Mathf.Rad2Deg, f.rnd, f.photographer);
+            }
+            if (photographers > 0) AddMeshObject(go.transform, "PhotographerCameras", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.DarkSteel] = cameras }, false);
+            Debug.Log($"[Apex] Trackside crowd: {fans.Count} fans ({ortakoy} at Ortaköy, {photographers} photographers).");
         }
 
         /// <summary>LOD screen heights of the palace buildings (per building, they are up to 140 m long).</summary>
@@ -542,6 +566,15 @@ namespace Apex.Game
                 var lod1 = AddMeshObject(group.transform, "LOD1", simple.parts, true);
                 var lg = group.AddComponent<LODGroup>();
                 var r0 = lod0.GetComponent<Renderer>();
+                // Hanging flags in their own mesh, moved by the wind (FlagWindComponent).
+                Renderer flagRenderer = null;
+                if (fronts.parts.TryGetValue(EnvironmentGeometry.BalconyFlag, out var flagParts) && flagParts.TriangleCount > 0)
+                {
+                    fronts.parts.Remove(EnvironmentGeometry.BalconyFlag);
+                    var fg = AddMeshObject(group.transform, "Flags", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.BalconyFlag] = flagParts }, false, false);
+                    fg.AddComponent<FlagWindComponent>().env = env;
+                    flagRenderer = fg.GetComponent<Renderer>();
+                }
                 if (fronts.Triangles > 0)
                 {
                     // Street-front relief (balconies, bay windows, awnings) only on the near level: it reads up to
@@ -549,7 +582,7 @@ namespace Apex.Game
                     var rel = AddMeshObject(group.transform, "Fronts", fronts.parts, true);
                     lg.SetLODs(new[]
                     {
-                        new LOD(0.35f, new Renderer[] { r0, rel.GetComponent<Renderer>() }),
+                        new LOD(0.35f, flagRenderer != null ? new Renderer[] { r0, rel.GetComponent<Renderer>(), flagRenderer } : new Renderer[] { r0, rel.GetComponent<Renderer>() }),
                         new LOD(0.12f, new Renderer[] { r0 }),
                         new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
                     });
@@ -1129,12 +1162,20 @@ namespace Apex.Game
             ferry.Ferry();
             var freighter = new LandmarkGeometry(1);
             freighter.Freighter();
+            var tour = new LandmarkGeometry(1);
+            tour.TourBoat();
+            var motor = new LandmarkGeometry(1);
+            motor.MotorBoat();
             foreach (var r in routes)
             {
-                int count = r.shuttle ? (r.name.StartsWith("Beşiktaş") ? 2 : 1) : (Quality == 0 ? 1 : 2);
+                // Moderate traffic: two Beşiktaş ferries, one per other ferry line, one tour boat, one motor boat per
+                // loop (none on mobile), two transit ships per direction (one on mobile).
+                int count = r.vesselKind == MarineRoute.VesselMotorBoat ? (Quality == 0 ? 0 : 1)
+                    : r.shuttle ? (r.name.StartsWith("Beşiktaş") ? 2 : 1) : (Quality == 0 ? 1 : 2);
                 for (int k = 0; k < count; k++)
                 {
-                    var lg = r.vesselKind == 0 ? ferry : freighter;
+                    var lg = r.vesselKind == MarineRoute.VesselFerry ? ferry : r.vesselKind == MarineRoute.VesselTourBoat ? tour
+                        : r.vesselKind == MarineRoute.VesselMotorBoat ? motor : freighter;
                     var v = AddMeshObject(go.transform, r.name + "_" + k, lg.parts, true, false);
                     mt.Add(r, v.transform, r.CycleTime * k / count + LandModel.Hash(k, r.points.Count) * 20f, WaterY);
                 }

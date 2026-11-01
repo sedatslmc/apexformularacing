@@ -21,13 +21,31 @@ namespace Apex.Environment
             public float yaw;
             /// <summary>Per-fan random value in [-1, 1] (shirt colour, height, hand flag).</summary>
             public float rnd;
+            /// <summary>Photographer (camera at the face) instead of a cheering fan.</summary>
+            public bool photographer;
+        }
+
+        /// <summary>Share of photographers among the fans.</summary>
+        public const float PhotographerShare = 0.04f;
+
+        /// <summary>Smooth value noise in [0, 1] (cells of `scale` metres): fans stand in groups, not even rows.</summary>
+        public static float Groups(float x, float z, float scale)
+        {
+            float gx = x / scale, gz = z / scale;
+            int x0 = (int)MathF.Floor(gx), z0 = (int)MathF.Floor(gz);
+            float tx = gx - x0, tz = gz - z0;
+            tx = tx * tx * (3f - 2f * tx); tz = tz * tz * (3f - 2f * tz);
+            float V(int a, int b) => LandModel.Hash(a * 92821 + 17, b * 68917 + 5) * 0.5f + 0.5f;
+            float a0 = V(x0, z0) + (V(x0 + 1, z0) - V(x0, z0)) * tx;
+            float a1 = V(x0, z0 + 1) + (V(x0 + 1, z0 + 1) - V(x0, z0 + 1)) * tx;
+            return a0 + (a1 - a0) * tz;
         }
 
         public const float MinBehind = 1.2f, MaxBehind = 8f, Spacing = 0.75f;
         public readonly List<Fan> fans = new List<Fan>();
 
         public TracksideCrowd(TrackGeometry g, TrackClearance clearance, TerrainField field, OsmCity city, IReadOnlyList<CityLife.Placed> furniture,
-            Vector2 centre, float radius, int quality, IReadOnlyList<CityLayout.Reserved> reserved = null)
+            Vector2 centre, float radius, int quality, IReadOnlyList<CityLayout.Reserved> reserved = null, float groupScale = 0f)
         {
             if (quality <= 0) return;
             float fill = quality == 1 ? 0.5f : quality == 2 ? 0.85f : 1f;
@@ -61,6 +79,8 @@ namespace Apex.Environment
                         if (m < MinBehind || m > MaxBehind) continue;
                         // Fewer people towards the back rows.
                         float keep = fill * (1f - 0.6f * (m - MinBehind) / (MaxBehind - MinBehind));
+                        // Groups of friends with gaps between them (viewing zones away from the Ortaköy section).
+                        if (groupScale > 0f) keep *= Math.Clamp((Groups(p.X, p.Z, groupScale) - 0.3f) * 2.4f, 0f, 1.3f);
                         if (LandModel.Hash(h, 3) * 0.5f + 0.5f > keep) continue;
                         if (field.IsWater(p.X, p.Z)) continue;
                         // Grandstands and event buildings have their own people (or none).
@@ -78,6 +98,7 @@ namespace Apex.Environment
                             position = new Vector3(p.X, field.Height(p.X, p.Z) + StreetNetwork.Lift + 0.02f, p.Z),
                             yaw = MathF.Atan2(toTrack.X, toTrack.Y),
                             rnd = LandModel.Hash(h, 4),
+                            photographer = LandModel.Hash(h, 5) * 0.5f + 0.5f < PhotographerShare,
                         });
                     }
                 }

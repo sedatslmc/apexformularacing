@@ -30,6 +30,46 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void SpectatorZonesStandInGroupsAtTheBrakingCorners()
+        {
+            var (def, field, clear, data, city) = World();
+            var g = TrackGeometry.FromDefinition(def);
+            var setup = new VehicleSetup();
+            var line = new RacingLine(g, 1.45f, setup.downforceArea * setup.airDensity * 0.5f / setup.mass);
+            var plan = new TrackInfrastructurePlan(g, g.CornersFor(def), line.offsets, line.speed);
+            var centre = city.OrtakoyCentre.Value;
+            Assert.That(SpectatorZones.Centres(g, plan, centre, StreetFronts.OrtakoyRadius, 0), Is.Empty, "no zones on mobile");
+            var zones = SpectatorZones.Centres(g, plan, centre, StreetFronts.OrtakoyRadius, 2);
+            TestContext.WriteLine($"{plan.viewingSpots.Count} viewing spots, {zones.Count} zones at quality 2");
+            Assert.That(zones.Count, Is.InRange(3, SpectatorZones.MaxZones(2)));
+            for (int i = 0; i < zones.Count; i++)
+            {
+                Assert.That(Vector2.Distance(zones[i], centre), Is.GreaterThan(StreetFronts.OrtakoyRadius + SpectatorZones.Radius - 0.01f), "zone inside the Ortaköy crowd");
+                for (int j = i + 1; j < zones.Count; j++)
+                    Assert.That(Vector2.Distance(zones[i], zones[j]), Is.GreaterThanOrEqualTo(2f * SpectatorZones.Radius - 0.01f), "zones overlap");
+            }
+            int even = 0, grouped = 0, photographers = 0;
+            foreach (var z in zones)
+            {
+                even += new TracksideCrowd(g, clear, field, city, null, z, SpectatorZones.Radius, 2).fans.Count;
+                var crowd = new TracksideCrowd(g, clear, field, city, null, z, SpectatorZones.Radius, 2, null, SpectatorZones.GroupScale);
+                grouped += crowd.fans.Count;
+                foreach (var f in crowd.fans)
+                {
+                    if (f.photographer) photographers++;
+                    Assert.That(clear.Margin(f.position.X, f.position.Z), Is.InRange(TracksideCrowd.MinBehind - 0.01f, TracksideCrowd.MaxBehind + 0.01f));
+                    Assert.That(field.IsWater(f.position.X, f.position.Z), Is.False);
+                    Assert.That(city.InsideBuilding(f.position.X, f.position.Z, 0.3f), Is.False, "fan inside a house");
+                }
+            }
+            TestContext.WriteLine($"zone fans: {grouped} in groups (evenly spread: {even}), {photographers} photographers");
+            Assert.That(grouped, Is.GreaterThan(100), "spectators at the braking zones");
+            Assert.That(grouped, Is.LessThan(even), "groups leave gaps along the barrier");
+            Assert.That(photographers, Is.GreaterThan(0));
+            Assert.That(photographers, Is.LessThan(grouped * 0.1), "photographers are a few among the fans");
+        }
+
+        [Test]
         public void SideStreetsEndAtTheBarriersAndStayOnLand()
         {
             var (_, field, clear, data, _) = World();

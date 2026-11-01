@@ -447,6 +447,50 @@ namespace Apex.Game
             VerticalLathe(B(Funnel), new Vector3(0f, 8f, 0f), new[] { new Vector2(0f, 1.9f), new Vector2(4.5f, 1.8f), new Vector2(4.5f, 0.01f) }, Seg(12));
         }
 
+        /// <summary>Bosphorus tour boat (~28 m): white hull with a blue band, enclosed lower deck, open upper deck under an awning. +z = bow.</summary>
+        public void TourBoat()
+        {
+            const float L = 28f, W = 6.5f;
+            var hull = new List<Vector3[]>();
+            int n = detail == 0 ? 12 : 6;
+            for (int i = 0; i <= n; i++)
+            {
+                float t = i / (float)n;
+                float z = (t - 0.5f) * L;
+                float w = W * 0.5f * (t > 0.7f ? Mathf.Lerp(1f, 0.1f, (t - 0.7f) / 0.3f) : t < 0.1f ? Mathf.Lerp(0.85f, 1f, t / 0.1f) : 1f);
+                hull.Add(new[] { new Vector3(-w * 0.7f, -1.4f, z), new Vector3(-w, 0.9f, z), new Vector3(w, 0.9f, z), new Vector3(w * 0.7f, -1.4f, z) });
+            }
+            B(Hull).RingLoft(hull, true, true);
+            B(Funnel).Box(new Vector3(0f, 0.7f, -1f), new Vector3(W * 1.01f, 0.35f, L * 0.68f));                 // blue band
+            B(Marble).Box(new Vector3(0f, 2.1f, -1.5f), new Vector3(W * 0.9f, 2.4f, L * 0.62f));               // lower saloon
+            B(Glass).Box(new Vector3(0f, 2.3f, -1.5f), new Vector3(W * 0.905f, 1.1f, L * 0.58f));
+            B(Marble).Box(new Vector3(0f, 3.35f, -1.5f), new Vector3(W * 0.95f, 0.1f, L * 0.64f));             // upper deck
+            if (detail >= 2) return;
+            for (float z = -L * 0.3f; z <= L * 0.18f; z += 3f)
+                foreach (float x in new[] { -W * 0.44f, W * 0.44f })
+                    B(Lead).Box(new Vector3(x, 4.5f, z), new Vector3(0.06f, 2.2f, 0.06f));
+            B(Funnel).Box(new Vector3(0f, 5.65f, -1.5f), new Vector3(W * 0.95f, 0.08f, L * 0.55f));             // awning
+            B(Lead).Box(new Vector3(-W * 0.47f, 3.9f, -1.5f), new Vector3(0.04f, 1.0f, L * 0.62f));            // rails
+            B(Lead).Box(new Vector3(W * 0.47f, 3.9f, -1.5f), new Vector3(0.04f, 1.0f, L * 0.62f));
+        }
+
+        /// <summary>Private motor boat (~9 m): white hull, small windscreen and cabin. +z = bow.</summary>
+        public void MotorBoat()
+        {
+            const float L = 9f, W = 2.8f;
+            var hull = new List<Vector3[]>();
+            for (int i = 0; i <= 6; i++)
+            {
+                float t = i / 6f;
+                float z = (t - 0.5f) * L;
+                float w = W * 0.5f * (t > 0.6f ? Mathf.Lerp(1f, 0.05f, (t - 0.6f) / 0.4f) : 1f);
+                hull.Add(new[] { new Vector3(0f, -0.7f, z), new Vector3(-w, 0.5f, z), new Vector3(w, 0.5f, z), new Vector3(0f, -0.7f, z) });
+            }
+            B(Marble).RingLoft(hull, true, true);
+            B(Marble).Box(new Vector3(0f, 0.85f, -0.6f), new Vector3(W * 0.8f, 0.7f, 2.6f));
+            B(Glass).Box(new Vector3(0f, 1.2f, 0.65f), new Vector3(W * 0.75f, 0.45f, 0.08f));
+        }
+
         /// <summary>Generic coastal freighter for the strait traffic (~120 m). +z = bow.</summary>
         public void Freighter()
         {

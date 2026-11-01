@@ -21,6 +21,7 @@ namespace Apex.Environment
         public float dwell = 50f;
         public bool shuttle = true;
         public int vesselKind;
+        public const int VesselFerry = 0, VesselFreighter = 1, VesselTourBoat = 2, VesselMotorBoat = 3;
 
         float[] cumulative;
 
@@ -98,11 +99,11 @@ namespace Apex.Environment
                 var l = def.FindLandmark(id);
                 return l == null ? (Vector2?)null : new Vector2(l.east, l.north);
             }
-            void Shuttle(string name, string a, string b, float speed, float dwell)
+            void Shuttle(string name, string a, string b, float speed, float dwell, int kind = 0)
             {
                 var pa = P(a); var pb = P(b);
                 if (pa == null || pb == null) return;
-                var r = new MarineRoute { name = name, speed = speed, dwell = dwell, shuttle = true, vesselKind = 0 };
+                var r = new MarineRoute { name = name, speed = speed, dwell = dwell, shuttle = true, vesselKind = kind };
                 var sa = Offshore(land, pa.Value, pb.Value, 30f);
                 var sb = Offshore(land, pb.Value, pa.Value, 30f);
                 // Gentle S-curve; points over land are pushed sideways onto open water.
@@ -124,6 +125,26 @@ namespace Apex.Environment
             Shuttle("Beşiktaş–Üsküdar", "besiktas_pier", "uskudar_pier", 7.5f, 55f);
             Shuttle("Karaköy–Üsküdar", "karakoy_pier", "uskudar_pier", 7.5f, 70f);
             Shuttle("Eminönü–Üsküdar", "eminonu_pier", "uskudar_pier", 7f, 60f);
+            // Bosphorus tour boat (Boğaz turu) from Eminönü up past the palaces and Ortaköy to the bridge.
+            Shuttle("Boğaz turu", "eminonu_pier", "bridge_eu", 5.5f, 45f, VesselTourBoat);
+            // Private motor boats circling off Ortaköy and off Çırağan.
+            foreach (var (id, name, radius) in new[] { ("ortakoy_mosque", "Motorboot Ortaköy", 170f), ("ciragan", "Motorboot Çırağan", 140f) })
+            {
+                var c = P(id);
+                if (c == null) continue;
+                // Centre off the shore towards the Asian side, on open water.
+                var centre = Offshore(land, c.Value, c.Value + new Vector2(1f, -0.3f), radius + 60f);
+                var r = new MarineRoute { name = name, speed = 9f, shuttle = false, vesselKind = VesselMotorBoat };
+                bool ok = true;
+                for (int k = 0; k < 14; k++)
+                {
+                    float a = k * MathF.PI * 2f / 14f;
+                    var q = centre + new Vector2(MathF.Cos(a) * radius, MathF.Sin(a) * radius * 0.6f);
+                    if (land.IsLand(q.X, q.Y) || land.WaterDistanceToCoast(q.X, q.Y) < 30f) { ok = false; break; }
+                    r.points.Add(q);
+                }
+                if (ok) { r.points.Add(r.points[0]); routes.Add(r); }
+            }
             // Channel transit south to north: on each cross-section the open-water span of the strait (the water run
             // next to the previous one, from the land outlines; the shorelines only cover the circuit's stretch).
             if (def.shoreline.Count > 1)
