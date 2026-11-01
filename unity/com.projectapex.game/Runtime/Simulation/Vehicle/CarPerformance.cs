@@ -17,6 +17,13 @@ namespace Apex.Vehicle
         /// </summary>
         public const float PlanningShare = 1.45f / 1.8f;
 
+        /// <summary>Braking share of the planning friction (RacingLine brakeShare). Measured on the 6-DOF pad
+        /// (Apex.Tuning brakecurve, ABS on) the car brakes 1.3–1.45 × harder in a straight line than planned with 0.85.
+        /// Later braking points (0.88–1.0) were tried: keyboard drivers with on/off brakes then ran wide where braking
+        /// and turning overlap (the kink before T1). 0.85 keeps that margin – about a quarter of the straight-line
+        /// braking – for digital brakes, ABS and trail braking; the points still move with the car's grip.</summary>
+        public const float BrakeShare = 0.85f;
+
         /// <summary>Planning friction coefficient (RacingLine mu).</summary>
         public readonly float mu;
         /// <summary>Downforce per unit mass per (m/s)² (RacingLine downforcePerMass).</summary>
@@ -27,6 +34,9 @@ namespace Apex.Vehicle
             this.mu = mu;
             this.downforcePerMass = downforcePerMass;
         }
+
+        /// <summary>The planner line for this car (AI, racing-line guide, test drivers).</summary>
+        public Apex.AI.RacingLine Line(Apex.Tracks.TrackGeometry g) => new Apex.AI.RacingLine(g, mu, downforcePerMass, brakeShare: BrakeShare);
 
         public static CarPerformance For(VehicleSetup s)
         {

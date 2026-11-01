@@ -989,6 +989,54 @@ else if (mode == "errors")
             Console.WriteLine($"{name,-6} {pname,-12} | {Row(hb.PowerExit(50f, 1f))} | {Row(hb.PowerExit(90f, 1f))} | {Row(hb.LiftOff(120f))} | {Row(hb.LiftOff(200f))} | {Row(hb.BrakeTurnIn(200f))} | {LimitRow(hb.LimitStep(250f))}");
         }
 }
+else if (mode == "guide")
+{
+    // Racing-line guide: the plan (allowed speed) every 50 m, and the hints for a car at a distance and speed.
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var geo = TrackGeometry.FromDefinition(CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/bosphorus_a.json")));
+    var gd = new Apex.AI.RacingLineGuide(CarPerformance.For(new VehicleSetup()).Line(geo));
+    if (args.Length < 3)
+    {
+        for (float d = 0f; d < geo.Length; d += 50f) Console.WriteLine($"  {d,6:F0} m: plan {gd.Allowed(d, 1f) * 3.6f,5:F0} km/h, curvature {gd.line.CurvatureAt(d) * 1000f,6:F1} /km");
+        return;
+    }
+    float at = float.Parse(args[1], inv), kmh = float.Parse(args[2], inv);
+    var list = new System.Collections.Generic.List<Apex.AI.RacingLineGuide.Dash>();
+    gd.Evaluate(at, kmh / 3.6f, 1f, Apex.AI.RacingLineGuide.Mode.WholeLap, true, list);
+    foreach (var x in list) Console.WriteLine($"  +{x.ahead,5:F0} m ({gd.dashDistance[x.index],6:F0}): {x.hint,-6} plan {gd.Allowed(gd.dashDistance[x.index], 1f) * 3.6f,5:F0}");
+}
+else if (mode == "guide-csv")
+{
+    // Plan view data for docs: road edges and the guide's dashes for a car at <distance> with each speed.
+    // guide-csv <distance> <kmh,kmh,...> [from] [to]
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var geo = TrackGeometry.FromDefinition(CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/bosphorus_a.json")));
+    var gd = new Apex.AI.RacingLineGuide(CarPerformance.For(new VehicleSetup()).Line(geo));
+    float at = float.Parse(args[1], inv);
+    float from = args.Length > 3 ? float.Parse(args[3], inv) : at - 50f, to = args.Length > 4 ? float.Parse(args[4], inv) : at + 700f;
+    Console.WriteLine("kind,speed,x,z,hint,alpha");
+    for (float d = from; d < to; d += 4f)
+    {
+        float w = geo.WidthAt(geo.Wrap(d)) * 0.5f;
+        geo.FrameAt(geo.Wrap(d), out var l, out _, out _, -w); geo.FrameAt(geo.Wrap(d), out var r, out _, out _, w);
+        Console.WriteLine(string.Format(inv, "edge,0,{0:F1},{1:F1},,", l.X, l.Z)); Console.WriteLine(string.Format(inv, "edge2,0,{0:F1},{1:F1},,", r.X, r.Z));
+    }
+    geo.FrameAt(geo.Wrap(at), out var car, out _, out _, gd.line.OffsetAt(at));
+    Console.WriteLine(string.Format(inv, "car,0,{0:F1},{1:F1},,", car.X, car.Z));
+    var list = new System.Collections.Generic.List<Apex.AI.RacingLineGuide.Dash>();
+    foreach (var ks in args[2].Split(','))
+    {
+        float kmh = float.Parse(ks, inv);
+        gd.Evaluate(at, kmh / 3.6f, 1f, Apex.AI.RacingLineGuide.Mode.WholeLap, true, list);
+        foreach (var x in list)
+        {
+            gd.DashFrame(x.index, out var c, out _, out _);
+            Console.WriteLine(string.Format(inv, "dash,{0},{1:F1},{2:F1},{3},{4:F2}", kmh, c.X, c.Z, x.hint, x.alpha));
+        }
+    }
+}
 else if (mode == "kblap")
 {
     // Keyboard lap on the collider surface with a trace between two distances: kblap <profile 0-2> <from> <to> [keys 0-3]

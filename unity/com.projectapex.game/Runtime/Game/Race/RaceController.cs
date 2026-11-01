@@ -110,9 +110,9 @@ namespace Apex.Game
             var g = circuit.Geometry;
             // Planning speeds from the car's real grip (CarPerformance): AI, racing-line guide and car agree.
             var perf = CarPerformance.For(new VehicleSetup());
-            Line = new RacingLine(g, perf.mu, perf.downforcePerMass);
+            Line = perf.Line(g);
             // The player's guide plans with the player's car (the previous handling has less grip).
-            PlayerLine = legacyPlayerHandling ? new RacingLine(g, CarPerformance.For(VehicleSetup.Legacy()).mu, perf.downforcePerMass) : Line;
+            PlayerLine = legacyPlayerHandling ? CarPerformance.For(VehicleSetup.Legacy()).Line(g) : Line;
             Weather = new WeatherModel(config.weather, config.dynamicWeather, config.seed);
             Weather.StateChanged += s => Message?.Invoke("Wetter: " + WeatherModel.Name(s), ApexStyle.Caution, 1);
             Director = new RaceDirector(config.MakeRules(type), g.Length, circuit.SectorStarts, config.seed);

@@ -31,11 +31,16 @@ namespace Apex.AI
         public float DownforcePerMass { get; }
 
         /// <param name="edgeMargin">Distance kept from the track edge (car half width + safety).</param>
-        public RacingLine(TrackGeometry geometry, float mu, float downforcePerMass, float edgeMargin = 1.6f, int iterations = 1800)
+        /// <summary>Longitudinal share of the friction budget used for braking (planner). 0.85 is the conservative
+        /// layout reference; CarPerformance.brakeShare plans with the car's measured braking.</summary>
+        public readonly float BrakeShare;
+
+        public RacingLine(TrackGeometry geometry, float mu, float downforcePerMass, float edgeMargin = 1.6f, int iterations = 1800, float brakeShare = 0.85f)
         {
             this.geometry = geometry;
             Mu = mu;
             DownforcePerMass = downforcePerMass;
+            BrakeShare = brakeShare;
             int n = geometry.Count;
             offsets = new float[n];
             curvature = new float[n];
@@ -106,7 +111,6 @@ namespace Apex.AI
         void BuildSpeedProfile()
         {
             int n = geometry.Count;
-            const float g = 9.81f;
             float ds = geometry.Spacing;
             GripProfile(Mu, gripSpeed);
             for (int i = 0; i < n; i++) speed[i] = MathF.Min(MaxSpeed, gripSpeed[i]);
@@ -114,11 +118,22 @@ namespace Apex.AI
                 for (int i = 0; i < n; i++)
                 {
                     float v = speed[i];
-                    float accel = MathF.Max(0.5f, ApexMath.Clamp(14f - v * 0.09f, 3f, 14f) - g * geometry.GradeAt(geometry.Distances[i]));
+                    float accel = AccelAt(v, geometry.Distances[i]);
                     int j = (i + 1) % n;
                     speed[j] = MathF.Min(speed[j], MathF.Sqrt(v * v + 2f * accel * ds));
                 }
         }
+
+        /// <summary>Planner acceleration (m/s²) at a speed and lap distance: traction and power limit, minus the grade.</summary>
+        public float AccelAt(float v, float distance) =>
+            MathF.Max(0.5f, ApexMath.Clamp(14f - v * 0.09f, 3f, 14f) - 9.81f * geometry.GradeAt(distance));
+
+        /// <summary>Planner braking deceleration (m/s²) available at a speed and lap distance in a straight line.</summary>
+        public float BrakeDecelAt(float v, float distance) =>
+            MathF.Max(1f, Mu * (9.81f + DownforcePerMass * v * v) * BrakeShare + 9.81f * geometry.GradeAt(distance));
+
+        /// <summary>Line curvature (1/m, + right) at a lap distance.</summary>
+        public float CurvatureAt(float distance) => curvature[geometry.IndexAt(distance)];
 
         /// <summary>Cornering and braking limit (m/s) per sample for a friction coefficient mu.</summary>
         void GripProfile(float mu, float[] profile)
@@ -172,7 +187,7 @@ namespace Apex.AI
                     float aTotal = mu * (g + DownforcePerMass * v * v);
                     float aLat = v * v * MathF.Abs(curvature[i]);
                     float aLong = MathF.Sqrt(MathF.Max(0f, aTotal * aTotal - aLat * aLat));
-                    float decel = MathF.Max(1f, aLong * 0.85f + g * geometry.GradeAt(geometry.Distances[i]));
+                    float decel = MathF.Max(1f, aLong * BrakeShare + g * geometry.GradeAt(geometry.Distances[i]));
                     profile[i] = MathF.Min(profile[i], MathF.Sqrt(v * v + 2f * decel * ds));
                 }
         }

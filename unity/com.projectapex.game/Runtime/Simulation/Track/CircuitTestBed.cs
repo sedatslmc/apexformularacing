@@ -28,7 +28,7 @@ namespace Apex.Tracks
         public void PlanFor(VehicleSetup setup)
         {
             var perf = CarPerformance.For(setup);
-            line = new RacingLine(g, perf.mu, perf.downforcePerMass);
+            line = perf.Line(g);
         }
         public readonly TrackInfrastructurePlan plan;
         public readonly RoadSurface surface;
@@ -44,7 +44,7 @@ namespace Apex.Tracks
             var layoutPerf = CarPerformance.LayoutReference(setup);
             var layoutLine = new RacingLine(g, layoutPerf.mu, layoutPerf.downforcePerMass);
             var perf = CarPerformance.For(setup);
-            line = new RacingLine(g, perf.mu, perf.downforcePerMass);
+            line = perf.Line(g);
             plan = new TrackInfrastructurePlan(g, g.CornersFor(def), layoutLine.offsets, layoutLine.speed);
             surface = new RoadSurface(g, def, plan.kerbs.left, plan.kerbs.right, plan.kerbs.height);
             if (withTerrain)

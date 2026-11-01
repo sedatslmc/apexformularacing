@@ -132,3 +132,6 @@ Offen:
   - Ist der Sog auf der Bosporus-Geraden spürbar, aber nicht übermächtig?
   - Untersteuert das Auto hinter einem anderen in schnellen Kurven (T3, T4, T12, T13) merklich?
   - Die Stellschrauben stehen in `Slipstream` (MaxTow, TowLength, MaxDirtyAir, DirtyAirLength).
+
+## Handling-Überarbeitung November 2026
+Lenkbegrenzer (Vorderreifen am Haftungsgipfel statt fester Einschlag), Tastaturprofile, Reifen μ 1,95, Stabilisatoren 30/70, Aero-Balance 0,41, gemeinsame Planungsbasis `CarPerformance`: siehe `docs/HANDLING_KEYBOARD.md`. Dynamische Ideallinie: `docs/RACING_LINE_GUIDE.md`.

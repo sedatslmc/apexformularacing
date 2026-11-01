@@ -219,7 +219,7 @@ namespace Apex.Tests
             var g = TrackGeometry.FromDefinition(def);
             var setup = new VehicleSetup();
             var perf = CarPerformance.For(setup);   // as RaceController: the AI plans with the car's real grip
-            var line = new RacingLine(g, perf.mu, perf.downforcePerMass);
+            var line = perf.Line(g);
             var rules = new RaceRules { type = SessionType.Race, laps = 3 };
             var sectors = Array.ConvertAll(def.sectorFractions, f => f * g.Length);
             var dir = new RaceDirector(rules, g.Length, sectors, 3);
