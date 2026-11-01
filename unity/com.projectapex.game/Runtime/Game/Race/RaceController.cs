@@ -65,6 +65,8 @@ namespace Apex.Game
         public RaceDirector Director { get; private set; }
         public WeatherModel Weather { get; private set; }
         public RacingLine Line { get; private set; }
+        /// <summary>Racing line planned with the player's car (the dynamic racing-line guide).</summary>
+        public RacingLine PlayerLine { get; private set; }
         public RaceControl Control { get; private set; }
         /// <summary>Latest car reports given to race control (race sessions only).</summary>
         public IReadOnlyList<CarReport> Reports => reports;
@@ -106,8 +108,11 @@ namespace Apex.Game
             Config = config;
             Type = type;
             var g = circuit.Geometry;
-            var setup = new VehicleSetup();
-            Line = new RacingLine(g, 1.45f, setup.downforceArea * setup.airDensity * 0.5f / setup.mass);
+            // Planning speeds from the car's real grip (CarPerformance): AI, racing-line guide and car agree.
+            var perf = CarPerformance.For(new VehicleSetup());
+            Line = new RacingLine(g, perf.mu, perf.downforcePerMass);
+            // The player's guide plans with the player's car (the previous handling has less grip).
+            PlayerLine = legacyPlayerHandling ? new RacingLine(g, CarPerformance.For(VehicleSetup.Legacy()).mu, perf.downforcePerMass) : Line;
             Weather = new WeatherModel(config.weather, config.dynamicWeather, config.seed);
             Weather.StateChanged += s => Message?.Invoke("Wetter: " + WeatherModel.Name(s), ApexStyle.Caution, 1);
             Director = new RaceDirector(config.MakeRules(type), g.Length, circuit.SectorStarts, config.seed);
@@ -554,7 +559,8 @@ namespace Apex.Game
             {
                 sim.throttle = Input.Throttle;
                 sim.brake = Input.Brake;
-                sim.steer = Input.Steer;
+                sim.steer = Input.SteerForPhysics(sim.ForwardSpeed, dt);
+                sim.steerSlipTarget = Input.SteerSlipTarget;
             }
         }
 
