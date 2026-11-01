@@ -747,6 +747,47 @@ if (Array.IndexOf(args, "--environment") >= 0)
     { var lg = new LandmarkGeometry(1); lg.ImperialMosque(15.5f, 34f, 4, 60f, LandmarkGeometry.HagiaPlaster); Put(lg, LP("hagia_sophia"), 122f + north); }
     var sbe = new StringBuilder();
     int vb = 1, total = 0;
+    // --crop x,z,r: only triangles within r of (x, z) (smaller files for close-up renders).
+    int ci = Array.IndexOf(args, "--crop");
+    if (ci >= 0 && ci + 1 < args.Length)
+    {
+        var cr = args[ci + 1].Split(',');
+        float kx = float.Parse(cr[0], CultureInfo.InvariantCulture) , kz = float.Parse(cr[1], CultureInfo.InvariantCulture), rr = float.Parse(cr[2], CultureInfo.InvariantCulture);
+        foreach (var kv in parts)
+        {
+            var mbx = kv.Value;
+            var map = new Dictionary<int, int>();
+            var vs = new List<string>(); var ft = new List<string>();
+            var ts = mbx.Triangles;
+            for (int i = 0; i < ts.Count; i += 3)
+            {
+                var v0 = mbx.Vertices[ts[i]];
+                if ((v0.x - kx) * (v0.x - kx) + (v0.z - kz) * (v0.z - kz) > rr * rr) continue;
+                var f = new StringBuilder("f");
+                for (int k = 0; k < 3; k++)
+                {
+                    int o = ts[i + k];
+                    if (!map.TryGetValue(o, out int n))
+                    {
+                        n = map.Count; map[o] = n;
+                        var v = mbx.Vertices[o]; var uv = mbx.UVs[o];
+                        vs.Add(string.Format(CultureInfo.InvariantCulture, "v {0:F2} {1:F2} {2:F2}\nvt {3:F4} {4:F4}", v.x, v.y, v.z, uv.x, uv.y));
+                    }
+                    f.Append(' ').Append(n + vb).Append('/').Append(n + vb);
+                }
+                ft.Add(f.ToString());
+            }
+            if (ft.Count == 0) continue;
+            sbe.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+            foreach (var l in vs) sbe.AppendLine(l);
+            foreach (var l in ft) sbe.AppendLine(l);
+            vb += map.Count; total += ft.Count;
+        }
+        Directory.CreateDirectory(outDir);
+        File.WriteAllText(Path.Combine(outDir, "environment.obj"), sbe.ToString());
+        Console.WriteLine($"environment.obj (crop {kx},{kz} r {rr}): {total} triangles");
+        return;
+    }
     foreach (var kv in parts)
     {
         var mbx = kv.Value;

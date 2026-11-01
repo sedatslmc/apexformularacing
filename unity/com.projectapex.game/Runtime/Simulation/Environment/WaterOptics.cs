@@ -141,11 +141,13 @@ namespace Apex.Environment
         }
 
         /// <param name="rasterizeLand">fills mask[z * res + x] with true for land cell centres</param>
-        public static CoastDistanceField Build(float minX, float minZ, float size, int res, Action<bool[], int, float, float, float> rasterizeLand)
+        /// <param name="inland">false: distance of water cells to the nearest land; true: of land cells to the nearest water</param>
+        public static CoastDistanceField Build(float minX, float minZ, float size, int res, Action<bool[], int, float, float, float> rasterizeLand, bool inland = false)
         {
             var f = new CoastDistanceField(res, minX, minZ, size / res);
             var land = new bool[res * res];
             rasterizeLand(land, res, minX, minZ, f.Cell);
+            if (inland) for (int i = 0; i < land.Length; i++) land[i] = !land[i];
             const float Inf = 1e20f;
             var g = new float[res * res];
             for (int i = 0; i < g.Length; i++) g[i] = land[i] ? 0f : Inf;

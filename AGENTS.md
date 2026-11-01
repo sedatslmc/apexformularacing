@@ -29,6 +29,7 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
   (`validate` erzeugt den Bericht für `docs/HANDLING_VALIDATION.md`).
 - Fahrbahn/Kollision ohne Unity (`docs/BOSPHORUS_ROAD_FIX.md`): `cd build/Apex.Tuning && dotnet run -c Release -- surface|validate-road|limits|trace|clearance-buildings <track_id> …`
   (`clearance-buildings` listet die OSM-Gebäude, die die Strecke verdrängt: vor jeder Linienänderung prüfen).
+  Ufer: `coast-audit` (Uferhöhen) und `landmark-ground` (Gelände unter Wahrzeichen); Ufermodell `CoastalProfile`, Stand `docs/ISTANBUL_OVERHAUL.md`.
   Fahrfläche nur über `RoadSurface` (Apex.Simulation) erzeugen: Unity-Mesh, MeshCollider, Prüfstand (`SurfaceRig`) und
   Validierung nutzen dieselben Dreiecke. Fahrzeug-Collider nur über `BodyCollider`.
 - Fahrzeuggeometrie ohne Unity: `cd build/Apex.ModelPreview && dotnet run -c Release -- <out_dir>`, dann

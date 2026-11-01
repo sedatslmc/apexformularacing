@@ -272,6 +272,58 @@ namespace Apex.Tests
             foreach (var t in city.trees) Assert.That(field.IsWater(t.x, t.z), Is.False, $"tree on the water at {t.x:F0},{t.z:F0}");
         }
 
+        [Test]
+        public void TheBosphorusShoreIsAQuayNotACliff()
+        {
+            // docs/BOSPHORUS_COAST_HEIGHTS.md: the surface model put 10-56 m of ground at the water's edge (84 % of the
+            // shore above 4 m), and the Dolmabahçe wings stood 27-35 m above the Bosphorus on a cliff.
+            var (_, field, _, data, city) = World();
+            const float c = 6f;
+            int coast = 0, high = 0;
+            float worst = 0f;
+            for (float z = field.MinZ + c; z < field.MaxZ - c; z += c)
+                for (float x = field.MinX + c; x < field.MaxX - c; x += c)
+                {
+                    if (field.IsWater(x, z)) continue;
+                    if (!(field.IsWater(x + c, z) || field.IsWater(x - c, z) || field.IsWater(x, z + c) || field.IsWater(x, z - c))) continue;
+                    coast++;
+                    float h = field.Height(x, z);
+                    worst = MathF.Max(worst, h);
+                    if (h > CoastalProfile.QuayLevel + 2.5f) high++;
+                }
+            TestContext.WriteLine($"{coast} shore cells, highest {worst:F1} m, {high} above quay + 2.5 m");
+            Assert.That(coast, Is.GreaterThan(500));
+            Assert.That(high, Is.LessThanOrEqualTo(coast / 100), "the shore is quay level, not a cliff");
+            // The waterfront palaces and the mosque stand on the coastal flat: low and nearly level.
+            foreach (var b in data.buildings)
+            {
+                if (b.name == null || !(b.name.StartsWith("Dolmabahçe Sarayı Selamlık") || b.name.StartsWith("Dolmabahçe Sarayı Harem") || b.name.StartsWith("Dolmabahçe Sarayı Muayede")
+                    || b.name == "Çırağan Sarayı" || b.name == "Büyük Mecidiye Camii" || b.name == "Esma Sultan Yalısı")) continue;
+                float lo = float.MaxValue, hi = float.MinValue;
+                foreach (var p in b.outline) { float h = field.Height(p.X, p.Y); lo = MathF.Min(lo, h); hi = MathF.Max(hi, h); }
+                TestContext.WriteLine($"{b.name}: ground {lo:F1}..{hi:F1} m");
+                Assert.That(lo, Is.InRange(1f, 4f), b.name + " at quay level");
+                Assert.That(hi, Is.LessThan(8f), b.name + " not on a hillside");
+            }
+            // Quays now match the ground behind them: no exposed earth above the wall.
+            var wf = new Waterfront(field, World().clear, (x, z) => city.InsideBuilding(x, z, 0f));
+            int steps = 0;
+            foreach (var sg in wf.segments)
+            {
+                var m = (sg.a + sg.b) * 0.5f;
+                var behind = m + sg.inland * 12f;
+                if (field.Height(behind.X, behind.Y) - sg.top > 3f) steps++;
+            }
+            TestContext.WriteLine($"{steps} of {wf.segments.Count} quay pieces with more than 3 m of ground above the wall 12 m behind");
+            Assert.That(steps, Is.LessThanOrEqualTo(wf.segments.Count / 50));
+            // The profile itself.
+            Assert.That(CoastalProfile.Bound(0f), Is.EqualTo(CoastalProfile.QuayLevel));
+            Assert.That(CoastalProfile.Ramp(4f, 80f, 10f), Is.EqualTo(CoastalProfile.QuayLevel), "level promenade");
+            Assert.That(CoastalProfile.Ramp(200f, 30f, 10f), Is.EqualTo(9f).Within(0.01f), "meets the street band");
+            Assert.That(CoastalProfile.Limit(30f, 50f, 100f, 8f, 140f), Is.LessThan(8f), "seaward of the coastal road: coastal flat");
+            Assert.That(CoastalProfile.Limit(30f, 200f, 100f, 8f, 50f), Is.EqualTo(30f), "inland of the road: the real hill");
+        }
+
         static Vector2 Centre(List<Vector2> o)
         {
             var c = Vector2.Zero;
