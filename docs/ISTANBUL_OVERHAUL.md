@@ -8,7 +8,8 @@
   - **Im Unity-Editor nicht geprüft.** Die Bilder sind three.js-Vorschauen der Spielgeometrie, keine Unity-Aufnahmen.
 - **Phase 3, Referenzzone Dolmabahçe:** implementiert und getestet (Abschnitt 2b). Im Unity-Editor nicht geprüft.
 - **Phase 4, erster Teil (Infrastruktur, Ufertypen, Gebäudedetails):** implementiert und getestet (Abschnitt 2c). Im Unity-Editor nicht geprüft.
-- **Phasen 4 (Rest) bis 6:** geplant (Abschnitt 4).
+- **Phase 4, zweiter Teil (Gebäudefamilien):** implementiert und getestet (Abschnitt 2d). Im Unity-Editor nicht geprüft.
+- **Phasen 5 und 6:** geplant (Abschnitt 4).
 
 **Git-Checkpoint:** `main` bei Commit `8a3377a` (Merge von PR #25), dem Stand vor dieser Überarbeitung. Das lokale Tag `checkpoint-pre-istanbul-overhaul` ließ sich über den Proxy nicht hochladen.
 
@@ -168,6 +169,31 @@ Gelände. `build_track_a.py` korrigiert es jetzt vor dem Höhenentwurf (`coastal
 - **Rettungsfahrzeuge, Fotografenzonen, Service-Zugänge:** noch nicht gebaut. Die Notfalltore im Zaun gibt es (alle 160 m).
 - **Fangzaun:** Die Regel (Bremszonen, über 234 km/h beidseitig, Start-Ziel) bleibt aus Sicherheitsgründen. Er ist bereits fein und transparent. Ob er im Cockpit noch zu dominant wirkt, muss die Unity-Prüfung zeigen.
 - **Distanztafeln:** Es sind TextMesh-Schilder mit eingebauter Schrift, nicht die Barlow-Schrift. In der Vorschau fehlen sie, weil das OBJ keinen Text enthält.
+
+## 2d. Phase 4, zweiter Teil: Gebäudefamilien
+Jedes OSM-Gebäude bekommt eine Familie (`BuildingFamilies.Classify`) aus Nutzung, Höhe, Grundfläche, Denkmal-Tag und Viertel. Die Familie bestimmt Farbe, Dach und die Gliederung der Straßenfronten:
+
+| Familie | Anteil | Farbe | Dach | Straßenfront |
+|---|---|---|---|---|
+| Osmanisches Holzhaus (bis 11 m, klein, in Ortaköy häufiger) | 6 % | gestrichenes Holz: Ochsenblut, dunkles Ocker, Graublau | Walmdach (vier Ecken) | Erker (cumba), Holzbänder zwischen den Geschossen, Eckbretter |
+| Steinbau 19./frühes 20. Jh. (Denkmal oder jeder fünfte mittelhohe) | 18 % | Creme- und Hellgelb-Putz | Walmdach zur Hälfte | Bossensockel bis zum 1. OG, Gesimsband je Geschoss, einzelne Eisenbalkone |
+| Wohnblock der 1960er–80er (apartman) | 57 % | Istanbuler Putzfarben | Flachdach mit Brüstung, Tanks, Treppenhaus | durchgehende Balkonplatten auf jedem Geschoss, Brüstung aus Metall oder Putz |
+| Neubau (nach 2000) | 16 % | kühles Grau | Flachdach | schlanke Platten mit Glasbrüstung, senkrechte Lamellen |
+| Büro, Hotel, Geschäftshaus | 3 % | Putz | Flachdach | Ladenzeilen |
+
+Dazu kommen für alle Familien weiterhin die Fassadendetails aus Teil 1: Fallrohre, Satellitenschüsseln, Dachterrassen, Klimageräte, Markisen, Ladenschilder und Flaggen. Die Farbpalette wächst von 6 auf 10 Fassadenfarben (`EnvironmentMaterials.FacadeColours`).
+
+**Test `TheCityIsBuiltFromSeveralBuildingFamilies`:**
+- Alle Familien sind vorhanden, keine dominiert über 80 %, die Nachkriegsblöcke stellen mehr als ein Drittel.
+- Holzhäuser sind niedrig und holzfarben, Blöcke haben Flachdächer, Walmdächer gibt es nur auf vier Ecken.
+
+![Vorher/nachher](img/phase4b_families_before_after.jpg)
+![Nahansicht](img/phase4b_families_close.jpg)
+
+**Ehrlich:**
+- **Aus der Luft:** ist der Unterschied mäßig. Die Gliederung entsteht nur an Straßenfronten. Rückseiten und Höfe bleiben glatte Wände mit der gemeinsamen Fenstertextur.
+- **Fehlt noch:** Fensterrahmen als Geometrie, Alterung und Schmutzspuren sowie eine eigene Holzverschalungs-Textur. Das Holzhaus nutzt das Fenstermuster der Putzfassade in Holzfarben.
+- **Anteile:** aus einer Regel, nicht aus einem Gebäudekataster. OSM kennt das Baujahr für diesen Ausschnitt nicht.
 
 ## 3. Werkzeuge
 ```sh

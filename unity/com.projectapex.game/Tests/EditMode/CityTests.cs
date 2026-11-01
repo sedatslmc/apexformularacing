@@ -427,6 +427,41 @@ namespace Apex.Tests
             }
         }
 
+        [Test]
+        public void TheCityIsBuiltFromSeveralBuildingFamilies()
+        {
+            var (_, _, _, _, city) = World();
+            var count = new Dictionary<BuildingFamilies.Family, int>();
+            int generic = 0;
+            foreach (var b in city.buildings)
+            {
+                if (b.classical != OsmCity.NotClassical) continue;
+                generic++;
+                count.TryGetValue(b.family, out int c);
+                count[b.family] = c + 1;
+                if (b.family == BuildingFamilies.Family.OttomanTimber)
+                {
+                    Assert.That(b.height, Is.LessThanOrEqualTo(11f), "timber houses are low");
+                    Assert.That(b.style, Is.InRange(BuildingFamilies.TimberStyle0, BuildingFamilies.TimberStyle0 + BuildingFamilies.TimberStyles - 1), "painted timber colours");
+                }
+                if (b.family == BuildingFamilies.Family.Apartment1970s) Assert.That(b.roof, Is.EqualTo(0), "post-war blocks have flat roofs");
+                if (b.roof == 1) Assert.That(b.outline.Count, Is.EqualTo(4));
+                Assert.That(b.style, Is.InRange(0, BuildingFamilies.FacadeStyles - 1));
+            }
+            foreach (BuildingFamilies.Family f in System.Enum.GetValues(typeof(BuildingFamilies.Family)))
+            {
+                count.TryGetValue(f, out int c);
+                TestContext.WriteLine($"{f}: {c} ({100f * c / generic:F0} %)");
+                Assert.That(c, Is.GreaterThan(generic / 100), $"{f} present");
+            }
+            // The post-war apartment blocks make up most of the district; no family dominates completely.
+            Assert.That(count[BuildingFamilies.Family.Apartment1970s], Is.GreaterThan(generic / 3));
+            foreach (var kv in count) Assert.That(kv.Value, Is.LessThan(generic * 0.8f), $"{kv.Key} does not dominate");
+            Assert.That(BuildingFamilies.Classify("office", 30f, 900f, false, false, 1), Is.Not.EqualTo(BuildingFamilies.Family.OttomanTimber));
+            Assert.That(BuildingFamilies.Classify("house", 8f, 120f, false, false, 7), Is.EqualTo(BuildingFamilies.Family.OttomanTimber));
+            Assert.That(BuildingFamilies.Classify("yes", 18f, 400f, true, false, 3), Is.EqualTo(BuildingFamilies.Family.Masonry19th));
+        }
+
         static Vector2 Centre(List<Vector2> o)
         {
             var c = Vector2.Zero;

@@ -219,9 +219,15 @@ namespace Apex.Game
             float fh = CityLayout.FloorHeight, tileW = BayWidth * TileBays, roofY = b.ground + 0.6f + b.height;
             if (Mathf.FloorToInt((b.height - 0.6f) / fh) < 2) return;
             int seed = Hash((int)(o[0].X * 7.1f), (int)(o[0].Y * 3.3f));
-            int kind = seed % 10;                     // 0-2 balconies, 4-5 cumba (older low-rise), else plain
-            bool balconies = kind < 3 && !b.historic;
-            bool cumba = (kind == 4 || kind == 5 || b.historic) && b.height <= 16f;
+            int kind = seed % 10;
+            // The building family (BuildingFamilies) decides the relief: timber houses have a bay window and timber
+            // bands, old masonry string courses and some iron balconies, the post-war blocks continuous balconies on
+            // every floor, contemporary buildings glass balustrades and fins, office and shop buildings neither.
+            var fam = b.family;
+            bool ribbons = fam == BuildingFamilies.Family.Apartment1970s || fam == BuildingFamilies.Family.Contemporary;
+            bool glassRail = fam == BuildingFamilies.Family.Contemporary;
+            bool balconies = fam == BuildingFamilies.Family.Masonry19th ? kind < 3 && !b.historic : false;
+            bool cumba = b.height <= 16f && (fam == BuildingFamilies.Family.OttomanTimber || (fam == BuildingFamilies.Family.Masonry19th && (kind == 4 || kind == 5 || b.historic)));
             bool metalRail = (seed >> 5) % 2 == 0;
             int awning = (seed >> 7) % Awnings;
             string solid = FacadeSolid(b.style);
@@ -321,6 +327,7 @@ namespace Apex.Game
                             B(solid).Box(P(t, fb + 0.74f, 0.09f), new Vector3(1.7f, 0.08f, 0.18f), q);
                     }
                 }
+                FamilyRelief(B, b, fam, P, dir, outward, q, len, y0, floors, fh, ribbons, glassRail, level, solid);
                 // Turkish flags hung vertically from a balcony railing or under a window (crescent and star at the top).
                 if (StreetFronts.FlagFront(seed, i, b.ortakoy, b.raceFront != null && b.raceFront[i]))
                 {
@@ -330,7 +337,7 @@ namespace Apex.Game
                         var (bay, floor) = StreetFronts.FlagSpot(seed, i, f2, bays.Count, floors);
                         if (floor >= floors || floor % TileBays == 0 || (cumba && bay == mid && bays.Count >= 2)) continue;
                         float t = bays[bay], fb = y0 + floor * fh;
-                        bool onBalcony = balconies && Hash(Hash(seed + i * 131, bay), floor) % 10 < 5;
+                        bool onBalcony = ribbons || (balconies && Hash(Hash(seed + i * 131, bay), floor) % 10 < 5);
                         // A window flag on the first floor would hang in front of a shop sign.
                         if (!onBalcony && floor == 1 && StreetFronts.IsShopBay(seed, i, bay, b.shop, b.ortakoy)) continue;
                         HangingFlag(B, P, dir, outward, t, onBalcony ? fb + 1.08f : fb + 0.7f, onBalcony ? 1.12f : 0.2f, !onBalcony,
@@ -360,6 +367,51 @@ namespace Apex.Game
                 }
             }
         }
+
+        /// <summary>
+        /// Family relief along a whole street front: continuous balcony slabs with railings (post-war blocks: concrete
+        /// slab and painted metal or solid parapet; contemporary: glass balustrade, slim slabs, vertical fins), string
+        /// courses and a stone plinth on 19th-century masonry, weatherboard bands and wide eaves on timber houses.
+        /// </summary>
+        static void FamilyRelief(Parts B, OsmCity.Building b, BuildingFamilies.Family fam, System.Func<float, float, float, Vector3> P,
+            Vector3 dir, Vector3 outward, Quaternion q, float len, float y0, int floors, float fh, bool ribbons, bool glassRail, int level, string solid)
+        {
+            float x0 = 0.6f, x1 = len - 0.6f, w = x1 - x0, mid = (x0 + x1) * 0.5f;
+            if (w < 3f) return;
+            if (ribbons)
+            {
+                float depth = glassRail ? 1.4f : 1.2f;
+                for (int f = 1; f < floors; f++)
+                {
+                    float fb = y0 + f * fh;
+                    B(Concrete).Box(P(mid, fb + 0.02f, depth * 0.5f), new Vector3(w, glassRail ? 0.12f : 0.18f, depth), q);
+                    if (glassRail) B(Glass).Box(P(mid, fb + 0.6f, depth - 0.02f), new Vector3(w, 1.0f, 0.03f), q);
+                    else B((Hash(f, (int)(len * 7f)) % 3 == 0) ? solid : LandmarkGeometry.Lead).Box(P(mid, fb + 0.55f, depth - 0.03f), new Vector3(w, 0.95f, 0.05f), q);
+                }
+                if (glassRail && level >= 2)
+                    for (float t = x0; t <= x1 + 0.01f; t += 3.5f)
+                        B(TrackKitDark).Box(P(t, y0 + floors * fh * 0.5f + 0.3f, depth * 0.5f), new Vector3(0.18f, floors * fh - 0.6f, depth), q);
+                return;
+            }
+            if (fam == BuildingFamilies.Family.Masonry19th)
+            {
+                // Rusticated plinth to the first floor and a string course at every floor line.
+                B(LandmarkGeometry.Stone).Box(P(mid, y0 + fh * 0.5f, 0.06f), new Vector3(len, fh, 0.12f), q);
+                for (int f = 1; f < floors; f++)
+                    B(LandmarkGeometry.Stone).Box(P(mid, y0 + f * fh, 0.1f), new Vector3(len, 0.16f, 0.2f), q);
+                return;
+            }
+            if (fam == BuildingFamilies.Family.OttomanTimber)
+            {
+                // Weatherboard bands between the storeys and corner boards.
+                for (int f = 1; f <= floors; f++)
+                    B(Wood).Box(P(mid, y0 + f * fh - 0.1f, 0.08f), new Vector3(len, 0.22f, 0.12f), q);
+                foreach (float t in new[] { 0.08f, len - 0.08f })
+                    B(Wood).Box(P(t, y0 + floors * fh * 0.5f, 0.07f), new Vector3(0.16f, floors * fh, 0.14f), q);
+            }
+        }
+
+        const string TrackKitDark = "KitDark";
 
         static int FirstFront(OsmCity.Building b)
         {

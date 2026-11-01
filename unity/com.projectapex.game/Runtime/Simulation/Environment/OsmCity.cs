@@ -216,6 +216,8 @@ namespace Apex.Environment
             public bool worship;
             /// <summary>Within <see cref="StreetFronts.OrtakoyRadius"/> of the Ortaköy Mosque (shop mix, more flags).</summary>
             public bool ortakoy;
+            /// <summary>Building family (BuildingFamilies.Family).</summary>
+            public BuildingFamilies.Family family;
             public string name;
             /// <summary>Built as an in-house landmark model, not as a generic block (see <see cref="ClassicalKind"/>).</summary>
             public int classical;
@@ -458,20 +460,23 @@ namespace Apex.Environment
             }
             int hash = Hash(b.id);
             bool historic = b.historic.Length > 0 || b.type == "mosque" || b.type == "church" || b.type == "palace" || b.amenity == "place_of_worship";
-            // Small, simple older houses get tiled hip roofs; apartment blocks the usual flat roofs.
-            int roof = o.Count <= 6 && area < 450f && b.height <= 14f && hash % 3 != 0 ? 1 : 0;
+            bool ortakoy = ortakoyCentre.HasValue && Vector2.Distance(c, ortakoyCentre.Value) < StreetFronts.OrtakoyRadius;
+            // Building family (BuildingFamilies): colours, roof and street-front relief follow it.
+            var family = BuildingFamilies.Classify(b.type, b.height, area, historic, ortakoy, hash);
+            int roof = BuildingFamilies.HipRoof(family, o.Count, hash) ? 1 : 0;
             buildings.Add(new Building
             {
                 outline = o,
                 ground = ground - 0.6f,
                 height = classical != NotClassical ? ClassicalHeight(b, classical) : b.height,
                 classical = classical,
-                style = historic ? CityLayout.Styles - 1 : hash % CityLayout.Styles,
+                style = BuildingFamilies.Style(family, historic, hash),
+                family = family,
                 roof = roof,
                 historic = historic,
                 shop = IsShopAmenity(b.amenity) || ((b.type == "commercial" || b.type == "retail") && b.amenity.Length == 0),
                 worship = b.amenity == "place_of_worship" || b.type == "mosque" || b.type == "church" || b.type == "synagogue",
-                ortakoy = ortakoyCentre.HasValue && Vector2.Distance(c, ortakoyCentre.Value) < StreetFronts.OrtakoyRadius,
+                ortakoy = ortakoy,
                 name = b.name,
             });
         }

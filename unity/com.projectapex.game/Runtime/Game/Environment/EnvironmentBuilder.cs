@@ -1221,11 +1221,16 @@ namespace Apex.Game
     /// </summary>
     public static class EnvironmentMaterials
     {
-        /// <summary>Istanbul plaster colours: cream, ochre, salmon, light grey, pale yellow, dusty pink.</summary>
+        /// <summary>
+        /// Facade colours (BuildingFamilies slots): Istanbul plaster – cream, ochre, salmon, light grey, pale yellow,
+        /// dusty pink –, painted timber – oxblood, dark ochre, grey-blue – and the cool grey of contemporary buildings.
+        /// </summary>
         static readonly Color[] FacadeColours =
         {
             new Color(0.9f, 0.85f, 0.73f), new Color(0.85f, 0.68f, 0.46f), new Color(0.86f, 0.62f, 0.52f),
             new Color(0.78f, 0.78f, 0.76f), new Color(0.92f, 0.86f, 0.62f), new Color(0.85f, 0.71f, 0.69f),
+            new Color(0.56f, 0.24f, 0.19f), new Color(0.76f, 0.56f, 0.26f), new Color(0.5f, 0.57f, 0.62f),
+            new Color(0.62f, 0.64f, 0.66f),
         };
 
         static readonly Dictionary<Color, Material> solids = new Dictionary<Color, Material>();
@@ -1417,7 +1422,7 @@ namespace Apex.Game
             if (facadeAlbedo == null) BuildFacadeTextures();
             if (waterNormal == null) BuildWaterNormal();
             if (flagTex == null) BuildFlag();
-            for (int i = 0; i < CityLayout.Styles; i++)
+            for (int i = 0; i < BuildingFamilies.FacadeStyles; i++)
             {
                 var m = new Material(ApexMaterials.LitShader()) { name = "Env_Facade" + i, enableInstancing = true };
                 SetTexture(m, "_BaseMap", "_MainTex", facadeAlbedo);
@@ -1431,7 +1436,7 @@ namespace Apex.Game
             }
             ApexMaterials.Register("EnvWater", WaterMaterial());
             // Street fronts: plaster in the facade colours (bay windows, parapets), canvas awnings, balcony flags.
-            for (int i = 0; i < CityLayout.Styles; i++) ApexMaterials.Register(EnvironmentGeometry.FacadeSolid(i), Solid(FacadeColours[i % FacadeColours.Length] * 0.97f));
+            for (int i = 0; i < BuildingFamilies.FacadeStyles; i++) ApexMaterials.Register(EnvironmentGeometry.FacadeSolid(i), Solid(FacadeColours[i % FacadeColours.Length] * 0.97f));
             var awnings = new[] { new Color(0.55f, 0.1f, 0.09f), new Color(0.13f, 0.32f, 0.22f), new Color(0.12f, 0.17f, 0.3f), new Color(0.85f, 0.8f, 0.66f) };
             for (int i = 0; i < EnvironmentGeometry.Awnings; i++)
             {
