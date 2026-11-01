@@ -44,6 +44,7 @@ namespace Apex.Game
             BuildRoadDetails(ci, infra);
             BuildPostsAndPanels(ci, infra);
             BuildSigns(ci, infra);
+            BuildTvTowers(ci, infra);
         }
 
         /// <summary>Emergency-exit sign on every third fence gate, readable from the track.</summary>
@@ -240,6 +241,38 @@ namespace Apex.Game
                 Board(ci, signs, font, pit.entry - 150f, pit.side, "PİT GİRİŞİ ▸", new Color(0.78f, 0.06f, 0.18f), Color.white, 2.4f);
                 Board(ci, signs, font, pit.entry + 10f, pit.side, $"PİT {pit.speedLimitKmh:0} km/h", Color.white, new Color(0.78f, 0.06f, 0.18f), 2.0f);
                 Board(ci, signs, font, pit.exit - 40f, pit.side, "PİT ÇIKIŞI", navy, ivory, 2.2f);
+            }
+            // Braking distance boards (150 / 100 / 50 m to the turn-in): white boards, black numerals.
+            foreach (var bb in ci.Infrastructure.brakeBoards)
+                Board(ci, signs, font, bb.distance, bb.side, bb.metres.ToString(), Color.white, new Color(0.06f, 0.06f, 0.07f), 1.1f);
+        }
+
+        /// <summary>TV camera towers behind the barrier at the slowest corners (TrackInfrastructurePlan.tvTowers), with an operator.</summary>
+        static void BuildTvTowers(CircuitInstance ci, Transform infra)
+        {
+            var g = ci.Geometry;
+            var root = new GameObject("TvTowers").transform;
+            root.SetParent(infra, false);
+            var tower = LodMeshes("TvTower", (B, lod) => TrackKitGeometry.TvTower(B, lod));
+            var shirt = new MeshBuilder();
+            var skin = new MeshBuilder();
+            EnvironmentGeometry.SpectatorMesh(shirt, skin);
+            var crewMesh = EnvironmentBuilder.Combine(new Dictionary<string, MeshBuilder> { ["KitDark"] = shirt, [EnvironmentGeometry.Skin] = skin }, "CameraCrew", out var crewMats);
+            int idx = 0;
+            foreach (var t in ci.Infrastructure.tvTowers)
+            {
+                int i = g.IndexAt(t.distance);
+                float[] wall = t.side < 0 ? ci.WallLeft : ci.WallRight;
+                var basePos = TrackInfrastructureGeometry.P(g, i, t.side * (wall[i] + TrackInfrastructurePlan.TvTowerOffset), BaseDy);
+                var toTrack = -new Vector3(g.Rights[i].X, 0f, g.Rights[i].Z).normalized * t.side;
+                // The camera looks back up the track at the cars coming out of the corner.
+                var fwd = new Vector3(g.Tangents[i].X, 0f, g.Tangents[i].Z).normalized;
+                var look = (toTrack - fwd).normalized;
+                var go = new GameObject($"TvTower_{idx++:00}");
+                go.transform.SetParent(root, false);
+                go.transform.SetPositionAndRotation(basePos, Quaternion.LookRotation(look, Vector3.up));
+                WithLods(go.transform, "Tower", tower, 60f);
+                Static(go.transform, "Operator", crewMesh, crewMats, new Vector3(0.1f, 5.06f, -0.35f), Quaternion.identity, Vector3.one * 1.75f);
             }
         }
 

@@ -103,6 +103,70 @@ def height_grid(cell=100.0):
             "source": "Copernicus DEM GLO-30, 5th percentile per cell (street level)"}
 
 
+# Shore correction of the street profile (docs/ISTANBUL_OVERHAUL.md, "Streckenhöhe"). The street-level profile is
+# a low percentile of the Copernicus *surface* model; next to the Bosphorus it carries the hills, walls and trees
+# behind the coastal road down to the water (Çırağan Cd. 12-15 m). The coastal roads lie on the coastal flat:
+# quay level (1.6 m, CoastalProfile.QuayLevel) plus the road crown, a flat strip, then a moderate rise inland.
+# Beyond COAST_REACH from the water the DEM profile is used unchanged.
+QUAY_LEVEL, ROAD_CROWN, FLAT_WIDTH, FLAT_GRADE, ROAD_GRADE, COAST_REACH = 1.6, 0.6, 60.0, 0.05, 0.12, 260.0
+
+
+def coastal_cap(d):
+    """Highest plausible street height (m) at d metres from the water."""
+    return QUAY_LEVEL + ROAD_CROWN + FLAT_GRADE * min(d, FLAT_WIDTH) + ROAD_GRADE * max(0.0, d - FLAT_WIDTH)
+
+
+def coast_distances(xy, land_path):
+    """Distance (m) of points [(x, z)] to the nearest coast edge of the land masses in a circuit file (geo.land)."""
+    import numpy as np
+    if not os.path.exists(land_path):
+        return [float("inf")] * len(xy)
+    masses = json.load(open(land_path, encoding="utf-8"))["geo"].get("land", [])
+    segs = []
+    for m in masses:
+        poly = np.array(m["polygon"], float)
+        segs.append(np.stack([poly, np.roll(poly, -1, axis=0)], axis=1))
+    if not segs:
+        return [float("inf")] * len(xy)
+    seg = np.concatenate(segs)                      # (S, 2, 2)
+    a, b = seg[:, 0], seg[:, 1]
+    ab = b - a
+    ll = np.maximum((ab * ab).sum(axis=1), 1e-9)
+    out = []
+    for x, z in xy:
+        p = np.array([x, z])
+        t = np.clip(((p - a) * ab).sum(axis=1) / ll, 0.0, 1.0)
+        q = a + ab * t[:, None]
+        out.append(float(np.sqrt(((q - p) ** 2).sum(axis=1)).min()))
+    return out
+
+
+SMOOTH = 160.0          # window (m) over which the lowering is spread, so the profile has no step at COAST_REACH
+
+
+def coastal_street(prof_s, street, pts, arc, land_path, keep=None):
+    """The street profile with the shore correction applied (prints what changed). `keep(s)` gives the weight
+    0..1 with which the correction applies at lap distance s (0 = keep the approved profile, e.g. the R20 section)."""
+    import numpy as np
+    xs = np.interp(prof_s, arc, [p[0] for p in pts])
+    zs = np.interp(prof_s, arc, [p[1] for p in pts])
+    dist = coast_distances(list(zip(xs, zs)), land_path)
+    h = np.array(street, float)
+    drop = np.array([max(0.0, hv - coastal_cap(d)) if d <= COAST_REACH else 0.0 for hv, d in zip(h, dist)])
+    if keep is not None:
+        drop *= np.array([keep(s_) for s_ in prof_s])
+    # Spread the lowering (moving maximum, then mean) so transitions stay gentle.
+    ps = np.array(prof_s, float)
+    spread = np.array([drop[np.abs(ps - s_) <= SMOOTH * 0.5].max() for s_ in ps])
+    smooth = np.array([spread[np.abs(ps - s_) <= SMOOTH * 0.5].mean() for s_ in ps])
+    if keep is not None:
+        smooth *= np.array([keep(s_) for s_ in prof_s])
+    out = h - smooth
+    k = int(np.argmax(smooth))
+    print(f"shore correction: {(smooth > 0.05).sum()} of {len(h)} profile samples lowered, most {smooth[k]:.1f} m at {ps[k]:.0f} m")
+    return out.tolist()
+
+
 def main(argv=None):
     import argparse
     ap = argparse.ArgumentParser()
@@ -211,7 +275,18 @@ def main(argv=None):
                 pairs.append((arc[i], (arc[bj] + t * seg) % L, va.PAIR_TOL + 0.25 * min(1.0, max(0.0, (best - 13.0) / 4.0))))
             else:
                 pairs.append((arc[i], (arc[bj] + t * seg) % L))
-    grid_s, grid_h, _ = va.design(prof_s, plan["profile"]["street"], L, limits, pairs)
+    keep = None
+    if r20:
+        # The approved Ortaköy (R20) section and its braking zone from 330 km/h keep their designed profile (a crest
+        # under braking unloads the car); the correction fades out over 200 m before the braking zone.
+        brake0 = s0 - 250.0
+
+        def keep(s_):
+            if brake0 - 200.0 <= s_ <= s1 + dl + 150.0:
+                return max(0.0, min(1.0, (brake0 - s_) / 200.0, (s_ - (s1 + dl)) / 150.0))
+            return 1.0
+    street = coastal_street(prof_s, plan["profile"]["street"], pts, arc, out_path, None if os.environ.get("APEX_FULL_SHORE") else keep)
+    grid_s, grid_h, _ = va.design(prof_s, street, L, limits, pairs)
     heights = (va.evaluate_c2 if r20 else va.evaluate)(grid_s, grid_h, L, np.array(arc))
     if os.environ.get("APEX_DUMP_GRID"):
         np.savez(os.environ["APEX_DUMP_GRID"], grid_s=grid_s, grid_h=grid_h, arc=np.array(arc), heights=heights, pairs=np.array(pairs), L=L)

@@ -219,9 +219,15 @@ namespace Apex.Game
             float fh = CityLayout.FloorHeight, tileW = BayWidth * TileBays, roofY = b.ground + 0.6f + b.height;
             if (Mathf.FloorToInt((b.height - 0.6f) / fh) < 2) return;
             int seed = Hash((int)(o[0].X * 7.1f), (int)(o[0].Y * 3.3f));
-            int kind = seed % 10;                     // 0-2 balconies, 4-5 cumba (older low-rise), else plain
-            bool balconies = kind < 3 && !b.historic;
-            bool cumba = (kind == 4 || kind == 5 || b.historic) && b.height <= 16f;
+            int kind = seed % 10;
+            // The building family (BuildingFamilies) decides the relief: timber houses have a bay window and timber
+            // bands, old masonry string courses and some iron balconies, the post-war blocks continuous balconies on
+            // every floor, contemporary buildings glass balustrades and fins, office and shop buildings neither.
+            var fam = b.family;
+            bool ribbons = fam == BuildingFamilies.Family.Apartment1970s || fam == BuildingFamilies.Family.Contemporary;
+            bool glassRail = fam == BuildingFamilies.Family.Contemporary;
+            bool balconies = fam == BuildingFamilies.Family.Masonry19th ? kind < 3 && !b.historic : false;
+            bool cumba = b.height <= 16f && (fam == BuildingFamilies.Family.OttomanTimber || (fam == BuildingFamilies.Family.Masonry19th && (kind == 4 || kind == 5 || b.historic)));
             bool metalRail = (seed >> 5) % 2 == 0;
             int awning = (seed >> 7) % Awnings;
             string solid = FacadeSolid(b.style);
@@ -321,8 +327,9 @@ namespace Apex.Game
                             B(solid).Box(P(t, fb + 0.74f, 0.09f), new Vector3(1.7f, 0.08f, 0.18f), q);
                     }
                 }
+                FamilyRelief(B, b, fam, P, dir, outward, q, len, y0, floors, fh, ribbons, glassRail, level, solid);
                 // Turkish flags hung vertically from a balcony railing or under a window (crescent and star at the top).
-                if (StreetFronts.FlagFront(seed, i, b.ortakoy))
+                if (StreetFronts.FlagFront(seed, i, b.ortakoy, b.raceFront != null && b.raceFront[i]))
                 {
                     int count = 1 + StreetFronts.Hash(seed, i + 3) % 2;
                     for (int f2 = 0; f2 < count; f2++)
@@ -330,13 +337,97 @@ namespace Apex.Game
                         var (bay, floor) = StreetFronts.FlagSpot(seed, i, f2, bays.Count, floors);
                         if (floor >= floors || floor % TileBays == 0 || (cumba && bay == mid && bays.Count >= 2)) continue;
                         float t = bays[bay], fb = y0 + floor * fh;
-                        bool onBalcony = balconies && Hash(Hash(seed + i * 131, bay), floor) % 10 < 5;
+                        bool onBalcony = ribbons || (balconies && Hash(Hash(seed + i * 131, bay), floor) % 10 < 5);
                         // A window flag on the first floor would hang in front of a shop sign.
                         if (!onBalcony && floor == 1 && StreetFronts.IsShopBay(seed, i, bay, b.shop, b.ortakoy)) continue;
-                        HangingFlag(B, P, dir, outward, t, onBalcony ? fb + 1.08f : fb + 0.7f, onBalcony ? 1.12f : 0.2f, !onBalcony);
+                        HangingFlag(B, P, dir, outward, t, onBalcony ? fb + 1.08f : fb + 0.7f, onBalcony ? 1.12f : 0.2f, !onBalcony,
+                            Mathf.Min(StreetFronts.FlagScale(seed, i, f2), (fh - 0.3f) / 1.35f));
+                    }
+                }
+                // Rain downpipes at both ends of the street front (zinc), from the eaves to the pavement.
+                foreach (float tp in new[] { 0.3f, len - 0.3f })
+                    B(LandmarkGeometry.Lead).Tube(P(tp, y0, 0.09f), P(tp, roofY - 0.15f, 0.09f), 0.05f, 5, true);
+                bool flatRoof = !(b.roof == 1 && n == 4);
+                if (level >= 2 && flatRoof)
+                {
+                    // Satellite dishes on the parapet of many apartment blocks: none, one or two per street front.
+                    int dishes = Hash(seed, i + 41) % 3;
+                    for (int k = 0; k < dishes; k++)
+                        SatelliteDish(B, P(len * (0.3f + 0.4f * k), roofY + 0.9f, -0.35f), outward, Hash(seed + k, i) % 360);
+                    // A roof terrace with a canvas shade on some blocks (once per building, at its first street front).
+                    if (Hash(seed, 77) % 4 == 0 && i == FirstFront(b) && len > 8f)
+                    {
+                        var c0 = P(len * 0.5f, roofY + 0.05f, -2.2f);
+                        foreach (float sx in new[] { -1.4f, 1.4f })
+                            foreach (float sz in new[] { -1.1f, 1.1f })
+                                B(LandmarkGeometry.Lead).Tube(c0 + dir * sx + outward * sz, c0 + dir * sx + outward * sz + Vector3.up * 2.3f, 0.03f, 4, true);
+                        B(Awning(awning)).Box(c0 + Vector3.up * 2.35f, new Vector3(3.2f, 0.04f, 2.6f), q);
+                        B(LandmarkGeometry.Lead).Box(c0 + Vector3.up * 0.45f, new Vector3(1.2f, 0.05f, 0.8f), q);   // table
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Family relief along a whole street front: continuous balcony slabs with railings (post-war blocks: concrete
+        /// slab and painted metal or solid parapet; contemporary: glass balustrade, slim slabs, vertical fins), string
+        /// courses and a stone plinth on 19th-century masonry, weatherboard bands and wide eaves on timber houses.
+        /// </summary>
+        static void FamilyRelief(Parts B, OsmCity.Building b, BuildingFamilies.Family fam, System.Func<float, float, float, Vector3> P,
+            Vector3 dir, Vector3 outward, Quaternion q, float len, float y0, int floors, float fh, bool ribbons, bool glassRail, int level, string solid)
+        {
+            float x0 = 0.6f, x1 = len - 0.6f, w = x1 - x0, mid = (x0 + x1) * 0.5f;
+            if (w < 3f) return;
+            if (ribbons)
+            {
+                float depth = glassRail ? 1.4f : 1.2f;
+                for (int f = 1; f < floors; f++)
+                {
+                    float fb = y0 + f * fh;
+                    B(Concrete).Box(P(mid, fb + 0.02f, depth * 0.5f), new Vector3(w, glassRail ? 0.12f : 0.18f, depth), q);
+                    if (glassRail) B(Glass).Box(P(mid, fb + 0.6f, depth - 0.02f), new Vector3(w, 1.0f, 0.03f), q);
+                    else B((Hash(f, (int)(len * 7f)) % 3 == 0) ? solid : LandmarkGeometry.Lead).Box(P(mid, fb + 0.55f, depth - 0.03f), new Vector3(w, 0.95f, 0.05f), q);
+                }
+                if (glassRail && level >= 2)
+                    for (float t = x0; t <= x1 + 0.01f; t += 3.5f)
+                        B(TrackKitDark).Box(P(t, y0 + floors * fh * 0.5f + 0.3f, depth * 0.5f), new Vector3(0.18f, floors * fh - 0.6f, depth), q);
+                return;
+            }
+            if (fam == BuildingFamilies.Family.Masonry19th)
+            {
+                // Rusticated plinth to the first floor and a string course at every floor line.
+                B(LandmarkGeometry.Stone).Box(P(mid, y0 + fh * 0.5f, 0.06f), new Vector3(len, fh, 0.12f), q);
+                for (int f = 1; f < floors; f++)
+                    B(LandmarkGeometry.Stone).Box(P(mid, y0 + f * fh, 0.1f), new Vector3(len, 0.16f, 0.2f), q);
+                return;
+            }
+            if (fam == BuildingFamilies.Family.OttomanTimber)
+            {
+                // Weatherboard bands between the storeys and corner boards.
+                for (int f = 1; f <= floors; f++)
+                    B(Wood).Box(P(mid, y0 + f * fh - 0.1f, 0.08f), new Vector3(len, 0.22f, 0.12f), q);
+                foreach (float t in new[] { 0.08f, len - 0.08f })
+                    B(Wood).Box(P(t, y0 + floors * fh * 0.5f, 0.07f), new Vector3(0.16f, floors * fh, 0.14f), q);
+            }
+        }
+
+        const string TrackKitDark = "KitDark";
+
+        static int FirstFront(OsmCity.Building b)
+        {
+            for (int i = 0; i < b.front.Length; i++) if (b.front[i]) return i;
+            return -1;
+        }
+
+        /// <summary>Satellite dish (0.8 m) on a short arm, tilted up towards the southern sky and turned a little per dish.</summary>
+        static void SatelliteDish(Parts B, Vector3 foot, Vector3 outward, int turnDeg)
+        {
+            var dish = new MeshBuilder();
+            LandmarkGeometry.VerticalLathe(dish, Vector3.zero, new[] { new Vector2(0f, 0.4f), new Vector2(0.06f, 0.3f), new Vector2(0.12f, 0.001f) }, 10);
+            var rot = Quaternion.LookRotation(Quaternion.Euler(0f, turnDeg % 60 - 30, 0f) * outward, Vector3.up) * Quaternion.Euler(-55f, 0f, 0f);
+            var head = foot + Vector3.up * 0.55f;
+            B(LandmarkGeometry.Marble).Append(dish, v => head + rot * new Vector3(v.x, v.z, v.y));
+            B(LandmarkGeometry.Lead).Tube(foot, head, 0.025f, 4, true);
         }
 
         public const string ShopSignAtlas = "ShopSign", Door = "Door";
@@ -355,9 +446,9 @@ namespace Apex.Game
         /// Turkish flag hung vertically (G = 0.9 m wide, 1.35 m long): the hoist with the crescent and star at the top,
         /// the cloth in three slightly bulging strips; window flags hang from a short rod.
         /// </summary>
-        static void HangingFlag(Parts B, System.Func<float, float, float, Vector3> P, Vector3 dir, Vector3 outward, float t, float top, float off, bool rod)
+        static void HangingFlag(Parts B, System.Func<float, float, float, Vector3> P, Vector3 dir, Vector3 outward, float t, float top, float off, bool rod, float scale = 1f)
         {
-            const float g = 0.9f, len = 1.35f;
+            float g = 0.9f * scale, len = 1.35f * scale;
             float[] bulge = { 0f, 0.05f, 0.015f, 0.06f };
             for (int s = 0; s < 3; s++)
             {
@@ -465,6 +556,11 @@ namespace Apex.Game
                     Vector2.zero, Vector2.right, Vector2.one, Vector2.up, -inl);
                 B(LandmarkGeometry.Stone).QuadFacing(Up(a, t + 0.05f) + o, Up(b, t + 0.05f) + o, Up(b + inl * 0.6f, t + 0.05f), Up(a + inl * 0.6f, t + 0.05f),
                     Vector2.zero, Vector2.right, Vector2.one, Vector2.up, Vector3.up);
+                if (s.palace)
+                {
+                    PalaceRailing(B, s, wf.openings, level);
+                    continue;
+                }
                 if (!s.promenade) continue;
                 float w = Waterfront.PromenadeWidth;
                 Vector2 Uv(Vector3 p) => new Vector2(p.x, p.z) / 3f;
@@ -492,6 +588,47 @@ namespace Apex.Game
                 B(DarkSteel).Tube(f, f + Vector3.up * 4.6f, 0.07f, 6, true);
                 B(DarkSteel).Tube(f + Vector3.up * 4.5f, f + Vector3.up * 4.5f + s * 0.8f, 0.04f, 4, false);
                 B(LampHead).Box(f + Vector3.up * 4.35f + s * 0.8f, new Vector3(0.45f, 0.3f, 0.45f));
+            }
+        }
+
+        /// <summary>
+        /// Dolmabahçe's palace quay: a white marble plinth with piers and an ornamental wrought-iron railing (gilt spear
+        /// tips) along the water, broken where the sea gates stand. Level 0: plinth only; 1: piers and rails; 2: bars.
+        /// </summary>
+        static void PalaceRailing(Parts B, Waterfront.Segment s, List<(System.Numerics.Vector2 at, float half)> openings, int level)
+        {
+            var inl = new Vector3(s.inland.X, 0f, s.inland.Y);
+            float t = s.top;
+            foreach (var (t0, t1) in Waterfront.OpenParts(s, openings))
+            {
+                var a2 = System.Numerics.Vector2.Lerp(s.a, s.b, t0) + s.inland * 0.35f;
+                var b2 = System.Numerics.Vector2.Lerp(s.a, s.b, t1) + s.inland * 0.35f;
+                var a = new Vector3(a2.X, 0f, a2.Y); var b = new Vector3(b2.X, 0f, b2.Y);
+                var along = b - a;
+                float len = along.magnitude;
+                if (len < 0.2f) continue;
+                var dir = along / len;
+                var mid = (a + b) * 0.5f;
+                var rot = Quaternion.LookRotation(inl, Vector3.up);
+                // Plinth (0.55 m) with a moulded top.
+                B(LandmarkGeometry.Marble).Box(Up(mid, t + 0.275f), new Vector3(len, 0.55f, 0.45f), rot);
+                if (level <= 0) continue;
+                B(LandmarkGeometry.Marble).Box(Up(mid, t + 0.58f), new Vector3(len, 0.08f, 0.55f), rot);
+                // Pier at the start of each run, with cap and ball finial.
+                B(LandmarkGeometry.Marble).Box(Up(a, t + 0.95f), new Vector3(0.55f, 1.9f, 0.55f), rot);
+                B(LandmarkGeometry.Marble).Box(Up(a, t + 1.95f), new Vector3(0.7f, 0.12f, 0.7f), rot);
+                B(LandmarkGeometry.Marble).Box(Up(a, t + 2.15f), new Vector3(0.32f, 0.3f, 0.32f), rot);
+                // Rails.
+                B(LandmarkGeometry.Lead).Tube(Up(a, t + 1.6f), Up(b, t + 1.6f), 0.03f, 5, false);
+                B(LandmarkGeometry.Lead).Tube(Up(a, t + 0.75f), Up(b, t + 0.75f), 0.025f, 4, false);
+                if (level < 2) continue;
+                int n = Mathf.Max(1, Mathf.RoundToInt(len / 0.16f));
+                for (int k = 1; k < n; k++)
+                {
+                    var p = a + dir * (len * k / n);
+                    B(LandmarkGeometry.Lead).Box(Up(p, t + 1.18f), new Vector3(0.025f, 0.9f, 0.025f));
+                    if (k % 4 == 0) B(LandmarkGeometry.Gilt).Box(Up(p, t + 1.7f), new Vector3(0.05f, 0.14f, 0.05f));
+                }
             }
         }
 

@@ -66,6 +66,37 @@ namespace Apex.Tracks
         public readonly Kerbs kerbs = new Kerbs();
         public readonly List<Protection> protections = new List<Protection>();
         public readonly List<Post> posts = new List<Post>();
+
+        /// <summary>Braking distance board: raw distance, side (outside of the corner) and the metres it shows.</summary>
+        public struct BrakeBoard
+        {
+            public float distance;
+            public int side;
+            public int metres;
+            public int corner;
+        }
+
+        /// <summary>Distance boards 150 / 100 / 50 m before the turn-in of every corner braked from high speed.</summary>
+        public readonly List<BrakeBoard> brakeBoards = new List<BrakeBoard>();
+        /// <summary>TV camera towers (scaffold with a camera platform) behind the barrier at the slowest corners.</summary>
+        public readonly List<Post> tvTowers = new List<Post>();
+        /// <summary>Viewing spots for standing spectators: the apex of every heavily braked corner (overtaking places).</summary>
+        public readonly List<Post> viewingSpots = new List<Post>();
+        public static readonly int[] BoardMetres = { 150, 100, 50 };
+        /// <summary>Boards only where the approach is braked by at least this much (m/s, ~90 km/h).</summary>
+        public const float BoardBraking = 25f;
+        public const int MaxTvTowers = 6;
+        /// <summary>TV tower centre behind the barrier (m) and the area kept free of trees and buildings around it.</summary>
+        public const float TvTowerOffset = 3.2f, TvTowerClearance = 4f;
+
+        /// <summary>Ground position (x, z) of a TV tower: TvTowerOffset behind the barrier line of its side.</summary>
+        public System.Numerics.Vector2 TvTowerPosition(Post t, float[] wallLeft, float[] wallRight)
+        {
+            int i = g.IndexAt(t.distance);
+            float wall = (t.side < 0 ? wallLeft : wallRight)[i];
+            var p = g.Positions[i] + g.Rights[i] * (t.side * (wall + TvTowerOffset));
+            return new System.Numerics.Vector2(p.X, p.Z);
+        }
         public readonly List<float> gates = new List<float>();
         /// <summary>
         /// Where a catch fence is needed per sample and side (see <see cref="BuildFenceNeeds"/>); the start/finish
@@ -174,6 +205,31 @@ namespace Apex.Tracks
                 }
                 // Marshal post with flag panel ~120 m before the corner, on the outside.
                 posts.Add(new Post { distance = g.Wrap(apex - 120f), side = PostSide(g.IndexAt(apex - 120f), outside), corner = ci });
+                // Distance boards before the turn-in of heavily braked corners, on the outside; none that would stand
+                // inside the previous corner (less than 60 m after its apex).
+                if (approachSpeed - cornerSpeed > BoardBraking)
+                {
+                    viewingSpots.Add(new Post { distance = g.Wrap(apex), side = outside, corner = ci });
+                    float turnIn = TurnIn(c);
+                    float prevApex = ci > 0 ? g.Distances[sorted[ci - 1].index] : g.Distances[sorted[sorted.Count - 1].index] - g.Length;
+                    foreach (int m in BoardMetres)
+                    {
+                        float d = turnIn - m;
+                        if (d - prevApex < 60f) continue;
+                        brakeBoards.Add(new BrakeBoard { distance = g.Wrap(d), side = PostSide(g.IndexAt(d), outside), metres = m, corner = ci });
+                    }
+                }
+                cornerSpeeds.Add((ci, cornerSpeed, apex, outside));
+            }
+            // TV towers at the slowest corners: 30 m after the apex on the outside, where the cars come towards the lens.
+            cornerSpeeds.Sort((x, y) => x.speed.CompareTo(y.speed));
+            for (int k = 0; k < cornerSpeeds.Count && tvTowers.Count < MaxTvTowers; k++)
+            {
+                var (ci2, _, apex2, outside2) = cornerSpeeds[k];
+                float d = g.Wrap(apex2 + 30f);
+                bool near = false;
+                foreach (var t in tvTowers) if (MathF.Abs(g.Wrap(t.distance - d + g.Length * 0.5f) - g.Length * 0.5f) < 250f) near = true;
+                if (!near) tvTowers.Add(new Post { distance = d, side = PostSide(g.IndexAt(d), outside2), corner = ci2 });
             }
             // Fill long gaps so no stretch exceeds ~450 m without a post.
             posts.Sort((x, y) => x.distance.CompareTo(y.distance));
@@ -190,6 +246,17 @@ namespace Apex.Tracks
             }
             posts.AddRange(extra);
             posts.Sort((x, y) => x.distance.CompareTo(y.distance));
+        }
+
+        readonly List<(int corner, float speed, float apex, int outside)> cornerSpeeds = new List<(int, float, float, int)>();
+
+        /// <summary>Raw distance where the corner starts to bend (curvature above a third of its peak), at most 120 m before the apex.</summary>
+        float TurnIn(TrackGeometry.Corner c)
+        {
+            int a = c.index;
+            float thresh = MathF.Abs(g.Curvatures[c.index]) * 0.33f;
+            while (MathF.Abs(g.Curvatures[Wrap(a - 1)]) > thresh && c.index - a < Samples(120f)) a--;
+            return g.Distances[c.index] - (c.index - a) * g.Spacing;
         }
 
         float Max(float[] a, int from, int to)

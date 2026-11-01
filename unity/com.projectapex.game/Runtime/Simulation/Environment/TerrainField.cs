@@ -101,9 +101,13 @@ namespace Apex.Environment
         }
 
         /// <summary>Nearest centreline sample (flat distance) within maxRange, else MaxValue.</summary>
-        public float TrackDistance(float x, float z, float maxRange, out float trackY)
+        public float TrackDistance(float x, float z, float maxRange, out float trackY) => TrackDistance(x, z, maxRange, out trackY, out _);
+
+        /// <summary>As above, also returning the nearest sample position.</summary>
+        public float TrackDistance(float x, float z, float maxRange, out float trackY, out Vector3 sample)
         {
             trackY = 0f;
+            sample = default;
             float best = maxRange * maxRange;
             bool found = false;
             int r = (int)MathF.Ceiling(maxRange / BinSize);
@@ -120,7 +124,7 @@ namespace Apex.Environment
                     {
                         float dx = samples[i].X - x, dz = samples[i].Z - z;
                         float d2 = dx * dx + dz * dz;
-                        if (d2 < best) { best = d2; trackY = samples[i].Y; found = true; }
+                        if (d2 < best) { best = d2; trackY = samples[i].Y; sample = samples[i]; found = true; }
                     }
                 }
             }
@@ -198,7 +202,7 @@ namespace Apex.Environment
         /// <summary>Ground height at (x, z) in game metres.</summary>
         public float Height(float x, float z)
         {
-            if (!InNearArea(x, z)) return land.HasLand ? land.Height(x, z) : baseLevel;
+            if (!InNearArea(x, z)) return land.HasLand ? Shore(land.Height(x, z), x, z) : baseLevel;
             float h = NearHeight(x, z);
             if (land.HasLand)
             {
@@ -206,8 +210,45 @@ namespace Apex.Environment
                 float t = ApexMath.SmoothStep01(1f - ApexMath.Clamp01(edge / Blend));
                 if (t > 0f) h = ApexMath.Lerp(h, land.Height(x, z), t);
             }
-            if (IsWater(x, z)) h = MathF.Min(h, -4f);
-            return h;
+            if (IsWater(x, z)) return MathF.Min(h, -4f);
+            return land.HasLand ? Shore(h, x, z) : h;
+        }
+
+        // --- Shore heights (CoastalProfile) ------------------------------------------------------------------
+
+        /// <summary>Extra extent of the shore distance field beyond the near area (m) and its cell (m).</summary>
+        const float ShoreMargin = 1500f, ShoreCell = 8f;
+        CoastDistanceField inland;
+
+        /// <summary>Distance of a land point to the nearest water (m); large far inland or outside the field.</summary>
+        public float CoastDistance(float x, float z)
+        {
+            if (!land.HasLand) return float.MaxValue;
+            if (inland == null)
+            {
+                float minX = MinX - ShoreMargin, minZ = MinZ - ShoreMargin;
+                float size = MathF.Max(MaxX - MinX, MaxZ - MinZ) + 2f * ShoreMargin;
+                int res = (int)MathF.Ceiling(size / ShoreCell);
+                inland = CoastDistanceField.Build(minX, minZ, res * ShoreCell, res, RasterizeLand, inland: true);
+            }
+            float span = inland.Resolution * inland.Cell;
+            if (x < inland.MinX || z < inland.MinZ || x > inland.MinX + span || z > inland.MinZ + span) return float.MaxValue;
+            return inland.Sample(x, z);
+        }
+
+        /// <summary>Bounds the ground near the water by the shore profile (quay, coastal flat, ramp to the road).</summary>
+        float Shore(float h, float x, float z)
+        {
+            if (h <= CoastalProfile.QuayLevel) return h;
+            float d = CoastDistance(x, z);
+            if (d >= CoastalProfile.Reach) return h;
+            float road = float.MaxValue, roadY = 0f, roadCoast = float.MaxValue;
+            if (InNearArea(x, z))
+            {
+                road = TrackDistance(x, z, 300f, out roadY, out var sample);
+                if (road < float.MaxValue) roadCoast = CoastDistance(sample.X, sample.Z);
+            }
+            return CoastalProfile.Limit(h, d, road, roadY, roadCoast);
         }
 
         public static float ShoreX(List<(float east, float north)> shore, float z)

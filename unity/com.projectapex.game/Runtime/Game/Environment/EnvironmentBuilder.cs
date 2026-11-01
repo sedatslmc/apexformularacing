@@ -67,6 +67,12 @@ namespace Apex.Game
             var reserved = new List<CityLayout.Reserved>();
             // Event buildings (pit building, timing tower, race control) keep stands and city away.
             foreach (var (x, z, r) in ci.EventFootprints) reserved.Add(new CityLayout.Reserved(x, z, r));
+            // TV camera towers behind the barrier (TrackInfrastructureBuilder.BuildTvTowers): no tree or building there.
+            foreach (var t in ci.Infrastructure.tvTowers)
+            {
+                var tp = ci.Infrastructure.TvTowerPosition(t, ci.WallLeft, ci.WallRight);
+                reserved.Add(new CityLayout.Reserved(tp.X, tp.Y, TrackInfrastructurePlan.TvTowerClearance));
+            }
             Safe("waterfront", () => BuildWaterfront(root.transform, env, ci, reserved));
             // Monumental Turkish flag (site from the circuit file, re-checked against the built circuit): keep the city away.
             bool monumental = false;
@@ -108,7 +114,7 @@ namespace Apex.Game
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
             }
-            Safe("waterfront edge", () => BuildWaterEdge(root.transform, ci, osm));
+            Safe("waterfront edge", () => BuildWaterEdge(root.transform, env, ci, osm));
             Safe("generic city", () => BuildCity(root.transform, city));
             Safe("trees", () => BuildTrees(root.transform, env, city));
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
@@ -242,7 +248,7 @@ namespace Apex.Game
         /// Quays and promenade along the real coastline (Waterfront), chunked so distant pieces cull; the promenade
         /// keeps clear of buildings and of the landmark terraces (Ortaköy Mosque).
         /// </summary>
-        static void BuildWaterEdge(Transform root, CircuitInstance ci, OsmCity osm)
+        static void BuildWaterEdge(Transform root, EnvironmentInstance env, CircuitInstance ci, OsmCity osm)
         {
             var def = ci.Definition;
             var mosque = def.FindLandmark("ortakoy_mosque");
@@ -252,7 +258,10 @@ namespace Apex.Game
                 if (mosque != null && (x - mosque.east) * (x - mosque.east) + (z - mosque.north) * (z - mosque.north) < 45f * 45f) return true;
                 return false;
             }
-            var wf = new Waterfront(ci.Terrain, ci.Clearance, Blocked);
+            System.Func<float, float, bool> palaceFront = null;
+            if (osm != null && osm.PalaceFront.HasPalace) palaceFront = osm.PalaceFront.OnFrontage;
+            var wf = new Waterfront(ci.Terrain, ci.Clearance, Blocked, palaceFront);
+            if (palaceFront != null) osm.PalaceFront.PlaceGates(wf);
             var edgeRoot = new GameObject("Waterfront").transform;
             edgeRoot.SetParent(root, false);
             const float size = 256f;
@@ -261,7 +270,7 @@ namespace Apex.Game
             Waterfront Bucket(float x, float z)
             {
                 var key = (Mathf.FloorToInt(x / size), Mathf.FloorToInt(z / size));
-                if (!chunks.TryGetValue(key, out var b)) chunks[key] = b = Waterfront.Empty();
+                if (!chunks.TryGetValue(key, out var b)) { chunks[key] = b = Waterfront.Empty(); b.openings.AddRange(wf.openings); }
                 return b;
             }
             foreach (var sgm in wf.segments) Bucket(sgm.a.X, sgm.a.Y).segments.Add(sgm);
@@ -276,7 +285,23 @@ namespace Apex.Game
                 lg.SetLODs(new[] { new LOD(0.01f, new Renderer[] { go.GetComponent<Renderer>() }) });
                 lg.RecalculateBounds();
             }
-            Debug.Log($"[Apex] Waterfront: {wf.quayLength / 1000f:F1} km quay, {wf.promenadeLength / 1000f:F1} km promenade, {wf.bollards.Count} bollards, {wf.lamps.Count} lamps.");
+            // Dolmabahçe's five sea gates on the palace quay, lit warm from the quay at night (High and above).
+            if (palaceFront != null)
+                for (int i = 0; i < osm.PalaceFront.gates.Count; i++)
+                {
+                    var g = osm.PalaceFront.gates[i];
+                    var pos = new Vector3(g.position.X, ci.Terrain.Height(g.position.X, g.position.Y), g.position.Y);
+                    float yaw = Mathf.Atan2(g.seaward.X, g.seaward.Y) * Mathf.Rad2Deg;
+                    bool main = g.main;
+                    PlaceDetailed(edgeRoot, "dolmabahce_sea_gate_" + i, "Dolmabahçe " + g.name, main ? 11f : 8.5f, lg => lg.SeaGate(main), pos, yaw, PalaceLods);
+                    if (Quality >= 2)
+                    {
+                        var sea = new Vector3(g.seaward.X, 0f, g.seaward.Y);
+                        Floodlight(edgeRoot, env, pos + sea * 6f + Vector3.up * 0.4f, pos + Vector3.up * (main ? 6f : 4.5f), new Color(1f, 0.82f, 0.6f), EsmaWashIntensity, 50f);
+                    }
+                }
+            Debug.Log($"[Apex] Waterfront: {wf.quayLength / 1000f:F1} km quay, {wf.promenadeLength / 1000f:F1} km promenade, {wf.palaceLength / 1000f:F2} km palace quay, " +
+                $"{(palaceFront != null ? osm.PalaceFront.gates.Count : 0)} sea gates, {wf.bollards.Count} bollards, {wf.lamps.Count} lamps.");
         }
 
         // --- City -------------------------------------------------------------------------------
@@ -364,16 +389,40 @@ namespace Apex.Game
         /// </summary>
         static void BuildTracksideCrowd(Transform root, EnvironmentInstance env, CircuitInstance ci, OsmCity osm, CityLife life, int q, List<CityLayout.Reserved> reserved)
         {
-            var crowd = new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, life != null ? life.props : null,
-                osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q, reserved);
-            if (crowd.fans.Count == 0) return;
+            var fans = new List<TracksideCrowd.Fan>();
+            var props = life != null ? life.props : null;
+            var crowd = new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, props, osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q, reserved);
+            fans.AddRange(crowd.fans);
+            int ortakoy = fans.Count;
+            // Viewing zones at the heavily braked corners elsewhere on the lap: standing fans in groups.
+            foreach (var z in SpectatorZones.Centres(ci.Geometry, ci.Infrastructure, osm.OrtakoyCentre.Value, StreetFronts.OrtakoyRadius, q))
+                fans.AddRange(new TracksideCrowd(ci.Geometry, ci.Clearance, ci.Terrain, osm, props, z, SpectatorZones.Radius, q, reserved, SpectatorZones.GroupScale).fans);
+            if (fans.Count == 0) return;
             var go = new GameObject("TracksideCrowd");
             go.transform.SetParent(root, false);
             var c = go.AddComponent<CrowdComponent>();
             c.env = env;
             c.handFlagShare = 0.45f;
-            foreach (var f in crowd.fans) c.Add(V(f.position), f.yaw * Mathf.Rad2Deg, f.rnd);
-            Debug.Log($"[Apex] Trackside crowd (Ortaköy): {crowd.fans.Count} fans.");
+            // Photographers: no cheering, a camera in front of the face.
+            var cameras = new MeshBuilder();
+            int photographers = 0;
+            foreach (var f in fans)
+            {
+                if (f.photographer)
+                {
+                    // Same height and facing as the instanced figure: body and lens at eye level, in front of the face.
+                    var p = V(f.position);
+                    float h = CrowdComponent.Height(f.rnd), yaw = CrowdComponent.Facing(f.yaw * Mathf.Rad2Deg, f.rnd) * Mathf.Deg2Rad;
+                    var fwd = new Vector3(Mathf.Sin(yaw), 0f, Mathf.Cos(yaw));
+                    var eye = p + Vector3.up * (0.88f * h);
+                    cameras.Box(eye + fwd * (0.075f * h + 0.06f), new Vector3(0.14f, 0.1f, 0.12f), Quaternion.LookRotation(fwd));
+                    cameras.Box(eye + fwd * (0.075f * h + 0.18f), new Vector3(0.08f, 0.08f, 0.14f), Quaternion.LookRotation(fwd));
+                    photographers++;
+                }
+                c.Add(V(f.position), f.yaw * Mathf.Rad2Deg, f.rnd, f.photographer);
+            }
+            if (photographers > 0) AddMeshObject(go.transform, "PhotographerCameras", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.DarkSteel] = cameras }, false);
+            Debug.Log($"[Apex] Trackside crowd: {fans.Count} fans ({ortakoy} at Ortaköy, {photographers} photographers).");
         }
 
         /// <summary>LOD screen heights of the palace buildings (per building, they are up to 140 m long).</summary>
@@ -517,6 +566,15 @@ namespace Apex.Game
                 var lod1 = AddMeshObject(group.transform, "LOD1", simple.parts, true);
                 var lg = group.AddComponent<LODGroup>();
                 var r0 = lod0.GetComponent<Renderer>();
+                // Hanging flags in their own mesh, moved by the wind (FlagWindComponent).
+                Renderer flagRenderer = null;
+                if (fronts.parts.TryGetValue(EnvironmentGeometry.BalconyFlag, out var flagParts) && flagParts.TriangleCount > 0)
+                {
+                    fronts.parts.Remove(EnvironmentGeometry.BalconyFlag);
+                    var fg = AddMeshObject(group.transform, "Flags", new Dictionary<string, MeshBuilder> { [EnvironmentGeometry.BalconyFlag] = flagParts }, false, false);
+                    fg.AddComponent<FlagWindComponent>().env = env;
+                    flagRenderer = fg.GetComponent<Renderer>();
+                }
                 if (fronts.Triangles > 0)
                 {
                     // Street-front relief (balconies, bay windows, awnings) only on the near level: it reads up to
@@ -524,7 +582,7 @@ namespace Apex.Game
                     var rel = AddMeshObject(group.transform, "Fronts", fronts.parts, true);
                     lg.SetLODs(new[]
                     {
-                        new LOD(0.35f, new Renderer[] { r0, rel.GetComponent<Renderer>() }),
+                        new LOD(0.35f, flagRenderer != null ? new Renderer[] { r0, rel.GetComponent<Renderer>(), flagRenderer } : new Renderer[] { r0, rel.GetComponent<Renderer>() }),
                         new LOD(0.12f, new Renderer[] { r0 }),
                         new LOD(0.003f, new Renderer[] { lod1.GetComponent<Renderer>() }),
                     });
@@ -1104,12 +1162,20 @@ namespace Apex.Game
             ferry.Ferry();
             var freighter = new LandmarkGeometry(1);
             freighter.Freighter();
+            var tour = new LandmarkGeometry(1);
+            tour.TourBoat();
+            var motor = new LandmarkGeometry(1);
+            motor.MotorBoat();
             foreach (var r in routes)
             {
-                int count = r.shuttle ? (r.name.StartsWith("Beşiktaş") ? 2 : 1) : (Quality == 0 ? 1 : 2);
+                // Moderate traffic: two Beşiktaş ferries, one per other ferry line, one tour boat, one motor boat per
+                // loop (none on mobile), two transit ships per direction (one on mobile).
+                int count = r.vesselKind == MarineRoute.VesselMotorBoat ? (Quality == 0 ? 0 : 1)
+                    : r.shuttle ? (r.name.StartsWith("Beşiktaş") ? 2 : 1) : (Quality == 0 ? 1 : 2);
                 for (int k = 0; k < count; k++)
                 {
-                    var lg = r.vesselKind == 0 ? ferry : freighter;
+                    var lg = r.vesselKind == MarineRoute.VesselFerry ? ferry : r.vesselKind == MarineRoute.VesselTourBoat ? tour
+                        : r.vesselKind == MarineRoute.VesselMotorBoat ? motor : freighter;
                     var v = AddMeshObject(go.transform, r.name + "_" + k, lg.parts, true, false);
                     mt.Add(r, v.transform, r.CycleTime * k / count + LandModel.Hash(k, r.points.Count) * 20f, WaterY);
                 }
@@ -1196,11 +1262,16 @@ namespace Apex.Game
     /// </summary>
     public static class EnvironmentMaterials
     {
-        /// <summary>Istanbul plaster colours: cream, ochre, salmon, light grey, pale yellow, dusty pink.</summary>
+        /// <summary>
+        /// Facade colours (BuildingFamilies slots): Istanbul plaster – cream, ochre, salmon, light grey, pale yellow,
+        /// dusty pink –, painted timber – oxblood, dark ochre, grey-blue – and the cool grey of contemporary buildings.
+        /// </summary>
         static readonly Color[] FacadeColours =
         {
             new Color(0.9f, 0.85f, 0.73f), new Color(0.85f, 0.68f, 0.46f), new Color(0.86f, 0.62f, 0.52f),
             new Color(0.78f, 0.78f, 0.76f), new Color(0.92f, 0.86f, 0.62f), new Color(0.85f, 0.71f, 0.69f),
+            new Color(0.56f, 0.24f, 0.19f), new Color(0.76f, 0.56f, 0.26f), new Color(0.5f, 0.57f, 0.62f),
+            new Color(0.62f, 0.64f, 0.66f),
         };
 
         static readonly Dictionary<Color, Material> solids = new Dictionary<Color, Material>();
@@ -1392,7 +1463,7 @@ namespace Apex.Game
             if (facadeAlbedo == null) BuildFacadeTextures();
             if (waterNormal == null) BuildWaterNormal();
             if (flagTex == null) BuildFlag();
-            for (int i = 0; i < CityLayout.Styles; i++)
+            for (int i = 0; i < BuildingFamilies.FacadeStyles; i++)
             {
                 var m = new Material(ApexMaterials.LitShader()) { name = "Env_Facade" + i, enableInstancing = true };
                 SetTexture(m, "_BaseMap", "_MainTex", facadeAlbedo);
@@ -1406,7 +1477,7 @@ namespace Apex.Game
             }
             ApexMaterials.Register("EnvWater", WaterMaterial());
             // Street fronts: plaster in the facade colours (bay windows, parapets), canvas awnings, balcony flags.
-            for (int i = 0; i < CityLayout.Styles; i++) ApexMaterials.Register(EnvironmentGeometry.FacadeSolid(i), Solid(FacadeColours[i % FacadeColours.Length] * 0.97f));
+            for (int i = 0; i < BuildingFamilies.FacadeStyles; i++) ApexMaterials.Register(EnvironmentGeometry.FacadeSolid(i), Solid(FacadeColours[i % FacadeColours.Length] * 0.97f));
             var awnings = new[] { new Color(0.55f, 0.1f, 0.09f), new Color(0.13f, 0.32f, 0.22f), new Color(0.12f, 0.17f, 0.3f), new Color(0.85f, 0.8f, 0.66f) };
             for (int i = 0; i < EnvironmentGeometry.Awnings; i++)
             {

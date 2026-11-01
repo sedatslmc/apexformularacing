@@ -720,6 +720,72 @@ else if (mode == "profile-csv")
     }
     Console.WriteLine("wrote " + args[2]);
 }
+else if (mode == "coast-audit")
+{
+    // Coast height audit: land cells next to water (4 m grid). For each: terrain height there and 15 / 40 m inland
+    // (towards higher land along the steepest water-distance gradient), the DEM height, the nearest track height.
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string json = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(json));
+    var f = bed.terrain;
+    const float c = 4f;
+    int nx = (int)((f.MaxX - f.MinX) / c), nz = (int)((f.MaxZ - f.MinZ) / c);
+    var water = new bool[nx * nz];
+    for (int z = 0; z < nz; z++) for (int x = 0; x < nx; x++) water[z * nx + x] = f.IsWater(f.MinX + (x + 0.5f) * c, f.MinZ + (z + 0.5f) * c);
+    var rows = new System.Collections.Generic.List<(float x, float z, float h0, float h15, float h40, float dem, float trackD, float trackY)>();
+    for (int z = 2; z < nz - 2; z++) for (int x = 2; x < nx - 2; x++)
+    {
+        if (water[z * nx + x]) continue;
+        int wx = 0, wz = 0; bool coast = false;
+        for (int dz = -1; dz <= 1; dz++) for (int dx = -1; dx <= 1; dx++) if (water[(z + dz) * nx + x + dx]) { coast = true; wx += dx; wz += dz; }
+        if (!coast || (wx == 0 && wz == 0)) continue;
+        float px = f.MinX + (x + 0.5f) * c, pz = f.MinZ + (z + 0.5f) * c;
+        float len = MathF.Sqrt(wx * wx + wz * wz); float ix = -wx / len, iz = -wz / len;   // inland direction
+        float td = f.TrackDistance(px, pz, 400f, out float ty);
+        rows.Add((px, pz, f.Height(px, pz), f.Height(px + ix * 15f, pz + iz * 15f), f.Height(px + ix * 40f, pz + iz * 40f), f.land.Height(px, pz), td, ty));
+    }
+    int tall = 0; foreach (var r in rows) if (r.h0 > 4f) tall++;
+    Console.WriteLine($"coast cells {rows.Count} (~{rows.Count * c / 1000f:0.0} km), coast top > 4 m: {tall} ({100f * tall / Math.Max(1, rows.Count):0} %)");
+    var hist = new int[8]; foreach (var r in rows) hist[Math.Min(7, Math.Max(0, (int)(r.h0 / 4f)))]++;
+    for (int k = 0; k < 8; k++) Console.WriteLine($"  coast height {k * 4,2}-{k * 4 + 4,2} m: {hist[k]}");
+    // Coarse 100 m cells along the coast with the highest coast edge.
+    var cells = new System.Collections.Generic.Dictionary<(int, int), (float h0, float h15, float h40, float dem, float td, float ty, int n)>();
+    foreach (var r in rows)
+    {
+        var key = ((int)MathF.Floor(r.x / 100f), (int)MathF.Floor(r.z / 100f));
+        cells.TryGetValue(key, out var a);
+        cells[key] = (MathF.Max(a.h0, r.h0), MathF.Max(a.h15, r.h15), MathF.Max(a.h40, r.h40), MathF.Max(a.dem, r.dem), a.n == 0 ? r.trackD : MathF.Min(a.td, r.trackD), a.n == 0 || r.trackD < a.td ? r.trackY : a.ty, a.n + 1);
+    }
+    var keys = new System.Collections.Generic.List<(int, int)>(cells.Keys);
+    keys.Sort((p, q) => p.Item2 != q.Item2 ? p.Item2.CompareTo(q.Item2) : p.Item1.CompareTo(q.Item1));
+    Console.WriteLine("cell(x,z)   coastTop  @15m  @40m   DEM   track dist  trackY");
+    foreach (var k in keys)
+    {
+        var a = cells[k];
+        if (args.Length > 2 || a.h0 > 3f)
+            Console.WriteLine($"{k.Item1 * 100,5},{k.Item2 * 100,5}  {a.h0,7:0.0} {a.h15,6:0.0} {a.h40,6:0.0} {a.dem,6:0.0}  {a.td,8:0} {a.ty,8:0.0}");
+    }
+}
+else if (mode == "landmark-ground")
+{
+    // Ground under named waterfront landmarks: footprint min/max terrain height and distance to the water.
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(def);
+    var city = Apex.Environment.CityData.FromJson(File.ReadAllText(root + "City/" + (string.IsNullOrEmpty(def.cityId) ? id : def.cityId) + ".json"));
+    string[] keys = args.Length > 2 ? args[2].Split(',') : new[] { "Dolmabahçe", "Çırağan", "Ortaköy Camii", "Büyük Mecidiye", "Esma Sultan", "Kabataş", "Beşiktaş" };
+    foreach (var b in city.buildings)
+    {
+        if (string.IsNullOrEmpty(b.name)) continue;
+        bool hit = false; foreach (var k in keys) if (b.name.Contains(k)) hit = true;
+        if (!hit) continue;
+        float lo = float.MaxValue, hi = float.MinValue, cd = float.MaxValue;
+        foreach (var p in b.outline) { float h = bed.terrain.Height(p.X, p.Y); lo = MathF.Min(lo, h); hi = MathF.Max(hi, h); cd = MathF.Min(cd, bed.terrain.CoastDistance(p.X, p.Y)); }
+        var c = b.outline[0];
+        Console.WriteLine($"{b.name,-48} at {c.X,6:0},{c.Y,6:0}  ground {lo,5:0.0}..{hi,5:0.0} m  coast {cd,5:0} m");
+    }
+}
 else if (mode == "terrain-audit")
 {
     // Gray-wall audit: per lap sample (every 10 m) and side, the terrain profile from the barrier outwards

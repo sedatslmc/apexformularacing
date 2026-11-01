@@ -216,11 +216,15 @@ namespace Apex.Environment
             public bool worship;
             /// <summary>Within <see cref="StreetFronts.OrtakoyRadius"/> of the Ortaköy Mosque (shop mix, more flags).</summary>
             public bool ortakoy;
+            /// <summary>Building family (BuildingFamilies.Family).</summary>
+            public BuildingFamilies.Family family;
             public string name;
             /// <summary>Built as an in-house landmark model, not as a generic block (see <see cref="ClassicalKind"/>).</summary>
             public int classical;
             /// <summary>Per outline edge (edge i runs from outline[i] to outline[i + 1]): faces a street or the circuit.</summary>
             public bool[] front;
+            /// <summary>Per outline edge: a street front that looks onto the circuit (festive: more flags on race days).</summary>
+            public bool[] raceFront;
             /// <summary>
             /// Per outline edge: street level in front of it (terrain 1.5 m outside the facade). On a slope the ground
             /// floor (shop row, doors, signs) of each facade starts at its own street, not at the lowest corner of the
@@ -320,6 +324,7 @@ namespace Apex.Environment
             var mosque = def.FindLandmark("ortakoy_mosque");
             if (mosque != null) ortakoyCentre = new Vector2(mosque.east, mosque.north);
             if (extraReserved != null) reserved.AddRange(extraReserved);
+            palaceFront = new PalaceWaterfront(data);
             foreach (var b in data.buildings) TryBuilding(b, def);
             DemoteStrayDependencies(data);
             IndexBuildings();
@@ -338,6 +343,7 @@ namespace Apex.Environment
                 var b = buildings[k];
                 int n = b.outline.Count;
                 b.front = new bool[n];
+                b.raceFront = new bool[n];
                 b.level = new float[n];
                 float lowest = b.ground + 0.6f, highest = MathF.Max(lowest, b.ground + 0.6f + b.height - 2f * CityLayout.FloorHeight - 0.6f);
                 for (int i = 0; i < n; i++)
@@ -361,6 +367,7 @@ namespace Apex.Environment
                         if (InsideBuilding(q.X, q.Y, 0f)) open = false;
                     }
                     b.front[i] = open && (StreetDistance(p.X, p.Y) < FrontReach || clearance.Margin(p.X, p.Y) < FrontReach + 3f);
+                    b.raceFront[i] = b.front[i] && clearance.Margin(p.X, p.Y) < RaceFrontReach;
                 }
                 buildings[k] = b;
             }
@@ -368,6 +375,8 @@ namespace Apex.Environment
 
         /// <summary>Distance from a point 3 m in front of a facade to a street edge (or the racing envelope, plus 3 m) that makes the facade a street front.</summary>
         public const float FrontReach = 5f;
+        /// <summary>A street front within this margin of the racing envelope faces the circuit (m).</summary>
+        public const float RaceFrontReach = 25f;
 
         /// <summary>"Daire", "Köşk" and "Kapı" are palace service buildings only next to a palace; elsewhere (a tax office, "Vergi Dairesi") they stay generic.</summary>
         void DemoteStrayDependencies(CityData data)
@@ -451,20 +460,23 @@ namespace Apex.Environment
             }
             int hash = Hash(b.id);
             bool historic = b.historic.Length > 0 || b.type == "mosque" || b.type == "church" || b.type == "palace" || b.amenity == "place_of_worship";
-            // Small, simple older houses get tiled hip roofs; apartment blocks the usual flat roofs.
-            int roof = o.Count <= 6 && area < 450f && b.height <= 14f && hash % 3 != 0 ? 1 : 0;
+            bool ortakoy = ortakoyCentre.HasValue && Vector2.Distance(c, ortakoyCentre.Value) < StreetFronts.OrtakoyRadius;
+            // Building family (BuildingFamilies): colours, roof and street-front relief follow it.
+            var family = BuildingFamilies.Classify(b.type, b.height, area, historic, ortakoy, hash);
+            int roof = BuildingFamilies.HipRoof(family, o.Count, hash) ? 1 : 0;
             buildings.Add(new Building
             {
                 outline = o,
                 ground = ground - 0.6f,
                 height = classical != NotClassical ? ClassicalHeight(b, classical) : b.height,
                 classical = classical,
-                style = historic ? CityLayout.Styles - 1 : hash % CityLayout.Styles,
+                style = BuildingFamilies.Style(family, historic, hash),
+                family = family,
                 roof = roof,
                 historic = historic,
                 shop = IsShopAmenity(b.amenity) || ((b.type == "commercial" || b.type == "retail") && b.amenity.Length == 0),
                 worship = b.amenity == "place_of_worship" || b.type == "mosque" || b.type == "church" || b.type == "synagogue",
-                ortakoy = ortakoyCentre.HasValue && Vector2.Distance(c, ortakoyCentre.Value) < StreetFronts.OrtakoyRadius,
+                ortakoy = ortakoy,
                 name = b.name,
             });
         }
@@ -685,9 +697,15 @@ namespace Apex.Environment
                 }
         }
 
+        /// <summary>Dolmabahçe's Bosphorus front (quay, sea gates, the open forecourt in front of the facade).</summary>
+        public PalaceWaterfront PalaceFront => palaceFront;
+        PalaceWaterfront palaceFront;
+
         void AddTree(float x, float z, int kind)
         {
             if (field.IsWater(x, z)) return;
+            // The garden strip between the palace and its quay stays open: the facade must show from the water.
+            if (palaceFront != null && field.land.HasLand && palaceFront.InForecourt(x, z, field.land.CoastDistance(x, z))) return;
             if (clearance.Margin(x, z) < TreeClearance) return;
             if (Reserved(x, z, 2f)) return;
             if (bins.TryGetValue(((int)MathF.Floor(x / BinSize), (int)MathF.Floor(z / BinSize)), out var list))

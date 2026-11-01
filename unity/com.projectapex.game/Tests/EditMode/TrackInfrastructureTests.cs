@@ -94,5 +94,40 @@ namespace Apex.Tests
             Assert.That(plan.rubberIntensity[brakeZone], Is.GreaterThan(plan.rubberIntensity[straight] + 0.2f));
             Assert.That(plan.rubberIntensity[straight], Is.GreaterThanOrEqualTo(0.12f), "a light film everywhere");
         }
+        [Test]
+        public void BrakeBoardsCountDownToHeavilyBrakedCornersAndTvTowersWatchTheSlowOnes()
+        {
+            var bed = new CircuitTestBed(TestData.Circuit("bosphorus_a"), false);
+            var plan = bed.plan;
+            var g = bed.g;
+            TestContext.WriteLine($"{plan.brakeBoards.Count} brake boards, {plan.tvTowers.Count} TV towers");
+            Assert.That(plan.brakeBoards.Count, Is.GreaterThanOrEqualTo(12), "boards at the main braking zones");
+            // Per corner: boards in order 150 > 100 > 50 along the lap, 50 m apart, all on one side.
+            var byCorner = new System.Collections.Generic.Dictionary<int, System.Collections.Generic.List<TrackInfrastructurePlan.BrakeBoard>>();
+            foreach (var b in plan.brakeBoards)
+            {
+                if (!byCorner.TryGetValue(b.corner, out var l)) byCorner[b.corner] = l = new System.Collections.Generic.List<TrackInfrastructurePlan.BrakeBoard>();
+                l.Add(b);
+            }
+            foreach (var kv in byCorner)
+                for (int i = 1; i < kv.Value.Count; i++)
+                {
+                    var a = kv.Value[i - 1]; var b = kv.Value[i];
+                    Assert.That(a.metres, Is.GreaterThan(b.metres));
+                    float gap = g.Wrap(b.distance - a.distance);
+                    Assert.That(gap, Is.EqualTo(a.metres - b.metres).Within(0.5f), "boards 50 m apart");
+                }
+            // The heaviest braking zone of the lap (Ortaköy, from ~330 km/h) has all three boards.
+            int full = 0;
+            foreach (var kv in byCorner) if (kv.Value.Count == 3) full++;
+            Assert.That(full, Is.GreaterThanOrEqualTo(4));
+            Assert.That(plan.tvTowers.Count, Is.InRange(4, TrackInfrastructurePlan.MaxTvTowers));
+            for (int i = 0; i < plan.tvTowers.Count; i++)
+                for (int j = i + 1; j < plan.tvTowers.Count; j++)
+                {
+                    float d = MathF.Abs(plan.tvTowers[i].distance - plan.tvTowers[j].distance);
+                    Assert.That(MathF.Min(d, g.Length - d), Is.GreaterThanOrEqualTo(250f), "towers spread over the lap");
+                }
+        }
     }
 }

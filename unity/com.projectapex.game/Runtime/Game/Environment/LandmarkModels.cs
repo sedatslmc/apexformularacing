@@ -987,6 +987,97 @@ namespace Apex.Game
             B(Lead).Box(new Vector3(0f, cornice + 0.05f, 0f), new Vector3(width, 0.1f, depth));
         }
 
+        // --- Dolmabahçe sea gates (yalı kapıları) on the palace quay ---------------------------------
+
+        /// <summary>
+        /// Sea gate of Dolmabahçe on the palace quay (PalaceWaterfront): a white marble portal with a round-arched
+        /// opening and wrought-iron gate leaves, columns on pedestals on both faces (paired on the main gate), a
+        /// moulded archivolt with keystone, an entablature, and a baroque crest – a raised cartouche with a gilded
+        /// medallion (no inscription) under an arched hood, flanked by stepped scroll blocks and urns. The main gate on
+        /// the axis of the ceremonial hall is larger and richer than the four others. Origin at the threshold on the
+        /// quay top, opening across x, +z towards the water. After photographs of the Bosphorus front; proportions
+        /// approximate (no measured drawings available here).
+        /// </summary>
+        public void SeaGate(bool main)
+        {
+            string W = Marble;
+            float r = main ? 2.3f : 1.6f;                 // half the opening
+            float spring = main ? 5.2f : 3.9f;            // springing line of the arch
+            float pier = main ? 1.7f : 1.15f;             // pier width each side
+            float depth = main ? 1.5f : 1.1f;
+            float half = r + pier, cornice = spring + r + (main ? 1.3f : 1.0f);
+            float hd = depth * 0.5f;
+            // Plinth on the quay, the arched portal body.
+            B(Stone).Box(new Vector3(0f, -0.15f, 0f), new Vector3(half * 2f + 0.6f, 0.3f, depth + 0.8f));
+            ArchedWall(W, half, spring, r, cornice, -hd, depth);
+            // Gate leaves: vertical bars with gilt spear tips, three rails, a centre stile.
+            if (detail == 0)
+            {
+                for (float x = -r + 0.11f; x < r; x += 0.13f)
+                {
+                    float top = spring + Mathf.Sqrt(Mathf.Max(0f, r * r - x * x)) - 0.12f;
+                    B(Lead).Box(new Vector3(x, top * 0.5f, 0f), new Vector3(0.035f, top, 0.035f));
+                    if (Mathf.Repeat(x + r, 0.52f) < 0.13f) B(Gilt).Box(new Vector3(x, top + 0.05f, 0f), new Vector3(0.07f, 0.12f, 0.07f));
+                }
+                foreach (float y in new[] { 0.3f, spring * 0.45f, spring - 0.15f })
+                    B(Lead).Box(new Vector3(0f, y, 0f), new Vector3(r * 2f, 0.09f, 0.06f));
+                // Scrollwork band at mid height (rings), and the gilt centre stile.
+                for (float x = -r + 0.35f; x < r - 0.2f; x += 0.7f)
+                    ArchBandRing(B(Lead), new Vector3(x, spring * 0.45f + 0.35f, 0f), 0.22f, 0.27f, -0.02f, 0.04f, 10);
+                B(Gilt).Box(new Vector3(0f, spring * 0.5f, 0f), new Vector3(0.07f, spring, 0.08f));
+            }
+            else Panel(B(Lead), ArchOutline(0f, 0f, r * 2f, spring, ArcSeg(r)), 0.04f, 0.08f);
+            foreach (float yaw in new[] { 0f, 180f })
+            {
+                var n = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
+                InFrame(n * hd, yaw, () =>
+                {
+                    // Archivolt and keystone.
+                    ArchBand(B(W), 0f, spring, r, r + (main ? 0.5f : 0.38f), 0f, 0.28f, ArcSeg(r));
+                    B(W).Box(new Vector3(0f, spring + r + 0.3f, 0.3f), new Vector3(main ? 0.8f : 0.6f, main ? 1.0f : 0.8f, 0.6f));
+                    // Columns on pedestals: paired on the main gate.
+                    foreach (float sx in new[] { -1f, 1f })
+                    {
+                        var offs = main ? new[] { 0.55f, 1.3f } : new[] { 0.6f };
+                        foreach (float off in offs)
+                        {
+                            float x = sx * (r + off);
+                            B(W).Box(new Vector3(x, 0.85f, 0.4f), new Vector3(0.75f, 1.7f, 0.8f));
+                            if (detail < 2) InFrame(new Vector3(0f, 0f, 0.35f), 0f, () => Column(W, x, 1.7f, cornice - 2.0f, main ? 0.3f : 0.24f));
+                            else B(W).Box(new Vector3(x, (cornice + 1.7f) * 0.5f, 0.4f), new Vector3(0.55f, cornice - 1.7f, 0.55f));
+                        }
+                        // Garland panel between the column and the arch (raised tablet).
+                        if (detail == 0)
+                            B(W).Box(new Vector3(sx * (r + (main ? 0.92f : 0.3f)), spring + 0.6f, 0.12f), new Vector3(main ? 0.35f : 0.25f, 1.2f, 0.2f));
+                    }
+                    Cornice(W, -half - 0.2f, half + 0.2f, cornice - 0.6f, main ? 0.9f : 0.7f);
+                    // Crest: cartouche with the gilded medallion under an arched hood, scroll blocks and urns.
+                    float cw = main ? 3.2f : 2.2f, ch = main ? 2.4f : 1.7f, y0 = cornice + 0.25f;
+                    B(W).Box(new Vector3(0f, y0 + ch * 0.5f, 0.15f), new Vector3(cw, ch, 0.5f));
+                    ClockDialLike(new Vector3(0f, y0 + ch * 0.5f, 0.45f), main ? 0.75f : 0.5f);
+                    if (detail < 2)
+                    {
+                        ArchBand(B(W), 0f, y0 + ch, cw * 0.5f - 0.15f, cw * 0.5f + 0.15f, 0f, 0.45f, ArcSeg(cw * 0.5f));
+                        Urn(W, new Vector3(0f, y0 + ch + cw * 0.5f, 0.2f), main ? 0.9f : 0.65f);
+                        foreach (float sx in new[] { -1f, 1f })
+                        {
+                            // Stepped scroll blocks falling away from the cartouche.
+                            for (int k = 0; k < 3; k++)
+                            {
+                                float w = (main ? 0.9f : 0.6f) - k * 0.15f;
+                                B(W).Box(new Vector3(sx * (cw * 0.5f + w * 0.5f + k * w * 0.8f), y0 + ch * (0.62f - k * 0.22f), 0.15f), new Vector3(w, ch * 0.3f, 0.45f));
+                            }
+                            Urn(W, new Vector3(sx * (half - 0.35f), cornice + 0.2f, 0.25f), main ? 1.0f : 0.75f);
+                        }
+                    }
+                });
+            }
+            // Crest core between the two faces.
+            float cwi = main ? 3.2f : 2.2f, chi = main ? 2.4f : 1.7f;
+            B(W).Box(new Vector3(0f, cornice + 0.25f + chi * 0.5f, 0f), new Vector3(cwi, chi, depth));
+            B(Lead).Box(new Vector3(0f, cornice + 0.05f, 0f), new Vector3(half * 2f, 0.1f, depth));
+        }
+
         /// <summary>Gilded round medallion (frame and disc), as on the palace gates; no lettering.</summary>
         void ClockDialLike(Vector3 c, float r)
         {
