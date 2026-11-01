@@ -677,7 +677,7 @@ namespace Apex.Game
                 "R   Teamfunk   ·   1–6 Funk-Auswahl",
                 "P   Boxenstopp anfordern (gewählte Reifen)",
                 "Tab   Timing-Tower aufklappen   ·   M   Minimap",
-                "H   HUD-Variante   ·   F3   Telemetrie   ·   F2   Layout-Prüfung",
+                "H   HUD-Variante   ·   F3   Telemetrie   ·   F2   Layout-Prüfung   ·   F6   Leistungsmessung",
                 "Rücktaste   Auto zurücksetzen (Training/Zeitfahren)",
                 "F5 (2×)   Training neu starten   ·   F9   Screenshot",
                 "Esc / Start   Pause   ·   F1   diese Hilfe",

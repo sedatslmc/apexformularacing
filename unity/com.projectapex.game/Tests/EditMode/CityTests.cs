@@ -30,6 +30,41 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void TheDriverSeesTheBrakeBoardsAndCrestsStayReadable()
+        {
+            var (def, field, clear, _, city) = World();
+            var g = TrackGeometry.FromDefinition(def);
+            var setup = new VehicleSetup();
+            var line = new RacingLine(g, 1.45f, setup.downforceArea * setup.airDensity * 0.5f / setup.mass);
+            var plan = new TrackInfrastructurePlan(g, g.CornersFor(def), line.offsets, line.speed);
+            var sight = new DriverSight(g, clear, field, city);
+            // Every brake board shows at least 1.5 s before the car reaches it, at racing-line speed.
+            Assert.That(plan.brakeBoards.Count, Is.GreaterThan(10));
+            foreach (var b in plan.brakeBoards)
+            {
+                float need = line.speed[g.IndexAt(g.Wrap(b.distance))] * DriverSight.BoardWarning;
+                Assert.That(sight.BoardVisibleFrom(b, need), Is.GreaterThanOrEqualTo(need), $"{b.metres} m board of corner {b.corner} at {b.distance:F0} m shows too late");
+            }
+            sight.Survey();
+            int fast = 0, blindFast = 0;
+            float shortest = float.MaxValue, shortestFast = float.MaxValue;
+            foreach (var p in sight.profile)
+            {
+                shortest = MathF.Min(shortest, p.sight);
+                float v = line.speed[g.IndexAt(p.distance)];
+                if (v < 50f) continue;
+                fast++;
+                shortestFast = MathF.Min(shortestFast, p.sight);
+                if (p.by == DriverSight.Blocker.Crest && p.sight < 2f * v) blindFast++;
+            }
+            TestContext.WriteLine($"sight: shortest {shortest:F0} m (in slow corners between houses), above 180 km/h {shortestFast:F0} m; above 180 km/h {blindFast} of {fast} points with a crest closer than 2 s");
+            // The crests come from the vertical alignment (vertical_alignment.py): blind for a moment on the straights,
+            // never a wall in front of the driver. Measured 2026-11-01: 135 of 668, shortest at speed 60 m.
+            Assert.That(shortestFast, Is.GreaterThanOrEqualTo(50f), "road ahead hidden closer than 50 m at speed");
+            Assert.That(blindFast, Is.LessThan(fast / 4), "more blind crests at speed than the alignment had");
+        }
+
+        [Test]
         public void SpectatorZonesStandInGroupsAtTheBrakingCorners()
         {
             var (def, field, clear, data, city) = World();

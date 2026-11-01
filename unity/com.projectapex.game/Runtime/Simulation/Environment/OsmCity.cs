@@ -638,6 +638,20 @@ namespace Apex.Environment
         }
 
         /// <summary>True when (x, z) lies inside a building footprint or within `pad` of its bounding box edge.</summary>
+        /// <summary>Roof height (m, game frame) of the building over a point, or negative infinity outside all buildings.</summary>
+        public float BuildingTop(float x, float z)
+        {
+            float top = float.NegativeInfinity;
+            if (bins.TryGetValue(((int)MathF.Floor(x / BinSize), (int)MathF.Floor(z / BinSize)), out var list))
+                foreach (int i in list)
+                {
+                    var bb = boxes[i];
+                    if (x >= bb.X && x <= bb.Z && z >= bb.Y && z <= bb.W && Polygon.Contains(buildings[i].outline, x, z))
+                        top = MathF.Max(top, buildings[i].ground + buildings[i].height);
+                }
+            return top;
+        }
+
         public bool InsideBuilding(float x, float z, float pad)
         {
             if (!NearBuilding(x, z, pad)) return false;

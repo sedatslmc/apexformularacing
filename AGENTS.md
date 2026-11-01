@@ -29,12 +29,13 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
   (`validate` erzeugt den Bericht für `docs/HANDLING_VALIDATION.md`).
 - Fahrbahn/Kollision ohne Unity (`docs/BOSPHORUS_ROAD_FIX.md`): `cd build/Apex.Tuning && dotnet run -c Release -- surface|validate-road|limits|trace|clearance-buildings <track_id> …`
   (`clearance-buildings` listet die OSM-Gebäude, die die Strecke verdrängt: vor jeder Linienänderung prüfen).
-  Ufer: `coast-audit` (Uferhöhen) und `landmark-ground` (Gelände unter Wahrzeichen); Ufermodell `CoastalProfile`, Stand `docs/ISTANBUL_OVERHAUL.md`.
+  Ufer: `coast-audit` (Uferhöhen) und `landmark-ground` (Gelände unter Wahrzeichen); Cockpit-Sicht: `sight` (`DriverSight`); Ufermodell `CoastalProfile`, Stand `docs/ISTANBUL_OVERHAUL.md`.
   Fahrfläche nur über `RoadSurface` (Apex.Simulation) erzeugen: Unity-Mesh, MeshCollider, Prüfstand (`SurfaceRig`) und
   Validierung nutzen dieselben Dreiecke. Fahrzeug-Collider nur über `BodyCollider`.
 - Fahrzeuggeometrie ohne Unity: `cd build/Apex.ModelPreview && dotnet run -c Release -- <out_dir>`, dann
   `python3 tools/render_car_preview.py <out_dir>/car_lod0.obj <bild.png> 0,0.47,0.02` (mit Cockpit-Ansicht).
   Unity-Konvention: Vorderseite, wenn `cross(b−a, c−a)` zum Betrachter zeigt.
+- Leistungsmessung im Spiel: F6 bzw. Telemetrie-Knopf (`PerfCapture`, Bericht unter `persistentDataPath/perf`).
 - PBR-Inspektionsrenders (three.js, Headless-Chromium): `tools/carrender/README.md`.
 - UI-Mockups (HTML/CSS, Headless-Chromium): `OUT_DIR=docs/img node tools/uimock/shot.mjs tools/uimock/<seite>.html`. Neue UI = UI Toolkit im Code (`Runtime/Game/UI`), Modelle/Tokens in `Apex.Simulation` (`Apex.UI`); Plan und Prüfstatus: `docs/UI_UX_OVERHAUL.md`.
 - Prozedurale Fahrzeuggeometrie ist Platzhalter-Art und wird nicht als fotorealistisch bezeichnet.

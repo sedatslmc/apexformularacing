@@ -10,7 +10,9 @@
 - **Phase 4, erster Teil (Infrastruktur, Ufertypen, Gebäudedetails):** implementiert und getestet (Abschnitt 2c). Im Unity-Editor nicht geprüft.
 - **Phase 4, zweiter Teil (Gebäudefamilien):** implementiert und getestet (Abschnitt 2d). Im Unity-Editor nicht geprüft.
 - **Phase 5, Atmosphäre (Zuschauerzonen, Boote, Flaggenwind, Hörner und Möwen):** implementiert und getestet (Abschnitt 2e). Im Unity-Editor nicht geprüft, nicht gehört.
-- **Phase 6:** geplant (Abschnitt 4).
+- **Phase 6, Tests und Leistung:**
+  - Sichtprüfung, Budgetzählung und Messwerkzeug: implementiert und getestet (Abschnitt 2f).
+  - Frame-Zeiten auf PC und Mobil: **nicht gemessen.** Dafür braucht es Unity und echte Geräte; das Messwerkzeug liegt bereit.
 
 **Git-Checkpoint:** `main` bei Commit `8a3377a` (Merge von PR #25), dem Stand vor dieser Überarbeitung. Das lokale Tag `checkpoint-pre-istanbul-overhaul` ließ sich über den Proxy nicht hochladen.
 
@@ -240,11 +242,77 @@ Dazu kommen für alle Familien weiterhin die Fassadendetails aus Teil 1: Fallroh
   - Licht der goldenen Stunde
   - Tribünen-Ereignisse (Mexican Wave, Pyro)
 
+## 2f. Phase 6: Tests, Sichtachsen, Leistung
+### Fahrbarkeit und KI (Bestand, nach allen Änderungen grün)
+- **Tastatur-Runden:** `BosphorusGrandPrixKeyboardLapWithoutSpins` (trocken und nass, alle Fahrprofile).
+- **Fahrbahn:** `RoadSurfaceDriveTests` A–G auf der echten Collider-Fläche.
+- **KI:** `AIFieldRacesCleanlyOnRig("bosphorus_a")`, sechs KI-Autos über 3 Runden innerhalb der Strecke.
+- **Freiraum:** Zuschauer, TV-Türme, Boote und Fassadenteile werden gegen den Fahrraum geprüft (Phase-5-Tests).
+
+### Sicht aus dem Cockpit (`DriverSight`, neu)
+- **Messung:**
+  - Augenhöhe 0,95 m, Ziel 0,5 m, alle 10 m der Runde bis 300 m voraus.
+  - Verdecker sind die Fahrbahn selbst (Kuppen), das Gelände und die OSM-Gebäude hinter der Barriere.
+  - Bäume und das eigene Auto zählen nicht.
+  - Die 1,1-m-Mauer liegt absichtlich über dem Auge, wie auf einem echten Stadtkurs.
+- **Ergebnis `bosphorus_a`:**
+  - Die Sicht endet an 329 Punkten an einer Kuppe, an 181 an einem Haus und an 59 am Gelände; 248 Punkte haben 300 m freie Sicht.
+  - **Alle 19 Bremstafeln** sind mindestens 1,5 s vor dem Erreichen sichtbar. Am knappsten ist die 50-m-Tafel von Kurve 3: 140 m gesehen, 139 m nötig.
+  - **Kuppen bei voller Fahrt:** Über 180 km/h sieht der Fahrer an 135 von 668 Punkten weniger als 2 s voraus.
+    - Am kürzesten sind 70 m bei 342 km/h (2060–2090 m, Kuppe bei 2120 m) und 60 m vor Kurve 13 (7300 m, Gefälle Richtung Ortaköy).
+    - Vor dieser Überarbeitung (`main` 8a3377a) waren es 130 Punkte mit denselben Tiefstwerten. Die Kuppen stammen aus dem Höhenentwurf (`vertical_alignment.py`), nicht aus der Uferkorrektur.
+    - Hinter der Kuppe bei 2120 m folgen noch rund 450 m Gerade bis zur ersten Bremstafel. Die Kuppe ist kurz blind, verdeckt aber keine Kurve.
+- **Test `TheDriverSeesTheBrakeBoardsAndCrestsStayReadable`:**
+  - Jede Bremstafel ist rechtzeitig sichtbar.
+  - Bei Tempo ist die Sicht nie kürzer als 50 m.
+  - Weniger als ein Viertel der schnellen Punkte sind blind.
+  - In langsamen Kurven zwischen Häusern sinkt die Sicht auf 40 m; das ist dort normal.
+- **Werkzeug:** `dotnet run -c Release -- sight bosphorus_a` (in `build/Apex.Tuning`).
+
+### Geometrie-Budget je Qualitätsstufe (statisch, ohne Unity)
+Gezählt mit `Apex.ModelPreview --environment --real --quality q`. Das ist die gesamte Szene ohne LOD-Wechsel und ohne Culling, also eine obere Grenze. Im Spiel zeichnen LOD-Gruppen und Sichtkegel deutlich weniger.
+
+| Stufe | Bäume | Fassadenrelief (Dreiecke) | Stadt LOD0 | Szene gesamt (Vorschau-OBJ) |
+|---|---|---|---|---|
+| 0 Mobil | 7 728 | 0 | 0,86 Mio | 1,94 Mio |
+| 1 Mittel | 12 972 | 0,58 Mio | 0,91 Mio | 2,37 Mio |
+| 2 Hoch | 16 481 | 0,88 Mio | 0,99 Mio | 2,69 Mio |
+| 3 Extrem | 16 481 | 0,88 Mio | 0,99 Mio | 2,69 Mio |
+
+- **Instanzierte Figuren** (nicht im OBJ):
+  - Mobil hat keine Zuschauer.
+  - Bei Qualität 2 sind es rund 4500 Zuschauer: Ortaköy plus 6 Zonen mit 3273.
+  - Dazu kommen 400–700 Fußgänger und 150–260 Fahrzeuge (Qualität 1).
+- **Auffällig für Mobil:**
+  - Die Paläste (Marmor 0,34 Mio, Blei 0,14 Mio LOD0) sind auf allen Stufen gleich.
+  - Die Bäume machen auf Mobil 0,57 Mio Dreiecke aus, wenn sie als Meshes gezählt werden.
+  - Ob das auf einem Mittelklasse-Handy 30 fps hält, zeigt erst eine Messung.
+
+### Leistungsmessung im Spiel (`PerfCapture`, neu)
+- **Starten:** im Rennen oder Training **F6** drücken. Auf Touch-Geräten im Telemetrie-Fenster (Einstellungen → Telemetrie) auf **LEISTUNG MESSEN (1 RUNDE)** tippen.
+- **Ablauf:** Die Messung zeichnet eine Runde auf, höchstens 180 s. Erneutes Drücken bricht ab und speichert, was bis dahin da ist.
+- **Dateien:** `perf/perf_<Datum>.csv` (jedes Bild: ms, Streckenposition, Draw Calls, SetPass, Dreiecke) und `.txt` (Bericht) unter `Application.persistentDataPath`. Unter Windows ist das `%USERPROFILE%\AppData\LocalLow\<Firma>\<Produkt>\perf`.
+- **Bericht** (`FrameStats`):
+  - Mittelwert, Median, P95, P99 und Maximum der Bildzeit, 1-%-Tief und Ruckler.
+  - Anteil im Ziel: 16,7 ms auf PC, 33,3 ms auf Mobil.
+  - Die fünf langsamsten 250-m-Abschnitte der Runde.
+  - Gerät, Grafikstufe, Umgebungsstufe und Kamera.
+- **Render-Zähler:** gibt Unity nur im Editor und in Development-Builds aus, sonst steht „nicht verfügbar“ im Bericht.
+- **Vorschlag für die Messreihe** (du in Unity):
+  - Bosphorus GP, Zeitfahren, Verfolger- und Cockpit-Kamera.
+  - PC auf Hoch und Extrem, Handy auf Mobil.
+  - Bitte jeweils die `.txt` zurückgeben, dann kann ich gezielt an den langsamsten Abschnitten arbeiten.
+
+### Ehrlich
+- **Keine Frame-Zeiten:** Es gibt keine gemessene Frame-Zeit und keine fps-Zahl. Alles oben ist Geometrie und Logik ohne GPU.
+- **Sicht vereinfacht:** Die Sichtprüfung kennt keine Bäume und kein Fahrzeug-Cockpit. Kopfhöhe und Halo-Bügel verändern das echte Bild.
+
 ## 3. Werkzeuge
 ```sh
 cd build/Apex.Tuning
 dotnet run -c Release -- coast-audit bosphorus_a              # Uferhöhen, Zellen über 3 m
 dotnet run -c Release -- landmark-ground bosphorus_a [namen]  # Gelände unter Wahrzeichen-Grundrissen
+dotnet run -c Release -- sight bosphorus_a                    # Sicht aus dem Cockpit, Bremstafeln, Kuppen
 cd build/Apex.ModelPreview
 dotnet run -c Release -- <out> --environment --real --quality 2 --crop x,z,radius   # Ausschnitt als OBJ
 cd tools/carrender && APEX_PAGE=env.html APEX_VIEWS='name|eye|target|fov|&tod=golden' node render.mjs <out>/environment.obj <prefix>
@@ -259,4 +327,4 @@ cd tools/carrender && APEX_PAGE=env.html APEX_VIEWS='name|eye|target|fov|&tod=go
    - Prüfung aus Verfolger-, Cockpit- und TV-Sicht (Vorschau; Unity-Prüfung durch dich).
 4. **Übertragung:** Gebäudefamilien mit Balkonen, Erkern, Klimageräten und Markisen; Flaggenverteilung; Ufertypen (historisch, urban, natürlich); Infrastruktur-Abgleich; Sektor-Charaktere.
 5. **Atmosphäre:** Zuschauerzonen, Boote, Flaggenwind und Geräusche umgesetzt (Abschnitt 2e). Offen: Licht der goldenen Stunde, Kielwasser.
-6. **Tests und Leistung:** Fahrbarkeit, KI, Sichtachsen, Profiling in Unity auf PC und Mobil (nur mit Unity-Messung als Zahl).
+6. **Tests und Leistung:** Fahrbarkeit, KI, Sichtachsen und Messwerkzeug umgesetzt (Abschnitt 2f). Offen: Messreihe in Unity auf PC und Mobil, danach gezielte Optimierung.

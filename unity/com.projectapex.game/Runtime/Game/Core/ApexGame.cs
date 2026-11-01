@@ -676,8 +676,30 @@ namespace Apex.Game
             if (sm.Current == GameState.Grid) sm.TryTransition(GameState.Driving);
         }
 
+        readonly PerfCapture perf = new PerfCapture();
+
+        /// <summary>Starts a one-lap performance capture, or stops a running one and writes it.</summary>
+        void TogglePerfCapture()
+        {
+            if (Race == null) return;
+            if (perf.Running)
+            {
+                perf.Stop(PerfHeader());
+                ShowMessage(perf.LastFile != null ? "Leistungsmessung gespeichert (abgebrochen)" : "Leistungsmessung verworfen", Color.white, 2.5f, false);
+                return;
+            }
+            perf.Start(Race.Player.raw, Race.Circuit.Geometry.Length);
+            ShowMessage("Leistungsmessung läuft: eine Runde", Color.white, 2f, false);
+        }
+
+        string PerfHeader() =>
+            $"Project Apex – Leistungsmessung {DateTime.Now:yyyy-MM-dd HH:mm}\n" +
+            $"Strecke: {Config.trackId} · Grafik: {GraphicsQuality.Resolve(Settings.graphicsTier)} · Umgebung: {Settings.environmentDetail} · Kamera: {RaceCamera.ModeNames[Settings.cameraMode]} · " +
+            $"Unity {Application.unityVersion}{(Application.isEditor ? " (Editor)" : Debug.isDebugBuild ? " (Development)" : "")}";
+
         void EndSession()
         {
+            if (perf.Running) perf.Stop(PerfHeader());
             if (world != null) Destroy(world);
             world = null;
             Race = null;
@@ -975,6 +997,9 @@ namespace Apex.Game
             if (input.CameraPressed) ShowMessage(RaceCamera.ModeNames[Settings.cameraMode = raceCam.Cycle()] + "-Kamera", Color.white, 1f, false);
             if (input.ResetPressed) Race.ResetPlayerToTrack();
             if (input.TelemetryPressed) showTelemetry = !showTelemetry;
+            if (input.PerfPressed) TogglePerfCapture();
+            if (perf.Running && perf.Tick(Time.unscaledDeltaTime, Race.Player.raw, PerfHeader()))
+                ShowMessage("Leistungsmessung gespeichert" + (perf.LastFile != null ? "" : " – Fehler, siehe Log"), Color.white, 2.5f, false);
             if (input.TowerPressed) towerExpanded = !towerExpanded;
             if (input.MapPressed) showMap = !showMap;
             if (input.HudPresetPressed)

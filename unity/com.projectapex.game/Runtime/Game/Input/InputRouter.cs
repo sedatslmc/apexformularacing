@@ -43,6 +43,8 @@ namespace Apex.Game
         public bool HudPresetPressed { get; private set; }
         public bool HelpPressed { get; private set; }
         public bool LayoutDebugPressed { get; private set; }
+        /// <summary>F6: start or stop a performance capture (PerfCapture).</summary>
+        public bool PerfPressed { get; private set; }
         public bool RestartPressed { get; private set; }
         public bool ScreenshotPressed { get; private set; }
         public bool NavUp { get; private set; }
@@ -145,6 +147,7 @@ namespace Apex.Game
             HudPresetPressed = kb != null && kb.hKey.wasPressedThisFrame;
             HelpPressed = kb != null && kb.f1Key.wasPressedThisFrame;
             LayoutDebugPressed = kb != null && kb.f2Key.wasPressedThisFrame;
+            PerfPressed = kb != null && kb.f6Key.wasPressedThisFrame;
             RestartPressed = kb != null && kb.f5Key.wasPressedThisFrame;
             ScreenshotPressed = kb != null && kb.f9Key.wasPressedThisFrame;
             NavUp = (kb != null && kb.upArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame);
