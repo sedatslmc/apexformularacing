@@ -218,7 +218,8 @@ namespace Apex.Tests
             var def = TestData.Circuit(trackId);
             var g = TrackGeometry.FromDefinition(def);
             var setup = new VehicleSetup();
-            var line = new RacingLine(g, 1.45f, setup.downforceArea * setup.airDensity * 0.5f / setup.mass);
+            var perf = CarPerformance.For(setup);   // as RaceController: the AI plans with the car's real grip
+            var line = perf.Line(g);
             var rules = new RaceRules { type = SessionType.Race, laps = 3 };
             var sectors = Array.ConvertAll(def.sectorFractions, f => f * g.Length);
             var dir = new RaceDirector(rules, g.Length, sectors, 3);
@@ -268,6 +269,10 @@ namespace Apex.Tests
                         maxBeyond = Math.Max(maxBeyond, b);
                     }
                 }
+                // Slipstream and dirty air between the cars (Slipstream), as RaceController.ApplyWakes does.
+                var wp = new System.Numerics.Vector3[n]; var wf = new System.Numerics.Vector3[n]; var ws = new float[n];
+                for (int i = 0; i < n; i++) { wp[i] = rigs[i].Position; wf[i] = rigs[i].Forward; ws[i] = rigs[i].u; }
+                for (int i = 0; i < n; i++) rigs[i].sim.wake = Slipstream.For(i, wp, wf, ws);
                 for (int i = 0; i < n; i++)
                 {
                     var sim = rigs[i].sim;

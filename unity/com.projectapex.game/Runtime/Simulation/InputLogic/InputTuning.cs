@@ -29,5 +29,15 @@ namespace Apex.InputLogic
             float a = ApexMath.Clamp01(System.MathF.Abs(x));
             return System.MathF.Sign(x) * System.MathF.Pow(a, StickExponent);
         }
+
+        /// <summary>Stick curve with the player's "Lenkempfindlichkeit" (0.5 .. 1.5): less sensitive = a softer centre
+        /// (exponent up to 1.7), more sensitive = closer to linear (down to 1.0). Full lock stays at full deflection.</summary>
+        public static float StickSteer(float x, float sensitivity)
+        {
+            float s = ApexMath.Clamp(sensitivity, 0.5f, 1.5f);
+            float exponent = s <= 1f ? ApexMath.Lerp(1.7f, StickExponent, (s - 0.5f) * 2f) : ApexMath.Lerp(StickExponent, 1f, s - 1f);
+            float a = ApexMath.Clamp01(System.MathF.Abs(x));
+            return System.MathF.Sign(x) * System.MathF.Pow(a, exponent);
+        }
     }
 }

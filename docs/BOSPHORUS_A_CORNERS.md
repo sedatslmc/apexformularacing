@@ -69,7 +69,7 @@ Die Bosporus-Gerade bleibt in jedem Fall unverändert.
 | Vorschlag | Wirkung | Aufwand / Risiko |
 |---|---|---|
 | **A. T10 weiter öffnen** (Radius ~+30 %, Scheitel ~75 km/h) | Komplex Bayıldım flüssiger, weniger Lenkbedarf, besserer Ausgang in die Kabataş-Passage | Liegt auf realen Straßen. Mehr Radius erfordert einen anderen Straßenzug oder eine Platzfläche. Neu-Erzeugung (`build_track_a.py`), Barrieren und Tests A–G neu prüfen. |
-| **B. Windschatten- bzw. Überholhilfe-Zonen** auf der Bosporus-Geraden (→ T1) und der Barbaros-Abfahrt (→ T6) | Macht die zwei längsten Bremszonen zu planbaren Überholstellen | Setzt Feature #3 „Windschatten / Dirty Air“ voraus (noch offen). Keine Layoutänderung. |
+| **B. Windschatten- bzw. Überholhilfe-Zonen** auf der Bosporus-Geraden (→ T1) und der Barbaros-Abfahrt (→ T6) | Macht die zwei längsten Bremszonen zu planbaren Überholstellen | Windschatten / Dirty Air ist seit 2026-11-01 umgesetzt (`docs/PHYSICS_MODEL.md`). Eine zusätzliche Überholhilfe (DRS-artig) wäre ein eigenes Feature. Keine Layoutänderung. |
 | **C. T5 Bremszone verlängern** (Palanga 2 etwas enger, damit die Ausfahrt früher gerade wird) | +100–150 m Anlauf vor Balmumcu, vierte Überholstelle | Größere Layoutänderung an realer Straßenführung |
 | **D. Nichts ändern** | Charakter eines echten Stadtkurses mit einer technischen Schlüsselstelle (Bayıldım) | – |
 

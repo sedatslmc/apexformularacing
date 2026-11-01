@@ -91,8 +91,10 @@ namespace Apex.Game
             var g = ci.Geometry;
             ci.Corners = g.CornersFor(def);
             // Racing line (for braking rubber and protection placement) and the infrastructure layout.
-            var refSetup = new VehicleSetup();
-            var line = new Apex.AI.RacingLine(g, 1.45f, refSetup.downforceArea * refSetup.airDensity * 0.5f / refSetup.mass);
+            // Fixed layout reference (CarPerformance.LayoutReference), not the car's grip: tuning the car must not move
+            // the kerbs, rubber and brake boards.
+            var refPerf = Apex.Vehicle.CarPerformance.LayoutReference(new VehicleSetup());
+            var line = new Apex.AI.RacingLine(g, refPerf.mu, refPerf.downforcePerMass);
             var plan = new TrackInfrastructurePlan(g, ci.Corners, line.offsets, line.speed);
             ci.Infrastructure = plan;
             TrackInfrastructureBuilder.EnsureMaterials();

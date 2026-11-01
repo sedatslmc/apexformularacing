@@ -89,8 +89,13 @@ namespace Apex.Vehicle
         public struct Capacity
         {
             public float kmh, maxLateralG, frontUse, rearUse, steerDeg, betaDeg;
+            /// <summary>Tyre force use (curve value of the combined slip, 1 = peak force) of each axle at the limit.</summary>
+            public float frontForce, rearForce;
             /// <summary>Front over rear normalised slip at the limit: &gt; 1 understeer, &lt; 1 oversteer.</summary>
             public float Balance => frontUse / MathF.Max(rearUse, 1e-3f);
+            /// <summary>Front over rear force use: the axle that limits the car. Slip use overstates understeer because
+            /// the tyre curve is flat near the peak (69 % of the peak slip already gives ~95 % of the force).</summary>
+            public float ForceBalance => frontForce / MathF.Max(rearForce, 1e-3f);
         }
 
         /// <summary>
@@ -122,6 +127,15 @@ namespace Apex.Vehicle
                     cap.maxLateralG = mean / 9.81f;
                     cap.frontUse = 0.5f * (MathF.Abs(sim.wheels[0].slipAngle) + MathF.Abs(sim.wheels[1].slipAngle)) / sim.tireFront.slipAnglePeak;
                     cap.rearUse = 0.5f * (MathF.Abs(sim.wheels[2].slipAngle) + MathF.Abs(sim.wheels[3].slipAngle)) / sim.tireRear.slipAnglePeak;
+                    float Force(int i)
+                    {
+                        var t = sim.TireFor(sim.wheels[i]);
+                        float s = t.CombinedSlip(sim.wheels[i].slipRatio, sim.wheels[i].slipAngle);
+                        // Past the peak the force falls again; count it as "at the limit" (1) for the balance.
+                        return s >= 1f ? 1f : t.Curve(s);
+                    }
+                    cap.frontForce = 0.5f * (Force(0) + Force(1));
+                    cap.rearForce = 0.5f * (Force(2) + Force(3));
                     cap.steerDeg = MathF.Abs(sim.SteerAngle) * ApexMath.Rad2Deg;
                     cap.betaDeg = MathF.Abs(Beta(r)) * ApexMath.Rad2Deg;
                 }
@@ -352,7 +366,7 @@ namespace Apex.Vehicle
             foreach (float kmh in new[] { 80f, 150f, 250f })
             {
                 var c = CorneringCapacity(kmh);
-                sb.AppendLine($"  cornering {kmh,3:F0} km/h: max lateral {c.maxLateralG:F2} g, balance front/rear slip use {c.frontUse:F2}/{c.rearUse:F2} (= {c.Balance:F2}), road-wheel angle {c.steerDeg:F1}°, slip angle {c.betaDeg:F1}°");
+                sb.AppendLine($"  cornering {kmh,3:F0} km/h: max lateral {c.maxLateralG:F2} g, balance front/rear slip use {c.frontUse:F2}/{c.rearUse:F2} (= {c.Balance:F2}), force use {c.frontForce:F2}/{c.rearForce:F2} (= {c.ForceBalance:F2}), road-wheel angle {c.steerDeg:F1}°, slip angle {c.betaDeg:F1}°");
             }
             foreach (float kmh in new[] { 80f, 150f, 250f })
             {

@@ -129,7 +129,8 @@ namespace Apex.Tests
             }
             sim.PreStep(Dt, 70f, 70f);
             sim.Step(Dt);
-            Assert.That(sim.AeroBalance, Is.GreaterThan(setup.aeroBalanceFront + 0.01f));
+            // Weaker since 2026-11 (aeroRakeSensitivity 0.3): the direction stays, the size is a third.
+            Assert.That(sim.AeroBalance, Is.GreaterThan(setup.aeroBalanceFront + 0.004f));
         }
 
         [Test]
