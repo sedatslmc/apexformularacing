@@ -446,13 +446,74 @@ if (Array.IndexOf(args, "--environment") >= 0)
         var rs = new Apex.Tracks.RoadSurface(g, def, pl.kerbs.left, pl.kerbs.right, pl.kerbs.height);
         osm = new Apex.Environment.OsmCity(data, field, new Apex.Tracks.TrackClearance(rs), def, null, quality);
         realRadius = data.radius;
-        foreach (var b in osm.buildings) EnvironmentGeometry.FootprintBuilding(B, b, true);
+        // Palaces, gates and the clock tower as the game builds them (BuildClassical), the rest as footprint blocks.
+        void PutLg(LandmarkGeometry lg, Vector3 pos, float yawDeg)
+        {
+            lg.MasonryUVs();
+            float ya = yawDeg * Mathf.Deg2Rad, cy = MathF.Cos(ya), sy = MathF.Sin(ya);
+            foreach (var kv in lg.parts) B(kv.Key).Append(kv.Value, v => new Vector3(v.x * cy + v.z * sy + pos.x, v.y + pos.y, -v.x * sy + v.z * cy + pos.z));
+        }
+        foreach (var b in osm.buildings)
+        {
+            if (b.classical == Apex.Environment.OsmCity.NotClassical || b.classical == Apex.Environment.OsmCity.RowHouse || b.classical == Apex.Environment.OsmCity.BrickShell)
+            {
+                EnvironmentGeometry.FootprintBuilding(B, b, true);
+                continue;
+            }
+            var cc = System.Numerics.Vector2.Zero;
+            foreach (var q in b.outline) cc += q;
+            cc /= b.outline.Count;
+            var local = new List<Vector2>();
+            foreach (var q in b.outline) local.Add(new Vector2(q.X - cc.X, q.Y - cc.Y));
+            var lg = new LandmarkGeometry(0);
+            if (b.classical == Apex.Environment.OsmCity.ClockTower) { lg.ClockTowerDetailed(); PutLg(lg, new Vector3(cc.X, b.ground + 0.6f, cc.Y), 0f); continue; }
+            if (b.classical == Apex.Environment.OsmCity.Gate)
+            {
+                float best = 0f, gy = 0f;
+                for (int i = 0; i < local.Count; i++) { var dd = local[(i + 1) % local.Count] - local[i]; if (dd.magnitude > best) { best = dd.magnitude; gy = Mathf.Atan2(dd.x, dd.y) * Mathf.Rad2Deg - 90f; } }
+                float minA = float.MaxValue, maxA = float.MinValue, minB = float.MaxValue, maxB = float.MinValue;
+                float ga = gy * Mathf.Deg2Rad;
+                foreach (var q in local) { float u = q.x * MathF.Cos(ga) - q.y * MathF.Sin(ga), w = q.x * MathF.Sin(ga) + q.y * MathF.Cos(ga); minA = MathF.Min(minA, u); maxA = MathF.Max(maxA, u); minB = MathF.Min(minB, w); maxB = MathF.Max(maxB, w); }
+                lg.GateMonument(maxA - minA, maxB - minB, b.height);
+                PutLg(lg, new Vector3(cc.X, b.ground, cc.Y), gy);
+                continue;
+            }
+            lg.ClassicalBuilding(local, b.height, 0, b.classical == Apex.Environment.OsmCity.PalaceWing);
+            if (b.name != null && b.name.Contains("Muayede")) lg.HallDome(b.height, 11f);
+            PutLg(lg, new Vector3(cc.X, b.ground, cc.Y), 0f);
+        }
+        // The waterfront as the game builds it: quays, promenades, Dolmabahçe's palace quay and sea gates.
+        {
+            var clearW = new Apex.Tracks.TrackClearance(rs);
+            var wfp = new Apex.Environment.Waterfront(field, clearW, (x, z) => osm.InsideBuilding(x, z, 0f), osm.PalaceFront.HasPalace ? osm.PalaceFront.OnFrontage : null);
+            if (osm.PalaceFront.HasPalace) osm.PalaceFront.PlaceGates(wfp);
+            EnvironmentGeometry.WaterfrontEdge(B, wfp, 2);
+            foreach (var gt in osm.PalaceFront.gates)
+            {
+                var lg = new LandmarkGeometry(0);
+                lg.SeaGate(gt.main);
+                PutLg(lg, new Vector3(gt.position.X, field.Height(gt.position.X, gt.position.Y), gt.position.Y), Mathf.Atan2(gt.seaward.X, gt.seaward.Y) * Mathf.Rad2Deg);
+            }
+            Console.WriteLine($"waterfront: palace quay {wfp.palaceLength:F0} m, {osm.PalaceFront.gates.Count} sea gates");
+        }
         Console.WriteLine($"real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees");
         // Street-front relief for the whole city (counted), and a window around --frontage x,z written as OBJ.
         var orn = new Dictionary<string, MeshBuilder>();
         MeshBuilder O(string k) { if (!orn.TryGetValue(k, out var m)) orn[k] = m = new MeshBuilder(); return m; }
         int fronts = 0;
         foreach (var b in osm.buildings) { EnvironmentGeometry.FacadeOrnaments(O, b, 2); if (b.front != null && Array.IndexOf(b.front, true) >= 0) fronts++; }
+        // With --crop: street-front relief (balconies, cumba, awnings, AC units, hanging flags) inside the crop goes into the OBJ.
+        int cri = Array.IndexOf(args, "--crop");
+        if (cri >= 0 && cri + 1 < args.Length)
+        {
+            var cr0 = args[cri + 1].Split(',');
+            float qx = float.Parse(cr0[0], CultureInfo.InvariantCulture), qz = float.Parse(cr0[1], CultureInfo.InvariantCulture), qr = float.Parse(cr0[2], CultureInfo.InvariantCulture);
+            foreach (var b in osm.buildings)
+            {
+                var o0 = b.outline[0];
+                if ((o0.X - qx) * (o0.X - qx) + (o0.Y - qz) * (o0.Y - qz) < qr * qr) EnvironmentGeometry.FacadeOrnaments(B, b, 2);
+            }
+        }
         int ornTris = 0; foreach (var kv in orn) ornTris += kv.Value.TriangleCount;
         Console.WriteLine($"street fronts: {fronts} buildings, ornament triangles (level 2): {ornTris}");
         foreach (var kv in orn) Console.WriteLine($"  ornaments {kv.Key}: {kv.Value.TriangleCount}");
@@ -564,7 +625,7 @@ if (Array.IndexOf(args, "--environment") >= 0)
     float cx = (field.MinX + field.MaxX) * 0.5f, cz = (field.MinZ + field.MaxZ) * 0.5f;
     EnvironmentGeometry.FarTerrain(B(EnvironmentGeometry.FarGround), field, cx, cz, 6400f);
     Console.WriteLine($"  far terrain triangles: {parts[EnvironmentGeometry.FarGround].TriangleCount}");
-    EnvironmentGeometry.QuayWall(B(EnvironmentGeometry.Quay), def.shoreline, true);
+    if (osm == null) EnvironmentGeometry.QuayWall(B(EnvironmentGeometry.Quay), def.shoreline, true);
     EnvironmentGeometry.QuayWall(B(EnvironmentGeometry.Quay), def.farShoreline, false);
     // Road ribbon.
     for (int i = 0; i < g.Count; i++)
@@ -738,8 +799,12 @@ if (Array.IndexOf(args, "--environment") >= 0)
     float qibla = (151f + north) % 360f;
     { var lg = new LandmarkGeometry(); lg.Bridge(LP("bridge_eu"), LP("bridge_as"), -0.4f); Put(lg, Vector3.zero, 0f); }
     { var lg = new LandmarkGeometry(); lg.OrtakoyMosque(); lg.B(LandmarkGeometry.Stone).Box(new Vector3(0, -3, 0), new Vector3(46, 6, 46)); var p = LP("ortakoy_mosque"); p.y = MathF.Max(p.y, 1.6f); Put(lg, p, qibla); }
-    { var lg = new LandmarkGeometry(); lg.Palace(284f, 48f, 18f, true); Put(lg, Inland(LP("dolmabahce"), -1, 40), ShoreYaw(def.shoreline, def.FindLandmark("dolmabahce").north)); }
-    { var lg = new LandmarkGeometry(1); lg.Palace(160f, 30f, 14f, false); Put(lg, Inland(LP("ciragan"), -1, 28), ShoreYaw(def.shoreline, def.FindLandmark("ciragan").north)); }
+    if (osm == null)
+    {
+        // Schematic palaces only without the OSM city (with --real the footprint models above stand there).
+        { var lg = new LandmarkGeometry(); lg.Palace(284f, 48f, 18f, true); Put(lg, Inland(LP("dolmabahce"), -1, 40), ShoreYaw(def.shoreline, def.FindLandmark("dolmabahce").north)); }
+        { var lg = new LandmarkGeometry(1); lg.Palace(160f, 30f, 14f, false); Put(lg, Inland(LP("ciragan"), -1, 28), ShoreYaw(def.shoreline, def.FindLandmark("ciragan").north)); }
+    }
     { var lg = new LandmarkGeometry(1); lg.Palace(65f, 40f, 15f, false); Put(lg, Inland(LP("beylerbeyi"), 1, 30), ShoreYaw(def.farShoreline, def.FindLandmark("beylerbeyi").north)); }
     { var lg = new LandmarkGeometry(1); lg.GalataTower(63f); Put(lg, LP("galata"), 0f); }
     { var lg = new LandmarkGeometry(1); lg.MaidensTower(); var p = LP("maidens_tower"); p.y = -0.4f; Put(lg, p, 90f + north); }

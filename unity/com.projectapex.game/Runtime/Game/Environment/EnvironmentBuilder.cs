@@ -108,7 +108,7 @@ namespace Apex.Game
                 city.trees.AddRange(osm.trees);
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
             }
-            Safe("waterfront edge", () => BuildWaterEdge(root.transform, ci, osm));
+            Safe("waterfront edge", () => BuildWaterEdge(root.transform, env, ci, osm));
             Safe("generic city", () => BuildCity(root.transform, city));
             Safe("trees", () => BuildTrees(root.transform, env, city));
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
@@ -242,7 +242,7 @@ namespace Apex.Game
         /// Quays and promenade along the real coastline (Waterfront), chunked so distant pieces cull; the promenade
         /// keeps clear of buildings and of the landmark terraces (Ortaköy Mosque).
         /// </summary>
-        static void BuildWaterEdge(Transform root, CircuitInstance ci, OsmCity osm)
+        static void BuildWaterEdge(Transform root, EnvironmentInstance env, CircuitInstance ci, OsmCity osm)
         {
             var def = ci.Definition;
             var mosque = def.FindLandmark("ortakoy_mosque");
@@ -252,7 +252,10 @@ namespace Apex.Game
                 if (mosque != null && (x - mosque.east) * (x - mosque.east) + (z - mosque.north) * (z - mosque.north) < 45f * 45f) return true;
                 return false;
             }
-            var wf = new Waterfront(ci.Terrain, ci.Clearance, Blocked);
+            System.Func<float, float, bool> palaceFront = null;
+            if (osm != null && osm.PalaceFront.HasPalace) palaceFront = osm.PalaceFront.OnFrontage;
+            var wf = new Waterfront(ci.Terrain, ci.Clearance, Blocked, palaceFront);
+            if (palaceFront != null) osm.PalaceFront.PlaceGates(wf);
             var edgeRoot = new GameObject("Waterfront").transform;
             edgeRoot.SetParent(root, false);
             const float size = 256f;
@@ -261,7 +264,7 @@ namespace Apex.Game
             Waterfront Bucket(float x, float z)
             {
                 var key = (Mathf.FloorToInt(x / size), Mathf.FloorToInt(z / size));
-                if (!chunks.TryGetValue(key, out var b)) chunks[key] = b = Waterfront.Empty();
+                if (!chunks.TryGetValue(key, out var b)) { chunks[key] = b = Waterfront.Empty(); b.openings.AddRange(wf.openings); }
                 return b;
             }
             foreach (var sgm in wf.segments) Bucket(sgm.a.X, sgm.a.Y).segments.Add(sgm);
@@ -276,7 +279,23 @@ namespace Apex.Game
                 lg.SetLODs(new[] { new LOD(0.01f, new Renderer[] { go.GetComponent<Renderer>() }) });
                 lg.RecalculateBounds();
             }
-            Debug.Log($"[Apex] Waterfront: {wf.quayLength / 1000f:F1} km quay, {wf.promenadeLength / 1000f:F1} km promenade, {wf.bollards.Count} bollards, {wf.lamps.Count} lamps.");
+            // Dolmabahçe's five sea gates on the palace quay, lit warm from the quay at night (High and above).
+            if (palaceFront != null)
+                for (int i = 0; i < osm.PalaceFront.gates.Count; i++)
+                {
+                    var g = osm.PalaceFront.gates[i];
+                    var pos = new Vector3(g.position.X, ci.Terrain.Height(g.position.X, g.position.Y), g.position.Y);
+                    float yaw = Mathf.Atan2(g.seaward.X, g.seaward.Y) * Mathf.Rad2Deg;
+                    bool main = g.main;
+                    PlaceDetailed(edgeRoot, "dolmabahce_sea_gate_" + i, "Dolmabahçe " + g.name, main ? 11f : 8.5f, lg => lg.SeaGate(main), pos, yaw, PalaceLods);
+                    if (Quality >= 2)
+                    {
+                        var sea = new Vector3(g.seaward.X, 0f, g.seaward.Y);
+                        Floodlight(edgeRoot, env, pos + sea * 6f + Vector3.up * 0.4f, pos + Vector3.up * (main ? 6f : 4.5f), new Color(1f, 0.82f, 0.6f), EsmaWashIntensity, 50f);
+                    }
+                }
+            Debug.Log($"[Apex] Waterfront: {wf.quayLength / 1000f:F1} km quay, {wf.promenadeLength / 1000f:F1} km promenade, {wf.palaceLength / 1000f:F2} km palace quay, " +
+                $"{(palaceFront != null ? osm.PalaceFront.gates.Count : 0)} sea gates, {wf.bollards.Count} bollards, {wf.lamps.Count} lamps.");
         }
 
         // --- City -------------------------------------------------------------------------------

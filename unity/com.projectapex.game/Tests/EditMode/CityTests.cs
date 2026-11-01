@@ -324,6 +324,76 @@ namespace Apex.Tests
             Assert.That(CoastalProfile.Limit(30f, 200f, 100f, 8f, 50f), Is.EqualTo(30f), "inland of the road: the real hill");
         }
 
+        [Test]
+        public void DolmabahceHasItsPalaceQuayFiveSeaGatesAndAnOpenForecourt()
+        {
+            var (def, field, clear, data, city) = World();
+            var front = city.PalaceFront;
+            Assert.That(front.HasPalace, Is.True);
+            var wf = new Waterfront(field, clear, (x, z) => city.InsideBuilding(x, z, 0f), front.OnFrontage);
+            front.PlaceGates(wf);
+            TestContext.WriteLine($"palace quay {wf.palaceLength:F0} m, gates {front.gates.Count}");
+            // A walled quay along the whole palace front (the real one is ~600 m incl. the gardens; the wings ~280 m).
+            Assert.That(wf.palaceLength, Is.InRange(250f, 700f));
+            foreach (var sg in wf.segments)
+                if (sg.palace) Assert.That(sg.promenade, Is.False, "no public promenade on the palace quay");
+            foreach (var l in wf.lamps) Assert.That(front.OnFrontage(l.foot.X, l.foot.Z), Is.False, "no promenade lamps on the palace quay");
+            // Five sea gates; the main one at the OSM node on the ceremonial hall's axis.
+            Assert.That(front.gates.Count, Is.EqualTo(5));
+            var main = front.gates.FindAll(g => g.main);
+            Assert.That(main.Count, Is.EqualTo(1));
+            Assert.That(Vector2.Distance(main[0].position, PalaceWaterfront.MainSeaGate), Is.LessThan(25f), "main gate at the OSM sea gate");
+            for (int i = 0; i < front.gates.Count; i++)
+            {
+                var g = front.gates[i];
+                TestContext.WriteLine($"{g.name} at {g.position.X:F0},{g.position.Y:F0} {(g.surveyed ? "(OSM)" : "(approx.)")}");
+                Assert.That(field.land.IsLand(g.position.X, g.position.Y), Is.True, "gate on the quay");
+                var sea = g.position + g.seaward * 6f;
+                Assert.That(field.IsWater(sea.X, sea.Y), Is.True, "gate faces the water");
+                for (int j = i + 1; j < front.gates.Count; j++)
+                    Assert.That(Vector2.Distance(g.position, front.gates[j].position), Is.GreaterThan(PalaceWaterfront.MinGateSpacing - 0.1f));
+            }
+            Assert.That(wf.openings.Count, Is.EqualTo(5));
+            // The railing is cut at the gates.
+            var cut = new Waterfront.Segment { a = new Vector2(-10f, 0f), b = new Vector2(10f, 0f) };
+            var parts = Waterfront.OpenParts(cut, new List<(Vector2, float)> { (new Vector2(0f, 1f), 3f) });
+            Assert.That(parts.Count, Is.EqualTo(2));
+            Assert.That(parts[0].t1, Is.EqualTo(0.35f).Within(1e-4f));
+            // The forecourt between the facade and the water is open: no trees there.
+            int blocked = 0;
+            foreach (var t in city.trees)
+                if (front.InForecourt(t.x, t.z, field.land.CoastDistance(t.x, t.z))) blocked++;
+            Assert.That(blocked, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void FacadesAlongTheCircuitAreFestiveWithFlagsOfDifferentSizes()
+        {
+            var (_, _, _, _, city) = World();
+            int race = 0, raceFlags = 0, other = 0, otherFlags = 0;
+            foreach (var b in city.buildings)
+            {
+                if (b.front == null || b.worship || b.classical != OsmCity.NotClassical) continue;
+                int seed = StreetFronts.Hash((int)(b.outline[0].X * 7.1f), (int)(b.outline[0].Y * 3.3f));
+                for (int i = 0; i < b.front.Length; i++)
+                {
+                    if (!b.front[i] || b.ortakoy) continue;
+                    bool flag = StreetFronts.FlagFront(seed, i, false, b.raceFront[i]);
+                    if (b.raceFront[i]) { race++; if (flag) raceFlags++; }
+                    else { other++; if (flag) otherFlags++; }
+                }
+            }
+            TestContext.WriteLine($"race fronts {race} ({100f * raceFlags / race:F0} % with flags), other fronts {other} ({100f * otherFlags / other:F0} %)");
+            Assert.That(race, Is.GreaterThan(100), "fronts that look onto the circuit");
+            Assert.That(raceFlags / (float)race, Is.InRange(0.3f, 0.5f));
+            Assert.That(otherFlags / (float)other, Is.InRange(0.05f, 0.15f));
+            float lo = float.MaxValue, hi = 0f;
+            for (int k = 0; k < 400; k++) { float sc = StreetFronts.FlagScale(k * 7, k % 5, k % 2); lo = MathF.Min(lo, sc); hi = MathF.Max(hi, sc); }
+            Assert.That(lo, Is.GreaterThanOrEqualTo(0.8f));
+            Assert.That(hi, Is.LessThanOrEqualTo(1.75f));
+            Assert.That(hi - lo, Is.GreaterThan(0.6f), "flags of different sizes");
+        }
+
         static Vector2 Centre(List<Vector2> o)
         {
             var c = Vector2.Zero;

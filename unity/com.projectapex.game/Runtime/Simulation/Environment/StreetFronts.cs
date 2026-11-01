@@ -148,10 +148,15 @@ namespace Apex.Environment
         }
 
         /// <summary>
-        /// Building front that shows Turkish flags hung vertically (from balcony railings or window sills): a
-        /// quarter of the fronts in Ortaköy, one in ten elsewhere; one or two flags per front.
+        /// Building front that shows Turkish flags hung vertically (from balcony railings or window sills): festive
+        /// fronts along the circuit 40 %, a quarter of the fronts in Ortaköy, one in ten elsewhere; one or two flags
+        /// per front. The hash keeps neighbours independent, so flags never form a regular grid.
         /// </summary>
-        public static bool FlagFront(int seed, int edge, bool ortakoy) => Hash(seed + 97, edge) % 100 < (ortakoy ? 25 : 10);
+        public static bool FlagFront(int seed, int edge, bool ortakoy, bool raceFront = false) =>
+            Hash(seed + 97, edge) % 100 < (raceFront ? 40 : ortakoy ? 25 : 10);
+
+        /// <summary>Size factor of a hanging flag (1 = 0.9 × 1.35 m): balcony flags in Istanbul range from about 0.7 × 1 m to 1.6 × 2.4 m.</summary>
+        public static float FlagScale(int seed, int edge, int k) => 0.8f + (Hash(seed + edge * 29, k + 11) % 100) / 100f * 0.95f;
 
         /// <summary>Bay and storey (1-based, above the ground floor) of the flags on a flag front.</summary>
         public static (int bay, int floor) FlagSpot(int seed, int edge, int k, int bays, int floors)

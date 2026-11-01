@@ -6,7 +6,8 @@
 - **Phase 1 (Analyse):** abgeschlossen.
 - **Phase 2, Uferhöhen:** implementiert und getestet (Simulation, Messwerkzeuge, Vorschau-Renders).
   - **Im Unity-Editor nicht geprüft.** Die Bilder sind three.js-Vorschauen der Spielgeometrie, keine Unity-Aufnahmen.
-- **Phasen 3–6:** geplant (Abschnitt 4).
+- **Phase 3, Referenzzone Dolmabahçe:** implementiert und getestet (Abschnitt 2b). Im Unity-Editor nicht geprüft.
+- **Phasen 4–6:** geplant (Abschnitt 4).
 
 **Git-Checkpoint:** `main` bei Commit `8a3377a` (Merge von PR #25), dem Stand vor dieser Überarbeitung. Das lokale Tag `checkpoint-pre-istanbul-overhaul` ließ sich über den Proxy nicht hochladen.
 
@@ -98,6 +99,47 @@ Gelände. `build_track_a.py` korrigiert es jetzt vor dem Höhenentwurf (`coastal
   - erzeugt aber eine Kuppe in der Bremszone aus 330 km/h (Experten-Tastaturrunde ohne ABS verlässt die Strecke),
   - verändert die Ideallinie auf dem Platz, sodass Gummiabrieb und Zaun-Mittelwand-Prüfung brechen.
 - Das braucht einen Neuentwurf der R20-Kehre mit Fahrtests. Mein Vorschlag ist ein eigener Schritt.
+
+## 2b. Phase 3: Referenzzone Dolmabahçe
+**Quellen:**
+- Die Palastfront steht auf einem ummauerten Kai von etwa 600 m.
+- Zum Bosporus öffnen sich **fünf Seetore** (yalı kapıları). Das Tor in der Achse des Muayede-Saals ist größer und reicher verziert als die anderen vier.
+- Das Haupttor ist in OSM erfasst: Knoten 13084855510 „Dolmabahçe Sarayı Deniz Kapısı“ (ODbL).
+
+### Was gebaut ist
+| Teil | Code | Inhalt |
+|---|---|---|
+| Palastkai | `PalaceWaterfront`, `Waterfront.Segment.palace`, `EnvironmentGeometry.PalaceRailing` | Kaistücke höchstens 75 m vor den Bosporus-Flügeln (Selamlık, Muayede, Harem): statt öffentlicher Promenade mit Pollern und Laternen ein weißer Marmorsockel mit Pfeilern und Kugelaufsatz, ein schmiedeeisernes Geländer mit vergoldeten Spitzen. An den Toren ist es unterbrochen. 417 m Palastkai. |
+| Seetore | `LandmarkGeometry.SeaGate`, `PalaceWaterfront.PlaceGates` | Marmorportal mit Rundbogen, Archivolte und Schlussstein, Säulen auf Postamenten (am Haupttor gepaart), Gebälk, barocke Bekrönung (Kartusche mit vergoldetem Medaillon ohne Inschrift, Bogenhaube, Volutenstufen, Urnen), schmiedeeiserne Torflügel mit Rankenband. Drei Detailstufen. Nachts von der Kaiseite warm angestrahlt (ab Hoch). |
+| Lage der Tore | wie oben | **Haupttor:** OSM, 8 m vom Knoten. **Die vier anderen:** nicht in OSM, daher genähert auf den Achsen von Selamlık und Harem und an den beiden Enden der Palastfront, mindestens 30 m Abstand. |
+| Freier Vorplatz | `OsmCity.AddTree`, `PalaceWaterfront.InForecourt` | Zwischen Fassade und Kai (bis 55 m vom Wasser und von den Flügeln) wachsen keine Bäume mehr. Die Fassade ist vom Wasser aus frei. Die Gärten an den Enden bleiben. |
+| Festliche Fassaden | `OsmCity.Building.raceFront`, `StreetFronts.FlagFront/FlagScale` | Straßenfronten zur Strecke hin (bis 25 m vom Fahrbereich) tragen zu 40 % hängende türkische Flaggen, Ortaköy zu 25 %, sonst zu 10 %. Flaggengröße zwischen 0,7 × 1,1 m und 1,6 × 2,4 m. Die Auswahl über eine Hashfunktion verhindert ein Raster. |
+
+### Tests
+- **`DolmabahceHasItsPalaceQuayFiveSeaGatesAndAnOpenForecourt`:**
+  - Palastkai 250–700 m, ohne Promenade und Laternen.
+  - Fünf Tore, das Haupttor höchstens 25 m vom OSM-Knoten, alle an Land mit Blick aufs Wasser, mindestens 30 m Abstand.
+  - Geländer an den Toren unterbrochen.
+  - Kein Baum im Vorplatz.
+- **`FacadesAlongTheCircuitAreFestiveWithFlagsOfDifferentSizes`:** 216 Fronten zur Strecke, davon 41 % mit Flaggen, sonst 10 %. Größen gestreut.
+
+### Bilder (three.js-Vorschau der Spielgeometrie, keine Unity-Aufnahme)
+![Bosporusfront](img/dolmabahce_ref_bosphorus.jpg)
+![Haupt-Seetor](img/dolmabahce_ref_sea_gate.jpg)
+![Palastkai](img/dolmabahce_ref_quay.jpg)
+![Verfolgerkamera](img/dolmabahce_ref_chase.jpg)
+![Cockpit Akaretler](img/akaretler_ref_cockpit.jpg)
+
+### Sichtbarkeit aus dem Fahrbetrieb (ehrlich)
+- **Seetore:** Die Strecke liegt an der Dolmabahçe Caddesi, also auf der Landseite. Die Tore sind daher **vom Fahrer nicht zu sehen**, nur vom Wasser, aus Wiederholungs- und TV-Kameras. Das ist geografisch korrekt; ich habe keine Sichtachse erfunden.
+- **Aus der Verfolgerkamera** sieht man an der Dolmabahçe Caddesi die Palast-Nebengebäude und das Saltanat-Tor.
+
+### Offen nach Phase 3
+- **Palastfassaden:** Die Grundriss-Modelle haben Fensterachsen, Gesimse und Balustraden. Die feine Gliederung der echten Bosporusfront (Pilaster und Säulenstellungen, reiche Fensterrahmungen) fehlt noch.
+- **Tore:** Die Proportionen beruhen auf Fotos, nicht auf Bauaufnahmen. Für die vier genäherten Positionen bräuchte es eine Bauaufnahme oder Millî-Saraylar-Pläne.
+- **Fangzaun an der Akaretler-Steigung:** beidseitig und im Cockpit dominant (Bild). Er gehört zur Infrastruktur-Phase 4.
+- **Vorschau-Werkzeug:** zeigt die Flaggen an Straßenfronten aus Streckensicht schlecht (keine Schatten-/Licht-Abstimmung). Die Prüfung im Unity-Editor ist nötig.
+- **Wind:** Die Bewegung der Balkonflaggen ist im Material nicht animiert; nur die Monumentalflagge bewegt sich.
 
 ## 3. Werkzeuge
 ```sh

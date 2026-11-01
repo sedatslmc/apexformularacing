@@ -23,6 +23,8 @@ namespace Apex.Environment
             public float top;
             public bool promenade;
             public bool europe;
+            /// <summary>Palace quay (Dolmabahçe): marble coping and ornamental railing, no public promenade.</summary>
+            public bool palace;
         }
 
         public const float PromenadeWidth = 8f, MinTop = 1.2f, MaxTop = 6f, Piece = 6f;
@@ -32,14 +34,42 @@ namespace Apex.Environment
         public readonly List<Vector3> bollards = new List<Vector3>();
         /// <summary>Lamp foot positions and the direction they face (towards the water).</summary>
         public readonly List<(Vector3 foot, Vector2 seaward)> lamps = new List<(Vector3, Vector2)>();
-        public float promenadeLength, quayLength;
+        public float promenadeLength, quayLength, palaceLength;
+        /// <summary>Gaps in the palace railing where a sea gate stands (centre on the quay line, half width).</summary>
+        public readonly List<(Vector2 at, float half)> openings = new List<(Vector2, float)>();
+
+        /// <summary>Parts (t0, t1 in 0..1 along a→b) of a quay piece that are not cut by an opening.</summary>
+        public static List<(float t0, float t1)> OpenParts(Segment s, List<(Vector2 at, float half)> openings)
+        {
+            var parts = new List<(float, float)> { (0f, 1f) };
+            float len = Vector2.Distance(s.a, s.b);
+            if (len < 1e-3f) return parts;
+            var dir = (s.b - s.a) / len;
+            foreach (var (at, half) in openings)
+            {
+                var rel = at - s.a;
+                float along = Vector2.Dot(rel, dir), across = MathF.Abs(rel.X * dir.Y - rel.Y * dir.X);
+                if (across > 3f) continue;
+                float c0 = (along - half) / len, c1 = (along + half) / len;
+                var next = new List<(float, float)>();
+                foreach (var (t0, t1) in parts)
+                {
+                    if (c1 <= t0 || c0 >= t1) { next.Add((t0, t1)); continue; }
+                    if (c0 > t0) next.Add((t0, c0));
+                    if (c1 < t1) next.Add((c1, t1));
+                }
+                parts = next;
+            }
+            return parts;
+        }
 
         Waterfront() { }
 
         /// <summary>An empty container (the builder sorts segments into chunks).</summary>
         public static Waterfront Empty() => new Waterfront();
 
-        public Waterfront(TerrainField field, TrackClearance clearance, Func<float, float, bool> blocked)
+        /// <param name="palaceFrontage">quay points in front of a palace (<see cref="PalaceWaterfront.OnFrontage"/>)</param>
+        public Waterfront(TerrainField field, TrackClearance clearance, Func<float, float, bool> blocked, Func<float, float, bool> palaceFrontage = null)
         {
             if (!field.land.HasLand) return;
             var edges = new List<(float ax, float az, float bx, float bz, string mass)>();
@@ -66,7 +96,8 @@ namespace Apex.Environment
                     var behind = mid + inland * 4f;
                     float top = Math.Clamp(field.Height(behind.X, behind.Y), MinTop, MaxTop);
                     bool europe = e.mass == "europe";
-                    bool prom = europe;
+                    bool palace = europe && palaceFrontage != null && palaceFrontage(mid.X, mid.Y);
+                    bool prom = europe && !palace;
                     if (prom)
                         foreach (float d in new[] { 1f, PromenadeWidth * 0.5f, PromenadeWidth })
                         {
@@ -74,7 +105,8 @@ namespace Apex.Environment
                             if (!field.land.IsLand(q.X, q.Y) || clearance.Margin(q.X, q.Y) < 2f || (blocked != null && blocked(q.X, q.Y))) { prom = false; break; }
                         }
                     float seg = Vector2.Distance(a, b);
-                    segments.Add(new Segment { a = a, b = b, inland = inland, top = top, promenade = prom, europe = europe });
+                    segments.Add(new Segment { a = a, b = b, inland = inland, top = top, promenade = prom, europe = europe, palace = palace });
+                    if (palace) palaceLength += seg;
                     quayLength += seg;
                     if (!prom) continue;
                     promenadeLength += seg;
