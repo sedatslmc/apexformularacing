@@ -78,13 +78,13 @@ namespace Apex.UI
         {
             switch (e)
             {
-                case HudElement.Tower: return "Positionsturm";
-                case HudElement.Info: return "Rennstatus";
-                case HudElement.Events: return "Ereignisse";
-                case HudElement.Dash: return "Cockpit-Anzeige";
-                case HudElement.Tyres: return "Reifen";
-                case HudElement.Map: return "Streckenkarte";
-                default: return "Zeiten";
+                case HudElement.Tower: return Loc.T("Positionsturm");
+                case HudElement.Info: return Loc.T("Rennstatus");
+                case HudElement.Events: return Loc.T("Ereignisse");
+                case HudElement.Dash: return Loc.T("Cockpit-Anzeige");
+                case HudElement.Tyres: return Loc.T("Reifen");
+                case HudElement.Map: return Loc.T("Streckenkarte");
+                default: return Loc.T("Zeiten");
             }
         }
 
@@ -92,10 +92,10 @@ namespace Apex.UI
         {
             switch (p)
             {
-                case HudPreset.Minimal: return "Minimal";
-                case HudPreset.Standard: return "Standard";
-                case HudPreset.Extended: return "Erweitert";
-                default: return "Aus";
+                case HudPreset.Minimal: return Loc.T("Minimal");
+                case HudPreset.Standard: return Loc.T("Standard");
+                case HudPreset.Extended: return Loc.T("Erweitert");
+                default: return Loc.T("Aus");
             }
         }
 
@@ -170,9 +170,9 @@ namespace Apex.UI
             for (int i = 0; i < shown.Count; i++)
             {
                 var r = Rect(shown[i], data?.Get(shown[i]), panelW, panelH);
-                if (r.Overlaps(clear)) issues.Add($"{Name(shown[i])} verdeckt die Fahrbahn");
+                if (r.Overlaps(clear)) issues.Add(Loc.Format("{0} verdeckt die Fahrbahn", Name(shown[i])));
                 for (int j = i + 1; j < shown.Count; j++)
-                    if (r.Overlaps(Rect(shown[j], data?.Get(shown[j]), panelW, panelH))) issues.Add($"{Name(shown[i])} überdeckt {Name(shown[j])}");
+                    if (r.Overlaps(Rect(shown[j], data?.Get(shown[j]), panelW, panelH))) issues.Add(Loc.Format("{0} überdeckt {1}", Name(shown[i]), Name(shown[j])));
             }
             return issues;
         }

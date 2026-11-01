@@ -118,11 +118,11 @@ namespace Apex.UI
         {
             switch (s)
             {
-                case TrackStatus.Yellow: return yellowHere ? "GELBE FLAGGE" : null;
-                case TrackStatus.VirtualSafetyCar: return "VIRTUELLES SAFETY CAR";
-                case TrackStatus.VirtualSafetyCarEnding: return "VSC ENDET";
-                case TrackStatus.SafetyCar: return "SAFETY CAR";
-                case TrackStatus.SafetyCarIn: return "SAFETY CAR KOMMT REIN";
+                case TrackStatus.Yellow: return yellowHere ? Loc.T("GELBE FLAGGE") : null;
+                case TrackStatus.VirtualSafetyCar: return Loc.T("VIRTUELLES SAFETY CAR");
+                case TrackStatus.VirtualSafetyCarEnding: return Loc.T("VSC ENDET");
+                case TrackStatus.SafetyCar: return Loc.T("SAFETY CAR");
+                case TrackStatus.SafetyCarIn: return Loc.T("SAFETY CAR KOMMT REIN");
                 default: return null;
             }
         }
@@ -131,11 +131,11 @@ namespace Apex.UI
         {
             switch (s)
             {
-                case TrackStatus.Yellow: return "Nicht überholen";
-                case TrackStatus.VirtualSafetyCar: return "Tempo begrenzt · Abstand halten";
-                case TrackStatus.VirtualSafetyCarEnding: return "Gleich wieder Grün";
-                case TrackStatus.SafetyCar: return "Hinter dem Safety Car einreihen";
-                case TrackStatus.SafetyCarIn: return "Neustart an der Linie";
+                case TrackStatus.Yellow: return Loc.T("Nicht überholen");
+                case TrackStatus.VirtualSafetyCar: return Loc.T("Tempo begrenzt · Abstand halten");
+                case TrackStatus.VirtualSafetyCarEnding: return Loc.T("Gleich wieder Grün");
+                case TrackStatus.SafetyCar: return Loc.T("Hinter dem Safety Car einreihen");
+                case TrackStatus.SafetyCarIn: return Loc.T("Neustart an der Linie");
                 default: return "";
             }
         }
@@ -156,7 +156,7 @@ namespace Apex.UI
             if (title != null && (s.status != last.status || s.yellowHere != last.yellowHere))
                 feed.Post(HudEventKind.Flag, title, StatusDetail(s.status), s.status == TrackStatus.VirtualSafetyCarEnding ? HudTone.Good : HudTone.Warning, now);
             else if (title == null && wasFlag && s.status == TrackStatus.Green && last.status != TrackStatus.Yellow)
-                feed.Post(HudEventKind.Flag, "GRÜNE FLAGGE", "Rennen freigegeben", HudTone.Good, now);
+                feed.Post(HudEventKind.Flag, Loc.T("GRÜNE FLAGGE"), Loc.T("Rennen freigegeben"), HudTone.Good, now);
 
             if (s.race && s.racing && !s.finished)
             {
@@ -166,20 +166,20 @@ namespace Apex.UI
                 {
                     int diff = confirmedPosition - pendingPosition;
                     feed.Post(diff > 0 ? HudEventKind.PositionGained : HudEventKind.PositionLost, $"P{pendingPosition}",
-                        diff > 0 ? $"+{diff} {(diff == 1 ? "Platz" : "Plätze")}" : $"{diff} {(diff == -1 ? "Platz" : "Plätze")}",
+                        diff > 0 ? $"+{diff} {Loc.T(diff == 1 ? "Platz" : "Plätze")}" : $"{diff} {Loc.T(diff == -1 ? "Platz" : "Plätze")}",
                         diff > 0 ? HudTone.Good : HudTone.Danger, now);
                     confirmedPosition = pendingPosition;
                 }
                 if (!finalLapShown && s.laps > 1 && s.lap == s.laps && last.lap == s.laps - 1)
                 {
                     finalLapShown = true;
-                    feed.Post(HudEventKind.FinalLap, "LETZTE RUNDE", $"P{s.position} von {s.fieldSize}", HudTone.Neutral, now);
+                    feed.Post(HudEventKind.FinalLap, Loc.T("LETZTE RUNDE"), Loc.Format("P{0} von {1}", s.position, s.fieldSize), HudTone.Neutral, now);
                 }
             }
             if (s.race && s.finished && !finishShown)
             {
                 finishShown = true;
-                feed.Post(HudEventKind.Finish, s.position == 1 ? "SIEG" : $"ZIEL · P{s.position}", s.position <= 3 ? "Podium" : $"von {s.fieldSize}", s.position <= 3 ? HudTone.Best : HudTone.Neutral, now);
+                feed.Post(HudEventKind.Finish, s.position == 1 ? Loc.T("SIEG") : Loc.Format("ZIEL · P{0}", s.position), s.position <= 3 ? Loc.T("Podium") : Loc.Format("von {0}", s.fieldSize), s.position <= 3 ? HudTone.Best : HudTone.Neutral, now);
             }
             if (!s.racing) { confirmedPosition = pendingPosition = s.position; pendingSince = now; }
             last = s;

@@ -104,6 +104,7 @@ namespace Apex.Game
             sm.Changed += OnStateChanged;
             CreateMenuView();
             CreateHudView();
+            CreateScreenViews();
             sm.TryTransition(GameState.MainMenu);
         }
 
@@ -510,6 +511,7 @@ namespace Apex.Game
         void UpdateShowroomCamera()
         {
             if (showroom == null) return;
+            if (sm.Current == GameState.Garage && UpdateGarageCamera()) return;
             if (sm.Current == GameState.MainMenu && !settingsOpen)
             {
                 MenuStage.MenuCamera(cam, showroom.transform, menuViewHeading, Time.unscaledTime, Settings.reducedMotion);
@@ -654,6 +656,9 @@ namespace Apex.Game
             raceCam.target = playerCar.transform;
             raceCam.SetMode(Settings.cameraMode);
             raceCam.enabled = true;
+            raceCam.ClearHold();
+            // Start sequence: a sweep around the car into the driving camera (not with reduced motion).
+            if (type == SessionType.Race && !Settings.reducedMotion) raceCam.PlayIntro();
             input.ReleaseAll();
             ApplyAssists();
             calibrating = Settings.controlPreset == ControlPreset.Tilt;
@@ -719,6 +724,7 @@ namespace Apex.Game
             menuView?.SetVisible(to == GameState.MainMenu);
             if (to == GameState.TrackSelect) ShowSetupView();
             setupView?.SetVisible(to == GameState.TrackSelect);
+            OnScreenStateChanged(from, to);
         }
 
         // --- Timing events ----------------------------------------------------------------
@@ -775,6 +781,8 @@ namespace Apex.Game
             public int levelAfter;
             public List<int> order;
             public string[] championshipLines;
+            public readonly List<Color> teams = new List<Color>();
+            public bool playerFinished;
             public bool championshipFinished;
         }
 
@@ -801,10 +809,13 @@ namespace Apex.Game
                     ApexStyle.FormatTime(e.BestLap), e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
                     Race.Type == SessionType.Race ? d.PointsFor(e).ToString() : "",
                 });
+                var tm = Roster.Teams[rc.teamIndex];
+                res.teams.Add(new Color(tm.r, tm.g, tm.b));
                 if (e.isPlayer)
                 {
                     res.playerRow = res.rows.Count - 1;
                     res.playerPosition = e.position;
+                    res.playerFinished = e.finished;
                 }
             }
             res.levelBefore = Career.Level;
@@ -887,6 +898,7 @@ namespace Apex.Game
                 ShowMessage("Screenshot gespeichert", Color.white, 1.5f, false);
             }
             if (input.HelpPressed) helpOpen = !helpOpen;
+            UpdateScreenViews();
 
             switch (sm.Current)
             {
@@ -903,9 +915,9 @@ namespace Apex.Game
                         if (!overlay)
                         {
                             menuView.Tick(Time.unscaledDeltaTime, navUp, navDown, navConfirm);
-                            if (input.PausePressed && menuView.Back()) break;
+                            if (BackPressed && menuView.Back()) break;
                         }
-                        else if (input.PausePressed)
+                        else if (BackPressed)
                         {
                             MenuBack();
                             RefreshMenu();
@@ -916,13 +928,13 @@ namespace Apex.Game
                     if (sm.Current == GameState.TrackSelect && setupView != null && !helpOpen)
                     {
                         setupView.Tick(Time.unscaledDeltaTime, navUp, navDown, navLeft, navRight, navConfirm);
-                        if (input.PausePressed && sm.Current == GameState.TrackSelect) setupView.Back();
+                        if (BackPressed && sm.Current == GameState.TrackSelect) setupView.Back();
                         break;
                     }
-                    if (input.PausePressed) MenuBack();
+                    if (BackPressed) MenuBack();
                     break;
                 case GameState.Results:
-                    if (input.PausePressed) sm.TryTransition(GameState.MainMenu);
+                    if (BackPressed) sm.TryTransition(GameState.MainMenu);
                     break;
                 case GameState.Grid:
                 case GameState.Driving:
@@ -932,7 +944,7 @@ namespace Apex.Game
                     UpdateInRace();
                     break;
                 case GameState.Pause:
-                    if (input.PausePressed && !(hudView != null && hudView.Editing))
+                    if (BackPressed && !(hudView != null && hudView.Editing))
                     {
                         if (settingsOpen) settingsOpen = false;
                         else sm.Resume();
@@ -953,7 +965,7 @@ namespace Apex.Game
         void UpdateInRace()
         {
             if (Race == null) return;
-            if (input.PausePressed)
+            if (BackPressed)
             {
                 if (radioOpen) CloseRadio();
                 else sm.TryTransition(GameState.Pause);

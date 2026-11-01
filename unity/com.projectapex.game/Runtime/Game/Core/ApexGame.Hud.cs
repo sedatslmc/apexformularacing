@@ -177,9 +177,11 @@ namespace Apex.Game
             }
             else if (!hudView.Editing) DrawHudButtons(safe);
             if (showTelemetry || (newHud && Apex.UI.HudLayout.ShowsTelemetry(CurrentHudPreset))) DrawTelemetry(safe, p);
-            if (radioOpen) DrawRadio(safe);
+            // Keyboard/mouse: the radio is part of the UI Toolkit HUD; touch keeps its IMGUI layout (touch buttons).
+            if (radioOpen && !(hudView != null && Settings.controlPreset == ControlPreset.Keyboard)) DrawRadio(safe);
             if (p.pit.stage == PitState.Stage.Stopped) DrawPitTimer(safe, p);
             DrawTouchButtons();
+            AddHudZones();
             if (layoutDebug) DrawLayoutDebug(safe);
         }
 

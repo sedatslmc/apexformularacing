@@ -197,7 +197,7 @@ namespace Apex.Game
             xpFill.style.width = new Length(Mathf.Clamp01(d.levelProgress) * 100f, LengthUnit.Percent); xpFill.style.height = 3;
 
             // Menu.
-            var caption = ApexUi.Caption(menuLayer, "Hauptmenü");
+            var caption = ApexUi.Caption(menuLayer, Loc.T("Hauptmenü"));
             ApexUi.Place(caption, m, 200);
             items = new VisualElement { pickingMode = PickingMode.Ignore };
             ApexUi.Place(items, m, 230, 580, -1);
@@ -209,14 +209,14 @@ namespace Apex.Game
             cards.style.position = Position.Absolute; cards.style.left = m; cards.style.bottom = 36;
             cards.style.flexDirection = FlexDirection.Row;
             menuLayer.Add(cards);
-            Card(cards, "Ausgewählte Strecke", d.trackName, d.trackMeta, true);
-            if (!string.IsNullOrEmpty(d.lastTitle)) Card(cards, "Letztes Ergebnis", d.lastTitle, d.lastMeta, false);
+            Card(cards, Loc.T("Ausgewählte Strecke"), d.trackName, d.trackMeta, true);
+            if (!string.IsNullOrEmpty(d.lastTitle)) Card(cards, Loc.T("Letztes Ergebnis"), d.lastTitle, d.lastMeta, false);
             var hints = new VisualElement { pickingMode = PickingMode.Ignore };
             hints.style.position = Position.Absolute; hints.style.right = m; hints.style.bottom = 40;
             hints.style.alignItems = Align.FlexEnd;
             menuLayer.Add(hints);
             if (!d.mobile)
-                ApexUi.Text(hints, "↑↓  Auswählen     Enter  Bestätigen     Esc  Zurück", ApexUi.Body, 14, ApexUi.C(UiTokens.Steel), 0.5f, TextAnchor.MiddleRight);
+                ApexUi.Text(hints, Loc.T("↑↓  Auswählen     Enter  Bestätigen     Esc  Zurück"), ApexUi.Body, 14, ApexUi.C(UiTokens.Steel), 0.5f, TextAnchor.MiddleRight);
             ApexUi.Text(hints, d.version.ToUpperInvariant(), ApexUi.BodyStrong, 11, ApexUi.C(UiTokens.Steel, 0.6f), 2.5f, TextAnchor.MiddleRight).style.marginTop = 6;
 
             ApplyFocus(true);
@@ -292,7 +292,7 @@ namespace Apex.Game
             var head = new VisualElement { pickingMode = PickingMode.Ignore };
             ApexUi.Place(head, m, 60);
             profileLayer.Add(head);
-            ApexUi.Caption(head, "Fahrerprofil");
+            ApexUi.Caption(head, Loc.T("Fahrerprofil"));
             ApexUi.Text(head, p.name.ToUpperInvariant(), ApexUi.DisplayStrong, UiTokens.H1, ApexUi.C(UiTokens.Ivory), 4f).style.marginTop = 8;
             ApexUi.Text(head, $"#{p.number} · {p.nationality} · {p.team}", ApexUi.Body, 18, ApexUi.C(UiTokens.Steel)).style.marginTop = 4;
 
@@ -300,20 +300,20 @@ namespace Apex.Game
             ApexUi.Place(grid, m, 230, 1180, -1);
             grid.style.flexDirection = FlexDirection.Row; grid.style.flexWrap = Wrap.Wrap;
             profileLayer.Add(grid);
-            Stat(grid, "Rennen", p.races.ToString());
-            Stat(grid, "Siege", p.wins.ToString(), p.wins > 0);
-            Stat(grid, "Podien", p.podiums.ToString());
-            Stat(grid, "Poles", p.poles.ToString());
-            Stat(grid, "Level", p.level.ToString());
-            Stat(grid, "XP", $"{p.xp} / {p.xpNext}");
-            Stat(grid, "Ø Platz", p.averageFinish > 0f ? p.averageFinish.ToString("0.0") : "–");
-            Stat(grid, "Distanz", p.distanceKm > 0 ? $"{p.distanceKm:0} km" : "–");
+            Stat(grid, Loc.T("Rennstarts"), p.races.ToString());
+            Stat(grid, Loc.T("Siege"), p.wins.ToString(), p.wins > 0);
+            Stat(grid, Loc.T("Podien"), p.podiums.ToString());
+            Stat(grid, Loc.T("Poles"), p.poles.ToString());
+            Stat(grid, Loc.T("Level"), p.level.ToString());
+            Stat(grid, Loc.T("XP"), $"{p.xp} / {p.xpNext}");
+            Stat(grid, Loc.T("Ø Platz"), p.averageFinish > 0f ? p.averageFinish.ToString("0.0") : "–");
+            Stat(grid, Loc.T("Distanz"), p.distanceKm > 0 ? $"{p.distanceKm:0} km" : "–");
 
             var laps = ApexUi.Panel(profileLayer);
             ApexUi.Place(laps, 1920 - m - 520, 230, 520, -1);
             laps.style.paddingLeft = 22; laps.style.paddingRight = 22; laps.style.paddingTop = 18; laps.style.paddingBottom = 18;
-            ApexUi.Caption(laps, "Bestzeiten");
-            if (p.bestLaps.Count == 0) ApexUi.Text(laps, "Noch keine gewerteten Runden.", ApexUi.Body, 16, ApexUi.C(UiTokens.Steel)).style.marginTop = 12;
+            ApexUi.Caption(laps, Loc.T("Bestzeiten"));
+            if (p.bestLaps.Count == 0) ApexUi.Text(laps, Loc.T("Noch keine gewerteten Runden."), ApexUi.Body, 16, ApexUi.C(UiTokens.Steel)).style.marginTop = 12;
             foreach (var (track, time) in p.bestLaps)
             {
                 var row = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -323,7 +323,7 @@ namespace Apex.Game
                 var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; row.Add(sp);
                 ApexUi.Text(row, time, ApexUi.Display, UiTokens.HudTiming, ApexUi.C(UiTokens.Ivory), 0f, TextAnchor.MiddleRight);
             }
-            var back = ApexUi.Text(profileLayer, data.mobile ? "‹  Zurück" : "Esc  Zurück", ApexUi.BodyStrong, 16, ApexUi.C(UiTokens.Steel), 1f);
+            var back = ApexUi.Text(profileLayer, data.mobile ? Loc.T("‹  Zurück") : Loc.T("Esc  Zurück"), ApexUi.BodyStrong, 16, ApexUi.C(UiTokens.Steel), 1f);
             back.pickingMode = PickingMode.Position;
             back.userData = "back";
             ApexUi.Place(back, m, 1000);

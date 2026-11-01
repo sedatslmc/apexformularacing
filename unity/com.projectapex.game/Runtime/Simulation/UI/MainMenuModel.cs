@@ -42,20 +42,20 @@ namespace Apex.UI
         {
             var list = new List<MenuEntry>
             {
-                new MenuEntry { action = MenuAction.QuickRace, label = "Rennen starten", primary = true,
-                    detail = $"{c.trackName} · {c.laps} {(c.laps == 1 ? "Runde" : "Runden")} · {c.timeOfDay}" },
+                new MenuEntry { action = MenuAction.QuickRace, label = Loc.T("Rennen starten"), primary = true,
+                    detail = $"{c.trackName} · {c.laps} {Loc.T(c.laps == 1 ? "Runde" : "Runden")} · {c.timeOfDay}" },
             };
             if (c.championshipActive)
-                list.Add(new MenuEntry { action = MenuAction.ContinueChampionship, label = "Meisterschaft fortsetzen",
-                    detail = $"Runde {c.championshipRound} / {c.championshipRounds} · {c.championshipTrack}" + (c.championshipPosition > 0 ? $" · P{c.championshipPosition}" : "") });
-            list.Add(new MenuEntry { action = MenuAction.GrandPrix, label = "Grand Prix", detail = "Qualifying + Rennen" });
+                list.Add(new MenuEntry { action = MenuAction.ContinueChampionship, label = Loc.T("Meisterschaft fortsetzen"),
+                    detail = Loc.Format("Runde {0} / {1} · {2}", c.championshipRound, c.championshipRounds, c.championshipTrack) + (c.championshipPosition > 0 ? $" · P{c.championshipPosition}" : "") });
+            list.Add(new MenuEntry { action = MenuAction.GrandPrix, label = Loc.T("Grand Prix"), detail = Loc.T("Qualifying + Rennen") });
             if (!c.championshipActive)
-                list.Add(new MenuEntry { action = MenuAction.Championship, label = "Meisterschaft", detail = "Saison starten" });
-            list.Add(new MenuEntry { action = MenuAction.TimeTrial, label = "Zeitfahren", detail = c.bestLap > 0 ? "Bestzeit " + FormatLap(c.bestLap) : "Noch keine Bestzeit" });
-            list.Add(new MenuEntry { action = MenuAction.Practice, label = "Freies Training", detail = "" });
-            list.Add(new MenuEntry { action = MenuAction.Garage, label = "Garage", detail = "Lackierung · Team · Setup" });
-            if (c.profileAvailable) list.Add(new MenuEntry { action = MenuAction.Profile, label = "Fahrerprofil", detail = "Statistiken" });
-            if (c.canQuit) list.Add(new MenuEntry { action = MenuAction.Quit, label = "Beenden", detail = "" });
+                list.Add(new MenuEntry { action = MenuAction.Championship, label = Loc.T("Meisterschaft"), detail = Loc.T("Saison starten") });
+            list.Add(new MenuEntry { action = MenuAction.TimeTrial, label = Loc.T("Zeitfahren"), detail = c.bestLap > 0 ? Loc.Format("Bestzeit {0}", FormatLap(c.bestLap)) : Loc.T("Noch keine Bestzeit") });
+            list.Add(new MenuEntry { action = MenuAction.Practice, label = Loc.T("Freies Training"), detail = "" });
+            list.Add(new MenuEntry { action = MenuAction.Garage, label = Loc.T("Garage"), detail = Loc.T("Lackierung · Team · Setup") });
+            if (c.profileAvailable) list.Add(new MenuEntry { action = MenuAction.Profile, label = Loc.T("Fahrerprofil"), detail = Loc.T("Statistiken") });
+            if (c.canQuit) list.Add(new MenuEntry { action = MenuAction.Quit, label = Loc.T("Beenden"), detail = "" });
             return list;
         }
 

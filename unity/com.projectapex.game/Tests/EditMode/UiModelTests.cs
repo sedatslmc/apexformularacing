@@ -374,5 +374,137 @@ namespace Apex.Tests
             Assert.That(m.MapX(g.Positions[0].X), Is.EqualTo(m.x[0]).Within(0.01f));
             Assert.That(m.MapY(g.Positions[0].Z), Is.EqualTo(m.y[0]).Within(0.01f));
         }
+        [Test]
+        public void PauseOffersOnlySessionFunctionsAndConfirmsLeavingARace()
+        {
+            var race = PauseModel.Entries(true, true).ConvertAll(e => e.action);
+            Assert.That(race.Contains(PauseAction.ResetCar) || race.Contains(PauseAction.Restart), Is.False, "no reset or restart in a race");
+            Assert.That(race[0], Is.EqualTo(PauseAction.Resume));
+            Assert.That(race[race.Count - 1], Is.EqualTo(PauseAction.Leave));
+            Assert.That(PauseModel.Entries(true, true).Find(e => e.action == PauseAction.Leave).confirm, Is.True);
+            Assert.That(PauseModel.Entries(false, true).Find(e => e.action == PauseAction.Leave).confirm, Is.False);
+            var practice = PauseModel.Entries(false, false).ConvertAll(e => e.action);
+            Assert.That(practice.Contains(PauseAction.ResetCar) && practice.Contains(PauseAction.Restart) && !practice.Contains(PauseAction.HudEditor), Is.True);
+            var gate = new ConfirmGate();
+            Assert.That(gate.Press(3), Is.False);
+            Assert.That(gate.Armed(3), Is.True);
+            Assert.That(gate.Press(1), Is.False, "another item re-arms instead of confirming");
+            Assert.That(gate.Press(1), Is.True);
+            Assert.That(gate.Armed(1), Is.False);
+        }
+
+        [Test]
+        public void ResultsHeadlineWeekendAndPodium()
+        {
+            Assert.That(ResultsModel.Headline(true, false, 1, 12, true).title, Is.EqualTo("SIEG"));
+            Assert.That(ResultsModel.Headline(true, false, 3, 12, true).title, Is.EqualTo("PODIUM"));
+            Assert.That(ResultsModel.Headline(true, false, 7, 12, true), Is.EqualTo(("P7", "P7 von 12")));
+            Assert.That(ResultsModel.Headline(true, false, 7, 12, false).title, Is.EqualTo("NICHT IM ZIEL"));
+            Assert.That(ResultsModel.Headline(false, true, 1, 12, false).title, Is.EqualTo("POLE POSITION"));
+            var w = ResultsModel.Weekend(true, false);
+            Assert.That(w.Count, Is.EqualTo(3));
+            Assert.That(w[0].done && w[1].current && !w[2].done, Is.True);
+            Assert.That(ResultsModel.Weekend(false, true), Is.Empty);
+            Assert.That(ResultsModel.Actions(true, false)[0].action, Is.EqualTo(ResultAction.ContinueToRace));
+            Assert.That(ResultsModel.Actions(false, true).ConvertAll(a => a.action), Is.EqualTo(new List<ResultAction> { ResultAction.NextRound, ResultAction.MainMenu }));
+            Assert.That(ResultsModel.ShowPodium(true, true, 2, true), Is.True);
+            Assert.That(ResultsModel.ShowPodium(true, true, 4, true) || ResultsModel.ShowPodium(true, true, 1, false) || ResultsModel.ShowPodium(false, true, 1, true), Is.False);
+        }
+
+        [Test]
+        public void GarageOrbitAndIntroCamera()
+        {
+            var o = new GarageOrbit();
+            o.Select(GarageView.Rear);
+            for (int i = 0; i < 200; i++) o.Update(0.02f, false);
+            Assert.That(o.yaw, Is.EqualTo(205f).Within(0.5f));
+            o.Drag(0f, -10000f);
+            Assert.That(o.TargetPitch, Is.EqualTo(GarageOrbit.MinPitch), "never below the floor");
+            o.Zoom(100f);
+            Assert.That(o.TargetDistance, Is.EqualTo(GarageOrbit.MinDistance));
+            o.Update(0.01f, true);
+            Assert.That(o.distance, Is.EqualTo(GarageOrbit.MinDistance), "reduced motion jumps");
+            o.Offset(out float x, out float y, out float z);
+            Assert.That(System.Math.Sqrt(x * x + y * y + z * z), Is.EqualTo(GarageOrbit.MinDistance).Within(1e-3));
+            // Shortest way round: from 350° to 10° goes forward through 0°.
+            var w = new GarageOrbit { yaw = 350f };
+            w.Drag(80f, 0f);   // target 35 + 20 = 55°
+            w.Update(0.05f, false);
+            Assert.That(w.yaw, Is.InRange(0f, 55f), "350° → 55° turns the short way, through 0°");
+            Assert.That(IntroCamera.Blend(0f), Is.EqualTo(0f));
+            Assert.That(IntroCamera.Blend(IntroCamera.Seconds), Is.EqualTo(1f));
+            IntroCamera.Pose(0f, out float a0, out _, out _);
+            IntroCamera.Pose(IntroCamera.Seconds, out float a1, out _, out _);
+            Assert.That(a0, Is.GreaterThan(a1));
+        }
+
+        [Test]
+        public void ColourVisionPalettesKeepMeaningfulPairsApart()
+        {
+            foreach (ColourVision v in System.Enum.GetValues(typeof(ColourVision)))
+            {
+                var p = UiPalette.For(v);
+                float Diff(UiTokens.Rgb a, UiTokens.Rgb b) => UiPalette.DeltaE(UiPalette.Simulate(a, v), UiPalette.Simulate(b, v));
+                Assert.That(Diff(p.good, p.bad), Is.GreaterThan(30f), $"{v}: faster/slower");
+                Assert.That(Diff(p.cold, p.hot), Is.GreaterThan(30f), $"{v}: cold/hot tyres");
+                Assert.That(Diff(p.optimal, p.hot), Is.GreaterThan(20f), $"{v}: optimal/hot tyres");
+                Assert.That(Diff(p.sector1, p.sector2), Is.GreaterThan(20f), $"{v}: sectors 1/2");
+                Assert.That(Diff(p.sector2, p.sector3), Is.GreaterThan(20f), $"{v}: sectors 2/3");
+            }
+            // Without the adapted palette the standard green/red pair collapses for deuteranopes.
+            var std = UiPalette.For(ColourVision.Standard);
+            float stdDeut = UiPalette.DeltaE(UiPalette.Simulate(std.good, ColourVision.Deuteranopia), UiPalette.Simulate(std.bad, ColourVision.Deuteranopia));
+            float adapted = UiPalette.DeltaE(UiPalette.Simulate(UiPalette.For(ColourVision.Deuteranopia).good, ColourVision.Deuteranopia), UiPalette.Simulate(UiPalette.For(ColourVision.Deuteranopia).bad, ColourVision.Deuteranopia));
+            Assert.That(adapted, Is.GreaterThan(stdDeut));
+            Assert.That(UiPalette.Simulate(UiTokens.Ivory, ColourVision.Standard).r, Is.EqualTo(UiTokens.Ivory.r));
+        }
+
+        [Test]
+        public void EnglishCoversAllModelTexts()
+        {
+            Loc.Missing.Clear();
+            Loc.Current = Language.English;
+            try
+            {
+                var c = new SessionConfig();
+                foreach (SetupMode m in System.Enum.GetValues(typeof(SetupMode)))
+                {
+                    SetupModel.Title(m);
+                    SetupModel.Summary(m, c);
+                    foreach (var o in SetupModel.Options(m, c, Tracks, id => id)) { var _ = o.group + o.label + o.value(); }
+                }
+                c.format = WeekendFormat.RaceOnly; c.aiCount = 0; c.failures = 1; c.tireWear = 0f;
+                SetupModel.Summary(SetupMode.GrandPrix, c);
+                foreach (var o in SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id)) o.value();
+                c.failures = 2; foreach (var o in SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id)) o.value();
+                foreach (Apex.Weather.TimeOfDay t in System.Enum.GetValues(typeof(Apex.Weather.TimeOfDay))) SetupModel.TimeName(t);
+                SetupModel.PointsScheme();
+                MainMenuModel.Build(new MenuContext { trackName = "X", laps = 1, bestLap = 90 });
+                MainMenuModel.Build(new MenuContext { trackName = "X", laps = 3, championshipActive = true, championshipRound = 1, championshipRounds = 2 });
+                foreach (var e in HudLayout.All) HudLayout.Name(e);
+                foreach (HudPreset p in System.Enum.GetValues(typeof(HudPreset))) HudLayout.PresetName(p);
+                var data = new HudLayoutData();
+                var ed = new HudEditor(data); ed.SelectElement(HudElement.Dash); ed.Nudge(0f, -500f, 1920f, 1080f);
+                HudLayout.Conflicts(data, HudPreset.Standard, 1920f, 1080f);
+                foreach (Apex.Race.TrackStatus s in System.Enum.GetValues(typeof(Apex.Race.TrackStatus))) { RaceEventDetector.StatusTitle(s, true); RaceEventDetector.StatusDetail(s); }
+                var feed = new RaceEventFeed(); var det = new RaceEventDetector();
+                var snap = new RaceSnapshot { race = true, racing = true, position = 3, fieldSize = 9, lap = 1, laps = 2, status = Apex.Race.TrackStatus.SafetyCar };
+                det.Update(snap, 0, feed); snap.status = Apex.Race.TrackStatus.Green; snap.position = 2; snap.lap = 2; det.Update(snap, 1, feed); det.Update(snap, 3, feed);
+                snap.position = 4; det.Update(snap, 4, feed); det.Update(snap, 6, feed); snap.finished = true; det.Update(snap, 7, feed);
+                snap.finished = false; det.Reset(); det.Update(snap, 8, feed); snap.finished = true; snap.position = 1; det.Update(snap, 9, feed);
+                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b); }
+                foreach (var (r, q, pos, fin) in new[] { (true, false, 1, true), (true, false, 2, true), (true, false, 5, false), (false, true, 1, false), (false, true, 4, false), (false, false, 2, false) })
+                    ResultsModel.Headline(r, q, pos, 10, fin);
+                foreach (var cat in SettingsCatalog.All) { SettingsCatalog.Name(cat); SettingsCatalog.Description(cat); }
+                foreach (GarageView v in System.Enum.GetValues(typeof(GarageView))) GarageOrbit.Name(v);
+                foreach (ColourVision v in System.Enum.GetValues(typeof(ColourVision))) UiPalette.Name(v);
+                var f = TrackFacts.From(TestData.Circuit("test_loop"), TestData.Geometry("test_loop"), 0); var dir = f.Direction; f.clockwise = !f.clockwise; dir = f.Direction;
+                var pts = new int[Roster.Drivers.Length + 1]; ChampionshipModel.Standings(pts, 3, 0);
+                Assert.That(Loc.Missing, Is.Empty, string.Join(" | ", Loc.Missing));
+                Assert.That(MainMenuModel.Build(new MenuContext { trackName = "X", laps = 2 })[0].label, Is.EqualTo("Start race"));
+            }
+            finally { Loc.Current = Language.Deutsch; }
+            Assert.That(Loc.T("Rennen starten"), Is.EqualTo("Rennen starten"));
+        }
     }
 }

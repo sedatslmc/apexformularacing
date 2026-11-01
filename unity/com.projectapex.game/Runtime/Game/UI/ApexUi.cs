@@ -55,7 +55,16 @@ namespace Apex.Game
 
         // --- Style helpers -------------------------------------------------------------------------------------
 
-        public static Color C(UiTokens.Rgb c, float a = 1f) => new Color(c.r, c.g, c.b, a);
+        /// <summary>Text size factor of the new screens (accessibility setting, 1.0 .. 1.3).</summary>
+        public static float TextScale = 1f;
+        static readonly UiTokens.Rgb SteelHigh = UiTokens.Rgb.Hex(0xC9D2DB);
+
+        /// <summary>A token colour; with high contrast the secondary Steel becomes brighter.</summary>
+        public static Color C(UiTokens.Rgb c, float a = 1f)
+        {
+            if (UiPalette.HighContrast && c.r == UiTokens.Steel.r && c.g == UiTokens.Steel.g && c.b == UiTokens.Steel.b) c = SteelHigh;
+            return new Color(c.r, c.g, c.b, a);
+        }
 
         public static VisualElement Box(VisualElement parent, Color background)
         {
@@ -69,7 +78,7 @@ namespace Apex.Game
         {
             var l = new Label(text) { pickingMode = PickingMode.Ignore };
             l.style.unityFontDefinition = new StyleFontDefinition(FontDefinition.FromFont(font));
-            l.style.fontSize = size;
+            l.style.fontSize = Mathf.Round(size * TextScale);
             l.style.color = colour;
             l.style.unityTextAlign = align;
             l.style.whiteSpace = WhiteSpace.NoWrap;
@@ -96,7 +105,7 @@ namespace Apex.Game
         /// <summary>Panel: Carbon at the given opacity with a hairline border (the design system's surface).</summary>
         public static VisualElement Panel(VisualElement parent, float alpha = UiTokens.PanelStrongAlpha)
         {
-            var p = Box(parent, C(UiTokens.Carbon, alpha));
+            var p = Box(parent, C(UiTokens.Carbon, UiPalette.HighContrast ? Mathf.Max(alpha, 0.97f) : alpha));
             var hair = C(UiTokens.Steel, UiTokens.HairlineAlpha);
             p.style.borderLeftWidth = 1; p.style.borderRightWidth = 1; p.style.borderTopWidth = 1; p.style.borderBottomWidth = 1;
             p.style.borderLeftColor = hair; p.style.borderRightColor = hair; p.style.borderTopColor = hair; p.style.borderBottomColor = hair;
@@ -171,5 +180,8 @@ namespace Apex.Game
         }
 
         public void SetVisible(bool on) => root.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+
+        /// <summary>Removes the panel (e.g. to rebuild a view after a language change).</summary>
+        public void Dispose() { if (document != null) Object.Destroy(document.gameObject); }
     }
 }

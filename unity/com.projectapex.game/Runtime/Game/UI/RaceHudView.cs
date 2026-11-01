@@ -56,6 +56,8 @@ namespace Apex.Game
         }
 
         public event Action EditorClosed;
+        /// <summary>A team radio entry was clicked (index into the labels given to <see cref="SetRadio"/>).</summary>
+        public event Action<int> RadioClicked;
 
         readonly ApexUi ui;
         readonly VisualElement[] boxes = new VisualElement[HudLayout.All.Length];
@@ -95,6 +97,13 @@ namespace Apex.Game
         // Lights and notes.
         VisualElement lightsBox, legacyNote;
         readonly VisualElement[] lamps = new VisualElement[10];
+        // Team radio.
+        VisualElement radioBox;
+        readonly List<(VisualElement row, Label label)> radioRows = new List<(VisualElement, Label)>();
+        readonly VisualElement[] waveBars = new VisualElement[28];
+        bool radioOpen;
+        int radioFocus = -1;
+        sealed class RadioEntry { public int index; }
         // Editor.
         HudEditor editor;
         VisualElement editorLayer, editorPanel;
@@ -112,6 +121,20 @@ namespace Apex.Game
         }
 
         public bool Visible { get; private set; } = true;
+
+        public void Dispose() => ui.Dispose();
+
+        /// <summary>Rectangles of the visible elements (panel coordinates) for the F2 layout check.</summary>
+        public IEnumerable<(string name, HudRect rect)> VisibleRects()
+        {
+            float pw = PanelWidth;
+            foreach (var e in HudLayout.All)
+            {
+                if (!HudLayout.Shows(preset, e)) continue;
+                var l = layout.Get(e);
+                yield return ("HUD:" + HudLayout.Name(e), HudLayout.Rect(e, new HudElementLayout { element = l.element, dx = l.dx, dy = l.dy, scale = l.scale * hudScale }, pw, HudLayout.RefHeight));
+            }
+        }
         public bool Editing => editor != null;
 
         public void SetVisible(bool on)
@@ -143,7 +166,8 @@ namespace Apex.Game
             BuildMap(boxes[(int)HudElement.Map]);
             BuildTiming(boxes[(int)HudElement.Timing]);
             BuildLights();
-            legacyNote = ApexUi.Text(ui.root, "ALTES FAHRVERHALTEN (VERGLEICH)", ApexUi.BodyStrong, 14, ApexUi.C(UiTokens.Amber), 2f);
+            BuildRadio();
+            legacyNote = ApexUi.Text(ui.root, Loc.T("ALTES FAHRVERHALTEN (VERGLEICH)"), ApexUi.BodyStrong, 14, ApexUi.C(UiTokens.Amber), 2f);
             legacyNote.style.position = Position.Absolute; legacyNote.style.top = 12; legacyNote.style.left = 0; legacyNote.style.right = 0;
             legacyNote.style.unityTextAlign = TextAnchor.MiddleCenter;
         }
@@ -167,7 +191,7 @@ namespace Apex.Game
             var red = ApexUi.Box(head, ApexUi.C(UiTokens.Red)); red.style.width = 3; red.style.height = 16; red.style.marginRight = 10;
             towerHeader = ApexUi.Text(head, "", ApexUi.DisplayStrong, 20, ApexUi.C(UiTokens.Ivory), 2f);
             var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; head.Add(sp);
-            towerFlag = ApexUi.Text(head, "ZIEL", ApexUi.BodyStrong, 13, ApexUi.C(UiTokens.Ivory), 2f, TextAnchor.MiddleRight);
+            towerFlag = ApexUi.Text(head, Loc.T("ZIEL"), ApexUi.BodyStrong, 13, ApexUi.C(UiTokens.Ivory), 2f, TextAnchor.MiddleRight);
             for (int i = 0; i < 20; i++)
             {
                 var row = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -259,7 +283,7 @@ namespace Apex.Game
             Size(box, HudElement.Tyres);
             var p = ApexUi.Panel(box, UiTokens.PanelAlpha);
             p.style.position = Position.Absolute; p.style.left = 0; p.style.right = 0; p.style.top = 0; p.style.bottom = 0;
-            var cap = ApexUi.Caption(p, "Reifen"); ApexUi.Place(cap, 16, 12);
+            var cap = ApexUi.Caption(p, Loc.T("Reifen")); ApexUi.Place(cap, 16, 12);
             compound = ApexUi.Text(p, "", ApexUi.DisplayStrong, 22, Color.white, 1f, TextAnchor.MiddleCenter);
             ApexUi.Place(compound, 176, 52, 60, 40);
             for (int i = 0; i < 4; i++)
@@ -302,10 +326,10 @@ namespace Apex.Game
             var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; top.Add(sp);
             delta = ApexUi.Text(top, "", ApexUi.DisplayStrong, 24, ApexUi.C(UiTokens.Ivory), 0.5f, TextAnchor.MiddleRight);
             delta.style.paddingLeft = 10; delta.style.paddingRight = 10; delta.style.height = 32;
-            Row(p, "Letzte", out last);
-            Row(p, "Beste", out best);
-            best.style.color = ApexUi.C(UiTokens.Best);
-            Row(p, "Rekord", out record);
+            Row(p, Loc.T("Letzte"), out last);
+            Row(p, Loc.T("Beste"), out best);
+            best.style.color = ApexUi.C(UiPalette.Current.best);
+            Row(p, Loc.T("Rekord"), out record);
             var bars = new VisualElement { pickingMode = PickingMode.Ignore };
             bars.style.flexDirection = FlexDirection.Row; bars.style.marginTop = 10;
             p.Add(bars);
@@ -349,6 +373,76 @@ namespace Apex.Game
                     lamp.style.borderTopLeftRadius = 22; lamp.style.borderTopRightRadius = 22; lamp.style.borderBottomLeftRadius = 22; lamp.style.borderBottomRightRadius = 22;
                     lamps[i * 2 + k] = lamp;
                 }
+            }
+        }
+
+        void BuildRadio()
+        {
+            radioBox = ApexUi.Panel(ui.root, UiTokens.PanelStrongAlpha);
+            radioBox.style.position = Position.Absolute; radioBox.style.width = 340;
+            radioBox.style.paddingLeft = 16; radioBox.style.paddingRight = 16; radioBox.style.paddingTop = 12; radioBox.style.paddingBottom = 12;
+            var head = new VisualElement { pickingMode = PickingMode.Ignore };
+            head.style.flexDirection = FlexDirection.Row; head.style.alignItems = Align.Center; head.style.height = 30;
+            radioBox.Add(head);
+            var edge = ApexUi.Box(head, ApexUi.C(UiTokens.Amber)); edge.style.width = 3; edge.style.height = 18; edge.style.marginRight = 10;
+            ApexUi.Text(head, Loc.T("TEAMFUNK"), ApexUi.DisplayStrong, 20, ApexUi.C(UiTokens.Amber), 2.5f);
+            // Waveform: animated bars while the channel is open (decoration of the open channel, no audio analysis).
+            var wave = new VisualElement { pickingMode = PickingMode.Ignore };
+            wave.style.flexDirection = FlexDirection.Row; wave.style.alignItems = Align.Center; wave.style.height = 28; wave.style.marginLeft = 16; wave.style.flexGrow = 1;
+            head.Add(wave);
+            for (int i = 0; i < waveBars.Length; i++)
+            {
+                var b = ApexUi.Box(wave, ApexUi.C(UiTokens.Amber, 0.8f));
+                b.style.width = 3; b.style.marginRight = 2; b.style.height = 4;
+                waveBars[i] = b;
+            }
+            radioBox.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>Team radio panel (keyboard/mouse): entries with the focused one highlighted; null hides it.</summary>
+        public void SetRadio(bool open, IList<string> labels, int focus)
+        {
+            radioOpen = open && labels != null;
+            radioBox.style.display = radioOpen ? DisplayStyle.Flex : DisplayStyle.None;
+            if (!radioOpen) return;
+            while (radioRows.Count < labels.Count)
+            {
+                var row = new VisualElement { pickingMode = PickingMode.Position, userData = new RadioEntry { index = radioRows.Count } };
+                row.style.height = 36; row.style.flexDirection = FlexDirection.Row; row.style.alignItems = Align.Center; row.style.paddingLeft = 10; row.style.marginTop = 2;
+                radioBox.Add(row);
+                var l = ApexUi.Text(row, "", ApexUi.Body, 16, ApexUi.C(UiTokens.Ivory));
+                radioRows.Add((row, l));
+            }
+            for (int i = 0; i < radioRows.Count; i++)
+            {
+                bool on = i < labels.Count;
+                radioRows[i].row.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+                if (!on) continue;
+                radioRows[i].label.text = $"{i + 1}   {labels[i]}";
+                bool f = i == focus;
+                radioRows[i].row.style.backgroundColor = f ? ApexUi.C(UiTokens.Amber, 0.18f) : Color.clear;
+                radioRows[i].label.style.color = f ? ApexUi.C(UiTokens.Ivory) : ApexUi.C(UiTokens.Ivory, 0.75f);
+            }
+            radioFocus = focus;
+        }
+
+        void TickRadio(double now)
+        {
+            if (!radioOpen) return;
+            float pw = PanelWidth;
+            radioBox.style.left = pw - 150f - 340f; radioBox.style.top = 240;
+            for (int i = 0; i < waveBars.Length; i++)
+            {
+                float a = ReducedMotion ? 0.4f : 0.5f + 0.5f * Mathf.Sin((float)now * (5f + i * 0.37f) + i * 1.7f) * Mathf.Sin((float)now * 2.3f + i * 0.5f);
+                waveBars[i].style.height = 3f + 18f * Mathf.Abs(a);
+            }
+            var p = Pointer.current;
+            if (p != null && p.press.wasReleasedThisFrame && ui.root.panel != null)
+            {
+                var screen = p.position.ReadValue();
+                var pos = RuntimePanelUtils.ScreenToPanel(ui.root.panel, new Vector2(screen.x, Screen.height - screen.y));
+                var e = ui.PickData<RadioEntry>(pos);
+                if (e != null) RadioClicked?.Invoke(e.index);
             }
         }
 
@@ -454,7 +548,8 @@ namespace Apex.Game
             for (int i = 0; i < 4; i++)
             {
                 var band = f.tyreBand[i];
-                Color c = band == TyreBand.Cold ? ApexUi.C(UiTokens.FlagBlue) : band == TyreBand.Hot ? ApexUi.C(UiTokens.FlagRed) : ApexUi.C(UiTokens.FlagGreen);
+                var pal = UiPalette.Current;
+                Color c = band == TyreBand.Cold ? ApexUi.C(pal.cold) : band == TyreBand.Hot ? ApexUi.C(pal.hot) : ApexUi.C(pal.optimal);
                 tyreFill[i].style.backgroundColor = c;
                 tyreFill[i].style.height = new Length(Mathf.Clamp01(1f - f.tyreWear[i]) * 100f, LengthUnit.Percent);
                 tyreTemp[i].text = $"{f.tyreTemp[i]:0}°";
@@ -487,13 +582,13 @@ namespace Apex.Game
             }
             // Timing.
             lapTime.text = f.lapTime;
-            lapTime.style.color = f.lapValid ? ApexUi.C(UiTokens.Ivory) : ApexUi.C(UiTokens.FlagRed);
+            lapTime.style.color = f.lapValid ? ApexUi.C(UiTokens.Ivory) : ApexUi.C(UiPalette.Current.bad);
             bool hasDelta = !double.IsNaN(f.delta);
             delta.style.display = hasDelta ? DisplayStyle.Flex : DisplayStyle.None;
             if (hasDelta)
             {
                 delta.text = (f.delta < 0 ? "−" : "+") + Math.Abs(f.delta).ToString("0.000");
-                delta.style.backgroundColor = f.delta < 0 ? ApexUi.C(UiTokens.FlagGreen, 0.85f) : ApexUi.C(UiTokens.FlagRed, 0.85f);
+                delta.style.backgroundColor = f.delta < 0 ? ApexUi.C(UiPalette.Current.good, 0.85f) : ApexUi.C(UiPalette.Current.bad, 0.85f);
             }
             last.text = f.last; best.text = f.best; record.text = f.record;
             for (int i = 0; i < 3; i++)
@@ -519,7 +614,7 @@ namespace Apex.Game
                     eventDetail.text = ev.detail;
                     eventDetail.style.display = string.IsNullOrEmpty(ev.detail) ? DisplayStyle.None : DisplayStyle.Flex;
                     eventEdge.style.backgroundColor = ToneColour(ev.tone);
-                    eventTitle.style.color = ev.tone == HudTone.Best ? ApexUi.C(UiTokens.Best) : ApexUi.C(UiTokens.Ivory);
+                    eventTitle.style.color = ev.tone == HudTone.Best ? ApexUi.C(UiPalette.Current.best) : ApexUi.C(UiTokens.Ivory);
                     // Plain messages (radio replies, penalties) are sentences: smaller than the headline events.
                     eventTitle.style.fontSize = ev.kind == HudEventKind.Info || ev.kind == HudEventKind.Notice ? 20 : 28;
                     eventTitle.style.letterSpacing = ev.kind == HudEventKind.Info || ev.kind == HudEventKind.Notice ? 0.3f : 2.5f;
@@ -530,8 +625,9 @@ namespace Apex.Game
             float a = ev == null ? 0f : Mathf.Min(UiMotion.OutCubic(Mathf.Clamp01(eventAnim / UiTokens.PanelTime)), Mathf.Clamp01((float)(ev.Ends - now) / 0.3f));
             eventBox.style.opacity = Editing && ev == null ? 0.35f : a;
             ApexUi.Translate(eventBox, 0f, ReducedMotion ? 0f : -12f * (1f - a));
-            if (Editing && ev == null) { eventTitle.text = "EREIGNISSE"; eventDetail.text = "Beispiel"; eventDetail.style.display = DisplayStyle.Flex; }
+            if (Editing && ev == null) { eventTitle.text = Loc.T("EREIGNISSE"); eventDetail.text = Loc.T("Beispiel"); eventDetail.style.display = DisplayStyle.Flex; }
 
+            TickRadio(now);
             if (Editing) TickEditor(dt);
         }
 
@@ -539,10 +635,10 @@ namespace Apex.Game
         {
             switch (t)
             {
-                case HudTone.Good: return ApexUi.C(UiTokens.FlagGreen);
-                case HudTone.Best: return ApexUi.C(UiTokens.Best);
+                case HudTone.Good: return ApexUi.C(UiPalette.Current.good);
+                case HudTone.Best: return ApexUi.C(UiPalette.Current.best);
                 case HudTone.Warning: return ApexUi.C(UiTokens.Amber);
-                case HudTone.Danger: return ApexUi.C(UiTokens.FlagRed);
+                case HudTone.Danger: return ApexUi.C(UiPalette.Current.bad);
                 default: return ApexUi.C(UiTokens.Cyan);
             }
         }
@@ -580,7 +676,7 @@ namespace Apex.Game
             var amber = ApexUi.C(UiTokens.Amber, 0.5f);
             clear.style.borderLeftWidth = 1; clear.style.borderRightWidth = 1; clear.style.borderTopWidth = 1; clear.style.borderBottomWidth = 1;
             clear.style.borderLeftColor = amber; clear.style.borderRightColor = amber; clear.style.borderTopColor = amber; clear.style.borderBottomColor = amber;
-            var cl = ApexUi.Text(clear, "FAHRBAHN FREIHALTEN", ApexUi.BodyStrong, 12, ApexUi.C(UiTokens.Amber, 0.8f), 3f);
+            var cl = ApexUi.Text(clear, Loc.T("FAHRBAHN FREIHALTEN"), ApexUi.BodyStrong, 12, ApexUi.C(UiTokens.Amber, 0.8f), 3f);
             ApexUi.Place(cl, 12, 8);
             foreach (var e in HudLayout.All)
             {
@@ -595,15 +691,15 @@ namespace Apex.Game
             editorPanel = ApexUi.Panel(editorLayer, UiTokens.PanelStrongAlpha);
             editorPanel.style.position = Position.Absolute; editorPanel.style.top = 280; editorPanel.style.width = 560;
             editorPanel.style.paddingLeft = 24; editorPanel.style.paddingRight = 24; editorPanel.style.paddingTop = 18; editorPanel.style.paddingBottom = 18;
-            ApexUi.Caption(editorPanel, "HUD anpassen");
+            ApexUi.Caption(editorPanel, Loc.T("HUD anpassen"));
             editorTitle = ApexUi.Text(editorPanel, "", ApexUi.DisplayStrong, 30, ApexUi.C(UiTokens.Ivory), 2f);
             editorTitle.style.marginTop = 6;
             editorValues = ApexUi.Text(editorPanel, "", ApexUi.Body, 16, ApexUi.C(UiTokens.Cyan));
             editorValues.style.marginTop = 4;
-            var help = ApexUi.Text(editorPanel,
+            var help = ApexUi.Text(editorPanel, Loc.T(
                 "Tab / LB RB  Element   ·   Pfeile / Steuerkreuz  Verschieben (Shift schneller)   ·   Maus  Ziehen\n" +
                 "+ −  / Y X  Größe   ·   Bild↑ Bild↓  / RT LT  Deckkraft   ·   R  Zurücksetzen   ·   Shift+R  Alles\n" +
-                "Enter / Esc / B  Fertig",
+                "Enter / Esc / B  Fertig"),
                 ApexUi.Body, 13, ApexUi.C(UiTokens.Steel));
             help.style.whiteSpace = WhiteSpace.Normal; help.style.marginTop = 12;
             editorIssues = ApexUi.Text(editorPanel, "", ApexUi.BodyStrong, 13, ApexUi.C(UiTokens.Amber));
@@ -631,9 +727,9 @@ namespace Apex.Game
             }
             var cur = layout.Get(editor.Current);
             editorTitle.text = HudLayout.Name(editor.Current).ToUpperInvariant();
-            editorValues.text = $"Größe {cur.scale * 100f:0} %   ·   Deckkraft {cur.opacity * 100f:0} %   ·   Preset {HudLayout.PresetName(preset)}";
+            editorValues.text = Loc.Format("Größe {0} %   ·   Deckkraft {1} %   ·   Preset {2}", (cur.scale * 100f).ToString("0"), (cur.opacity * 100f).ToString("0"), HudLayout.PresetName(preset));
             var issues = HudLayout.Conflicts(layout, preset == HudPreset.Off ? HudPreset.Standard : preset, pw, HudLayout.RefHeight);
-            editorIssues.text = issues.Count == 0 ? "" : "Hinweis: " + string.Join(" · ", issues);
+            editorIssues.text = issues.Count == 0 ? "" : Loc.T("Hinweis: ") + string.Join(" · ", issues);
         }
 
         void TickEditor(float dt)

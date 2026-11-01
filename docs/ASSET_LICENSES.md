@@ -27,6 +27,7 @@ Stand: Inhalte sind selbst erstellt oder prozedural erzeugt; Ausnahme sind die u
 | Schriften Barlow Medium/SemiBold, Barlow Condensed SemiBold/Bold (`Resources/Fonts`) | [Barlow](https://github.com/jpt/barlow), Jeremy Tribby (über Google Fonts) | SIL Open Font License 1.1 (`Resources/Fonts/OFL-Barlow.txt` liegt bei) | neue UI (UI Toolkit); Einbettung im Spiel erlaubt, Schrift nicht einzeln verkaufen; die alten IMGUI-Bildschirme nutzen weiter die Unity-Standard-Font |
 | Schrift (alte IMGUI-Bildschirme) | Unity-Standard-Font | Unity-Lizenz | wird mit den UI-Phasen 3–5 abgelöst |
 | UI-Sounds (Fokus, Bestätigen, Zurück, Übergang, Start) | prozedural synthetisiert (`UiSounds`) | Projekteigentum | keine Aufnahmen |
+| Menümusik (Platzhalter-Loop) | prozedural synthetisiert (`MenuMusic`) | Projekteigentum | keine Aufnahmen, keine Samples; wird durch lizenzierte Musik ersetzt (Lizenz dann hier eintragen) |
 | Menü-Showroom (Bühne, LED-Ring) | prozedural im Code (`MenuStage`) | Projekteigentum | Platzhalter-Art |
 | UI-Mockups `docs/img/ui_mock_*.jpg`, Hintergründe in `tools/uimock/` | selbst gerendert (`tools/uimock`, `tools/carrender/showroom.html`) aus eigenen Renders der prozeduralen Szene | Projekteigentum | nur Entwurfsbilder, nicht im Spiel; Fahrername „Fahrer“ als Platzhalter |
 

@@ -16,7 +16,6 @@ namespace Apex.Game
         bool sectors = true;
         Color single = Color.white;
         float progress = 1f;
-        static readonly Color[] SectorColours = { ApexUi.C(UiTokens.Red), ApexUi.C(UiTokens.Cyan), ApexUi.C(UiTokens.Amber) };
 
         public TrackMapElement()
         {
@@ -63,6 +62,8 @@ namespace Apex.Game
             if (quads == 0) return;
             var mesh = mgc.Allocate(quads * 4, quads * 6);
             var casing = ApexUi.C(UiTokens.Navy, 0.85f);
+            var pal = UiPalette.Current;
+            Color[] sectorColours = { ApexUi.C(pal.sector1), ApexUi.C(pal.sector2), ApexUi.C(pal.sector3) };
             int vtx = 0;
             for (int pass = 0; pass < 2; pass++)
                 for (int i = 0; i < segs; i++)
@@ -70,7 +71,7 @@ namespace Apex.Game
                     int j = (i + 1) % n;
                     var a = new Vector2(line.x[i], line.y[i]);
                     var b = new Vector2(line.x[j], line.y[j]);
-                    Color c = pass == 0 ? casing : sectors ? SectorColours[Mathf.Clamp(line.sector[i], 0, 2)] : single;
+                    Color c = pass == 0 ? casing : sectors ? sectorColours[Mathf.Clamp(line.sector[i], 0, 2)] : single;
                     Segment(mesh, ref vtx, a, b, pass == 0 ? width + 4f : width, c);
                 }
             if (progress >= 1f)

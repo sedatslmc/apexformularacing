@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Apex.Core;
 using Apex.Race;
 using Apex.UI;
@@ -29,6 +30,7 @@ namespace Apex.Game
             try
             {
                 hudView = new RaceHudView();
+                hudView.RadioClicked += i => { if (radioOpen && Race != null) RadioAction(i); };
                 hudView.EditorClosed += () =>
                 {
                     // The key that closed the editor must not also trigger the pause menu.
@@ -95,15 +97,26 @@ namespace Apex.Game
                 hudView.Configure(CurrentHudPreset, Settings.hudLayout, Settings.hudScale, Settings.reducedMotion);
             }
             FillHudFrame();
+            hudView.SetRadio(radioOpen && Settings.controlPreset == ControlPreset.Keyboard, RadioLabels(), radioFocus);
             hudView.Tick(hudFrame, eventFeed, Time.unscaledTime, Time.unscaledDeltaTime);
+        }
+
+        readonly List<string> radioLabels = new List<string>();
+
+        List<string> RadioLabels()
+        {
+            radioLabels.Clear();
+            for (int i = 0; i < RadioItems.Length; i++)
+                radioLabels.Add(i == 1 ? Loc.Format("Reifen: {0}", CompoundSpec.For(radioCompound).name) : Loc.T(RadioItems[i]));
+            return radioLabels;
         }
 
         static Color SectorTokenColour(Color c)
         {
-            if (c == ApexStyle.Best) return ApexUi.C(UiTokens.Best);
-            if (c == ApexStyle.Faster) return ApexUi.C(UiTokens.FlagGreen);
+            if (c == ApexStyle.Best) return ApexUi.C(UiPalette.Current.best);
+            if (c == ApexStyle.Faster) return ApexUi.C(UiPalette.Current.good);
             if (c == ApexStyle.Caution) return ApexUi.C(UiTokens.Amber);
-            if (c == ApexStyle.Urgent) return ApexUi.C(UiTokens.FlagRed);
+            if (c == ApexStyle.Urgent) return ApexUi.C(UiPalette.Current.bad);
             return ApexUi.C(UiTokens.Surface);
         }
 

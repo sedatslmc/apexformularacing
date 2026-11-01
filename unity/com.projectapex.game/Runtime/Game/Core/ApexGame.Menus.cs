@@ -53,7 +53,7 @@ namespace Apex.Game
             {
                 case GameState.MainMenu:
                     // The main menu is the UI Toolkit view (MainMenuView); the IMGUI one is only the fallback.
-                    if (settingsOpen) DrawSettings();
+                    if (settingsOpen) { if (settingsView == null) DrawSettings(); }
                     else if (menuView == null) DrawMainMenu();
                     break;
                 case GameState.TrackSelect:
@@ -63,7 +63,7 @@ namespace Apex.Game
                     else DrawSetup();
                     break;
                 case GameState.Garage:
-                    DrawGarage();
+                    if (garageView == null) DrawGarage();
                     break;
                 case GameState.Loading:
                     DrawLoading();
@@ -79,11 +79,11 @@ namespace Apex.Game
                 case GameState.Pause:
                     DrawHud();
                     if (hudView != null && hudView.Editing) break;   // the HUD editor replaces the pause menu
-                    if (settingsOpen) DrawSettings();
-                    else DrawPause();
+                    if (settingsOpen) { if (settingsView == null) DrawSettings(); }
+                    else if (pauseView == null) DrawPause();
                     break;
                 case GameState.Results:
-                    DrawResults();
+                    if (resultsView == null) DrawResults();
                     break;
             }
             if (helpOpen) DrawHelp();
@@ -506,6 +506,7 @@ namespace Apex.Game
                     value = () => GraphicsQuality.Current.motionBlur <= 0f ? "– (ab Hoch)" : s.reducedMotion ? "aus (reduzierte Bewegung)" : OnOff(s.motionBlur),
                     change = d => s.motionBlur = !s.motionBlur });
             }
+            AddUiSettingRows(rows);
             return rows;
         }
 

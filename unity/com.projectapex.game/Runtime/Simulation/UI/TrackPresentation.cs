@@ -21,7 +21,7 @@ namespace Apex.UI
         /// <summary>Named corners in lap order (empty when the track has no authored corner names).</summary>
         public readonly List<string> cornerNames = new List<string>();
 
-        public string Direction => clockwise ? "im Uhrzeigersinn" : "gegen den Uhrzeigersinn";
+        public string Direction => Loc.T(clockwise ? "im Uhrzeigersinn" : "gegen den Uhrzeigersinn");
 
         public static TrackFacts From(CircuitDefinition def, TrackGeometry g, double bestLap)
         {
@@ -177,7 +177,7 @@ namespace Apex.UI
                 int i = order[k];
                 bool me = i == 0;
                 var d = me ? default : Roster.Drivers[Math.Min(i - 1, Roster.Drivers.Length - 1)];
-                return new StandingRow { position = k + 1, points = points[i], player = me, team = me ? playerTeam : d.team, name = me ? "Du" : d.name, code = me ? "DU" : d.code };
+                return new StandingRow { position = k + 1, points = points[i], player = me, team = me ? playerTeam : d.team, name = me ? Loc.T("Du") : d.name, code = me ? "DU" : d.code };
             }
             int shown = Math.Min(rows, order.Count);
             for (int k = 0; k < shown; k++) list.Add(Row(k));
