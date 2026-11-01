@@ -337,7 +337,45 @@ namespace Apex.Game
                             Mathf.Min(StreetFronts.FlagScale(seed, i, f2), (fh - 0.3f) / 1.35f));
                     }
                 }
+                // Rain downpipes at both ends of the street front (zinc), from the eaves to the pavement.
+                foreach (float tp in new[] { 0.3f, len - 0.3f })
+                    B(LandmarkGeometry.Lead).Tube(P(tp, y0, 0.09f), P(tp, roofY - 0.15f, 0.09f), 0.05f, 5, true);
+                bool flatRoof = !(b.roof == 1 && n == 4);
+                if (level >= 2 && flatRoof)
+                {
+                    // Satellite dishes on the parapet of many apartment blocks: none, one or two per street front.
+                    int dishes = Hash(seed, i + 41) % 3;
+                    for (int k = 0; k < dishes; k++)
+                        SatelliteDish(B, P(len * (0.3f + 0.4f * k), roofY + 0.9f, -0.35f), outward, Hash(seed + k, i) % 360);
+                    // A roof terrace with a canvas shade on some blocks (once per building, at its first street front).
+                    if (Hash(seed, 77) % 4 == 0 && i == FirstFront(b) && len > 8f)
+                    {
+                        var c0 = P(len * 0.5f, roofY + 0.05f, -2.2f);
+                        foreach (float sx in new[] { -1.4f, 1.4f })
+                            foreach (float sz in new[] { -1.1f, 1.1f })
+                                B(LandmarkGeometry.Lead).Tube(c0 + dir * sx + outward * sz, c0 + dir * sx + outward * sz + Vector3.up * 2.3f, 0.03f, 4, true);
+                        B(Awning(awning)).Box(c0 + Vector3.up * 2.35f, new Vector3(3.2f, 0.04f, 2.6f), q);
+                        B(LandmarkGeometry.Lead).Box(c0 + Vector3.up * 0.45f, new Vector3(1.2f, 0.05f, 0.8f), q);   // table
+                    }
+                }
             }
+        }
+
+        static int FirstFront(OsmCity.Building b)
+        {
+            for (int i = 0; i < b.front.Length; i++) if (b.front[i]) return i;
+            return -1;
+        }
+
+        /// <summary>Satellite dish (0.8 m) on a short arm, tilted up towards the southern sky and turned a little per dish.</summary>
+        static void SatelliteDish(Parts B, Vector3 foot, Vector3 outward, int turnDeg)
+        {
+            var dish = new MeshBuilder();
+            LandmarkGeometry.VerticalLathe(dish, Vector3.zero, new[] { new Vector2(0f, 0.4f), new Vector2(0.06f, 0.3f), new Vector2(0.12f, 0.001f) }, 10);
+            var rot = Quaternion.LookRotation(Quaternion.Euler(0f, turnDeg % 60 - 30, 0f) * outward, Vector3.up) * Quaternion.Euler(-55f, 0f, 0f);
+            var head = foot + Vector3.up * 0.55f;
+            B(LandmarkGeometry.Marble).Append(dish, v => head + rot * new Vector3(v.x, v.z, v.y));
+            B(LandmarkGeometry.Lead).Tube(foot, head, 0.025f, 4, true);
         }
 
         public const string ShopSignAtlas = "ShopSign", Door = "Door";

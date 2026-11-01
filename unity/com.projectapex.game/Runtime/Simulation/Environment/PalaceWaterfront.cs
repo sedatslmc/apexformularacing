@@ -39,16 +39,27 @@ namespace Apex.Environment
         public const float MainHalfWidth = 4.3f, GateHalfWidth = 3.05f;
 
         readonly List<List<Vector2>> wings = new List<List<Vector2>>();
+        /// <summary>Dolmabahçe's wings only (the sea gates belong to Dolmabahçe).</summary>
+        readonly List<List<Vector2>> dolmabahce = new List<List<Vector2>>();
         public readonly List<Gate> gates = new List<Gate>();
 
         /// <summary>The Bosphorus-side wings of Dolmabahçe (Selamlık / Mabeyn, ceremonial hall, Harem) from the OSM city.</summary>
         public static bool IsWaterfrontWing(string name) =>
             name != null && name.StartsWith("Dolmabahçe Sarayı") && (name.Contains("Selamlık") || name.Contains("Muayede") || name.Contains("Harem"));
 
+        /// <summary>
+        /// Çırağan Palace (1871, rebuilt 1989) and its hotel wing on the same marble quay: a palace quay with the
+        /// balustrade, but no sea gates of its own in the model (none are recorded in OSM).
+        /// </summary>
+        public static bool IsCiraganWing(string name) => name == "Çırağan Sarayı" || name == "Çırağan Sarayı Kempinski";
+
         public PalaceWaterfront(CityData data)
         {
             foreach (var b in data.buildings)
-                if (IsWaterfrontWing(b.name)) wings.Add(b.outline);
+            {
+                if (IsWaterfrontWing(b.name)) { wings.Add(b.outline); dolmabahce.Add(b.outline); }
+                else if (IsCiraganWing(b.name)) wings.Add(b.outline);
+            }
         }
 
         public bool HasPalace => wings.Count > 0;
@@ -88,11 +99,18 @@ namespace Apex.Environment
         {
             gates.Clear();
             var front = new List<Waterfront.Segment>();
-            foreach (var s in wf.segments) if (s.palace) front.Add(s);
+            foreach (var s in wf.segments)
+            {
+                if (!s.palace) continue;
+                var m = (s.a + s.b) * 0.5f;
+                float d = float.MaxValue;
+                foreach (var w in dolmabahce) d = MathF.Min(d, DistanceToOutline(w, m));
+                if (d <= FrontageReach) front.Add(s);
+            }
             if (front.Count == 0) return;
             // Target points: the main gate (OSM), the wing axes, the two ends of the palace front.
             var targets = new List<(Vector2 p, bool main, string name, bool surveyed)> { (MainSeaGate, true, "Deniz Kapısı (Muayede)", true) };
-            foreach (var w in wings)
+            foreach (var w in dolmabahce)
             {
                 var c = Vector2.Zero;
                 foreach (var q in w) c += q;

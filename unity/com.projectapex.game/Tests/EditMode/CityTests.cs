@@ -333,8 +333,17 @@ namespace Apex.Tests
             var wf = new Waterfront(field, clear, (x, z) => city.InsideBuilding(x, z, 0f), front.OnFrontage);
             front.PlaceGates(wf);
             TestContext.WriteLine($"palace quay {wf.palaceLength:F0} m, gates {front.gates.Count}");
-            // A walled quay along the whole palace front (the real one is ~600 m incl. the gardens; the wings ~280 m).
-            Assert.That(wf.palaceLength, Is.InRange(250f, 700f));
+            // Walled palace quays: Dolmabahçe (the real one ~600 m incl. the gardens) and Çırağan with its hotel wing.
+            float dolma = 0f, ciragan = 0f;
+            foreach (var sg in wf.segments)
+            {
+                if (!sg.palace) continue;
+                var m = (sg.a + sg.b) * 0.5f;
+                if (m.X < 600f) dolma += Vector2.Distance(sg.a, sg.b); else ciragan += Vector2.Distance(sg.a, sg.b);
+            }
+            TestContext.WriteLine($"Dolmabahçe quay {dolma:F0} m, Çırağan quay {ciragan:F0} m");
+            Assert.That(dolma, Is.InRange(250f, 700f));
+            Assert.That(ciragan, Is.InRange(200f, 700f));
             foreach (var sg in wf.segments)
                 if (sg.palace) Assert.That(sg.promenade, Is.False, "no public promenade on the palace quay");
             foreach (var l in wf.lamps) Assert.That(front.OnFrontage(l.foot.X, l.foot.Z), Is.False, "no promenade lamps on the palace quay");
@@ -392,6 +401,30 @@ namespace Apex.Tests
             Assert.That(lo, Is.GreaterThanOrEqualTo(0.8f));
             Assert.That(hi, Is.LessThanOrEqualTo(1.75f));
             Assert.That(hi - lo, Is.GreaterThan(0.6f), "flags of different sizes");
+        }
+
+        [Test]
+        public void TvTowersStandClearOfTreesAndBuildings()
+        {
+            var def = TestData.Circuit("bosphorus_a");
+            var bed = new CircuitTestBed(def, false);
+            var field = new TerrainField(bed.g, def);
+            var towers = new List<CityLayout.Reserved>();
+            var spots = new List<Vector2>();
+            foreach (var t in bed.plan.tvTowers)
+            {
+                var p = bed.plan.TvTowerPosition(t, bed.surface.wallLeft, bed.surface.wallRight);
+                spots.Add(p);
+                towers.Add(new CityLayout.Reserved(p.X, p.Y, TrackInfrastructurePlan.TvTowerClearance));
+            }
+            var city = new OsmCity(TestData.City("bosphorus_a"), field, new TrackClearance(bed.surface), def, towers, 1);
+            foreach (var p in spots)
+            {
+                foreach (var tr in city.trees)
+                    Assert.That(Vector2.Distance(new Vector2(tr.x, tr.z), p), Is.GreaterThan(TrackInfrastructurePlan.TvTowerClearance - 0.01f), "tree in a TV tower");
+                Assert.That(city.InsideBuilding(p.X, p.Y, 0f), Is.False, "TV tower inside a building");
+                Assert.That(field.IsWater(p.X, p.Y), Is.False, "TV tower in the water");
+            }
         }
 
         static Vector2 Centre(List<Vector2> o)

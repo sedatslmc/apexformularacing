@@ -67,6 +67,12 @@ namespace Apex.Game
             var reserved = new List<CityLayout.Reserved>();
             // Event buildings (pit building, timing tower, race control) keep stands and city away.
             foreach (var (x, z, r) in ci.EventFootprints) reserved.Add(new CityLayout.Reserved(x, z, r));
+            // TV camera towers behind the barrier (TrackInfrastructureBuilder.BuildTvTowers): no tree or building there.
+            foreach (var t in ci.Infrastructure.tvTowers)
+            {
+                var tp = ci.Infrastructure.TvTowerPosition(t, ci.WallLeft, ci.WallRight);
+                reserved.Add(new CityLayout.Reserved(tp.X, tp.Y, TrackInfrastructurePlan.TvTowerClearance));
+            }
             Safe("waterfront", () => BuildWaterfront(root.transform, env, ci, reserved));
             // Monumental Turkish flag (site from the circuit file, re-checked against the built circuit): keep the city away.
             bool monumental = false;

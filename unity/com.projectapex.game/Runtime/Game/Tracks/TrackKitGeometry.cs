@@ -406,6 +406,47 @@ namespace Apex.Game
         }
 
         /// <summary>
+        /// TV camera tower behind the barrier: a 1.8 m square scaffold of steel tubes with cross braces, a platform at
+        /// 5 m with a toe board and hand rail, a ladder, a broadcast camera on a tripod and a sun canopy. Origin at
+        /// the foot, +z towards the track.
+        /// </summary>
+        public static void TvTower(Parts B, int lod)
+        {
+            var steel = B(TrackInfrastructureGeometry.Steel);
+            const float h = 5f, w = 0.9f;
+            int seg = lod == 0 ? 6 : 4;
+            foreach (float x in new[] { -w, w })
+                foreach (float z in new[] { -w, w })
+                    steel.Tube(new Vector3(x, 0f, z), new Vector3(x, h + 1.1f, z), 0.045f, seg, true);
+            var deck = B(TrackInfrastructureGeometry.Housing);
+            deck.Box(new Vector3(0f, h, 0f), new Vector3(2f * w + 0.3f, 0.12f, 2f * w + 0.3f));
+            B(TrackInfrastructureGeometry.Roof).Box(new Vector3(0f, h + 2.4f, 0.1f), new Vector3(2f * w + 0.6f, 0.06f, 2f * w + 0.8f));
+            foreach (float x in new[] { -w, w })
+                steel.Tube(new Vector3(x, h + 1.1f, -w), new Vector3(x, h + 2.4f, -w), 0.03f, seg, true);
+            if (lod >= 2) return;
+            // Cross braces on all four sides, hand rail and toe board.
+            for (int side = 0; side < 4; side++)
+            {
+                float a = side * Mathf.PI * 0.5f;
+                Vector3 R(float u, float y) => new Vector3(Mathf.Cos(a) * w - Mathf.Sin(a) * u, y, Mathf.Sin(a) * w + Mathf.Cos(a) * u);
+                steel.Tube(R(-w, 0.3f), R(w, h - 0.2f), 0.025f, 4, false);
+                steel.Tube(R(-w, h + 1.05f), R(w, h + 1.05f), 0.03f, 4, false);
+                deck.Box(R(0f, h + 0.12f), new Vector3(side % 2 == 0 ? 0.04f : 2f * w, 0.18f, side % 2 == 0 ? 2f * w : 0.04f));
+            }
+            if (lod > 0) return;
+            // Ladder on the back.
+            foreach (float x in new[] { -0.22f, 0.22f }) steel.Tube(new Vector3(x, 0f, -w - 0.08f), new Vector3(x, h + 1f, -w - 0.08f), 0.02f, 4, true);
+            for (float y = 0.3f; y < h; y += 0.3f) steel.Tube(new Vector3(-0.22f, y, -w - 0.08f), new Vector3(0.22f, y, -w - 0.08f), 0.015f, 4, false);
+            // Broadcast camera on a tripod, lens towards the track (+z).
+            var dark = B(Dark);
+            foreach (float t in new[] { 0f, 2.1f, 4.2f })
+                dark.Tube(new Vector3(0f, h + 1.25f, 0.2f), new Vector3(Mathf.Sin(t) * 0.35f, h + 0.06f, 0.2f + Mathf.Cos(t) * 0.35f), 0.02f, 4, false);
+            dark.Box(new Vector3(0f, h + 1.4f, 0.2f), new Vector3(0.3f, 0.32f, 0.55f));
+            dark.Tube(new Vector3(0f, h + 1.42f, 0.47f), new Vector3(0f, h + 1.42f, 0.95f), 0.09f, 8, true);
+            B(TrackInfrastructureGeometry.Housing).Box(new Vector3(0.22f, h + 1.5f, 0.05f), new Vector3(0.12f, 0.16f, 0.2f));   // viewfinder
+        }
+
+        /// <summary>
         /// LED flag panel housing on its post (the emissive faces at y 2.53 / 2.98, z 0.1 are built by
         /// the caller): cabinet with bezel and sun hood, post with base plate and stay.
         /// </summary>

@@ -7,7 +7,8 @@
 - **Phase 2, Uferhöhen:** implementiert und getestet (Simulation, Messwerkzeuge, Vorschau-Renders).
   - **Im Unity-Editor nicht geprüft.** Die Bilder sind three.js-Vorschauen der Spielgeometrie, keine Unity-Aufnahmen.
 - **Phase 3, Referenzzone Dolmabahçe:** implementiert und getestet (Abschnitt 2b). Im Unity-Editor nicht geprüft.
-- **Phasen 4–6:** geplant (Abschnitt 4).
+- **Phase 4, erster Teil (Infrastruktur, Ufertypen, Gebäudedetails):** implementiert und getestet (Abschnitt 2c). Im Unity-Editor nicht geprüft.
+- **Phasen 4 (Rest) bis 6:** geplant (Abschnitt 4).
 
 **Git-Checkpoint:** `main` bei Commit `8a3377a` (Merge von PR #25), dem Stand vor dieser Überarbeitung. Das lokale Tag `checkpoint-pre-istanbul-overhaul` ließ sich über den Proxy nicht hochladen.
 
@@ -140,6 +141,33 @@ Gelände. `build_track_a.py` korrigiert es jetzt vor dem Höhenentwurf (`coastal
 - **Fangzaun an der Akaretler-Steigung:** beidseitig und im Cockpit dominant (Bild). Er gehört zur Infrastruktur-Phase 4.
 - **Vorschau-Werkzeug:** zeigt die Flaggen an Straßenfronten aus Streckensicht schlecht (keine Schatten-/Licht-Abstimmung). Die Prüfung im Unity-Editor ist nötig.
 - **Wind:** Die Bewegung der Balkonflaggen ist im Material nicht animiert; nur die Monumentalflagge bewegt sich.
+
+## 2c. Phase 4, erster Teil: Infrastruktur, Ufertypen, Gebäudedetails
+| Teil | Code | Inhalt |
+|---|---|---|
+| Bremstafeln | `TrackInfrastructurePlan.brakeBoards`, `TrackInfrastructureBuilder.BuildSigns` | Weiße Tafeln mit schwarzen Ziffern 150 / 100 / 50 m vor dem Einlenkpunkt jeder Kurve, die um mehr als 90 km/h angebremst wird, außen hinter der Barriere. Keine Tafel, die in die vorige Kurve fiele. 19 Tafeln. |
+| TV-Kameratürme | `TrackInfrastructurePlan.tvTowers`, `TrackKitGeometry.TvTower` | Gerüst 1,8 × 1,8 m, Plattform auf 5 m, Leiter, Sonnendach, Kamera auf Stativ, Kameramann. 30 m nach dem Scheitel der sechs langsamsten Kurven, mindestens 250 m auseinander. Standort für Bäume und Gebäude reserviert. |
+| Ufertypen | `PalaceWaterfront` | **Palastkai:** Dolmabahçe (417 m, mit Seetoren) und **Çırağan** mit Hotelflügel (519 m, Balustrade, keine erfundenen Tore). **Urbane Promenade:** übrige europäische Seite mit Pollern und Laternen. **Kai ohne Promenade:** asiatische Seite. |
+| Gebäudedetails | `EnvironmentGeometry.FacadeOrnaments` | Zusätzlich zu Balkonen, Erkern, Markisen, Klimageräten und Flaggen: **Fallrohre** an beiden Enden jeder Straßenfront, **Satellitenschüsseln** (0–2 je Front) auf der Brüstung von Flachdächern, **Dachterrassen** mit Sonnensegel und Tisch auf jedem vierten Flachdach an der Straße. |
+
+### Tests
+- **`BrakeBoardsCountDownToHeavilyBrakedCornersAndTvTowersWatchTheSlowOnes`:** Reihenfolge 150 > 100 > 50 im Abstand von 50 m, mindestens vier vollständige Sätze, 4–6 Türme mit mindestens 250 m Abstand.
+- **`TvTowersStandClearOfTreesAndBuildings`:** kein Baum im 4-m-Radius, kein Gebäude und kein Wasser am Turmstandort. Die Vorschau hatte zuerst einen Baum im Turm gezeigt; das ist jetzt behoben.
+- **Dolmabahçe-Test erweitert:** Dolmabahçe 250–700 m, Çırağan 200–700 m Palastkai.
+
+### Bilder (Vorschau, keine Unity-Aufnahme)
+![Çırağan](img/phase4_ciragan_quay.jpg)
+![TV-Turm](img/phase4_tv_tower.jpg)
+![Beşiktaş von oben](img/phase4_besiktas_roofs.jpg)
+
+### Ehrlich: noch nicht erreicht
+- **Gebäude:** Abseits der Straßenfronten sind die Gebäude weiter extrudierte Grundrisse mit gemeinsamer Fassadentextur (Luftbild). Für echte Gebäudefamilien fehlen:
+  - eigene Grundtypen (osmanisches Holzhaus, Jugendstil-Apartment, 1970er-Block, Neubau),
+  - Fensterrahmen als Geometrie,
+  - Alterung über Texturvariation.
+- **Rettungsfahrzeuge, Fotografenzonen, Service-Zugänge:** noch nicht gebaut. Die Notfalltore im Zaun gibt es (alle 160 m).
+- **Fangzaun:** Die Regel (Bremszonen, über 234 km/h beidseitig, Start-Ziel) bleibt aus Sicherheitsgründen. Er ist bereits fein und transparent. Ob er im Cockpit noch zu dominant wirkt, muss die Unity-Prüfung zeigen.
+- **Distanztafeln:** Es sind TextMesh-Schilder mit eingebauter Schrift, nicht die Barlow-Schrift. In der Vorschau fehlen sie, weil das OBJ keinen Text enthält.
 
 ## 3. Werkzeuge
 ```sh

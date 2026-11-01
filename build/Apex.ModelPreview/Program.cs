@@ -444,7 +444,13 @@ if (Array.IndexOf(args, "--environment") >= 0)
         var rl = new Apex.AI.RacingLine(g, 1.45f, su.downforceArea * su.airDensity * 0.5f / su.mass);
         var pl = new Apex.Tracks.TrackInfrastructurePlan(g, g.CornersFor(def), rl.offsets, rl.speed);
         var rs = new Apex.Tracks.RoadSurface(g, def, pl.kerbs.left, pl.kerbs.right, pl.kerbs.height);
-        osm = new Apex.Environment.OsmCity(data, field, new Apex.Tracks.TrackClearance(rs), def, null, quality);
+        var towerReserved = new List<Apex.Environment.CityLayout.Reserved>();
+        foreach (var tv in pl.tvTowers)
+        {
+            var tp = pl.TvTowerPosition(tv, rs.wallLeft, rs.wallRight);
+            towerReserved.Add(new Apex.Environment.CityLayout.Reserved(tp.X, tp.Y, Apex.Tracks.TrackInfrastructurePlan.TvTowerClearance));
+        }
+        osm = new Apex.Environment.OsmCity(data, field, new Apex.Tracks.TrackClearance(rs), def, towerReserved, quality);
         realRadius = data.radius;
         // Palaces, gates and the clock tower as the game builds them (BuildClassical), the rest as footprint blocks.
         void PutLg(LandmarkGeometry lg, Vector3 pos, float yawDeg)
@@ -716,6 +722,21 @@ if (Array.IndexOf(args, "--environment") >= 0)
             Place(T2 => TrackKitGeometry.MarshalPost(T2, 1), Q(i, po.side * (w[i] + 2.3f), -0.12f));
             Place(T2 => TrackKitGeometry.FlagPanelHousing(T2, 1), Q(i, po.side * (w[i] + 0.75f), -0.12f));
         }
+        // TV camera towers (as TrackInfrastructureBuilder.BuildTvTowers).
+        foreach (var tv in plan.tvTowers)
+        {
+            int i = g.IndexAt(tv.distance);
+            float[] w = tv.side < 0 ? wl : wr;
+            var toTrack = -new Vector3(g.Rights[i].X, 0f, g.Rights[i].Z).normalized * tv.side;
+            var fwd = new Vector3(g.Tangents[i].X, 0f, g.Tangents[i].Z).normalized;
+            var rot = Quaternion.LookRotation((toTrack - fwd).normalized);
+            var at = Q(i, tv.side * (w[i] + 3.2f), -0.12f);
+            var tmp = new Dictionary<string, MeshBuilder>();
+            TrackKitGeometry.TvTower(k => { if (!tmp.TryGetValue(k, out var m2)) tmp[k] = m2 = new MeshBuilder(); return m2; }, 0);
+            foreach (var kv in tmp) B(kv.Key).Append(kv.Value, v => at + rot * v);
+            Console.WriteLine($"  TV tower at {at.x:F0},{at.y:F1},{at.z:F0} looking {rot * Vector3.forward}");
+        }
+        Console.WriteLine($"{plan.tvTowers.Count} TV towers, {plan.brakeBoards.Count} brake boards (boards are TextMesh signs in the game, not in this OBJ)");
         // Event identity: gantry, pit building with podium and trophy, timing tower, race control (EventLayout as in the game).
         if (def.identity == Apex.Race.EventIdentity.Bosphorus)
         {
