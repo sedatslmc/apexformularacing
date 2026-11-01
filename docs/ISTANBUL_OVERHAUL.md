@@ -307,6 +307,34 @@ Gezählt mit `Apex.ModelPreview --environment --real --quality q`. Das ist die g
 - **Keine Frame-Zeiten:** Es gibt keine gemessene Frame-Zeit und keine fps-Zahl. Alles oben ist Geometrie und Logik ohne GPU.
 - **Sicht vereinfacht:** Die Sichtprüfung kennt keine Bäume und kein Fahrzeug-Cockpit. Kopfhöhe und Halo-Bügel verändern das echte Bild.
 
+## 2g. Kielwasser der Schiffe (`ShipWake`, 2026-11-01)
+- **Modell:** Die Schiffsrouten sind reine Kinematik. Das Kielwasser wird deshalb aus der eigenen Vergangenheit des Schiffs gelesen (Position, Kurs und Tempo zur Zeit t − a), ohne Verlaufsspeicher und ohne Zufall.
+  - **Heckwelle:** weißes Wasser, so breit wie das Schiff. Sie verbreitert sich um 0,35 m je Sekunde und verblasst über die Lebensdauer: Fähre 55 s, Frachter 70 s, Ausflugsschiff 40 s, Motorboot 25 s.
+  - **Kelvin-Arme ab dem Bug:** In tiefem Wasser liegen die Wellenkämme unabhängig vom Tempo 19,47° (arcsin 1/3) neben dem Kurs. Ein vor a Sekunden erzeugter Kamm liegt v·a·tan 19,47° seitlich, höchstens 180 m.
+  - **Schaumstärke:** wächst mit der Froude-Zahl. Ein gleitendes Motorboot macht mehr Gischt als eine Fähre bei gleichem Tempo.
+  - **Liegezeit am Anleger:** keine neue Spur. Die alte Spur verblasst.
+  - **Transitschiffe:** Wenn ein Frachter am anderen Ende des Bosporus wieder eingesetzt wird, bricht die Spur dort ab.
+- **Darstellung** (`ShipWakeComponent`, neuer Shader `Apex/Wake`):
+  - Je Schiff ein Mesh aus drei Bändern (Heckwelle und zwei Arme), jedes drei Punkte breit, damit der Schaum zu den Rändern ausläuft.
+  - Neu aufgebaut wird zwölfmal pro Sekunde und nur bis 3 km Entfernung.
+  - Über Land (Kais, Anleger) ist der Schaum ausgeblendet.
+  - Der Shader ist alpha-geblendet. Ein wandernder Rauschwert zerreißt den Schaum in Flecken. Beleuchtet wird er von Sonne (mit Schatten) und Umgebungslicht, mit Nebel.
+  - Auf Mobil gibt es nur halb so viele Stützpunkte (alle 1,5 s statt 0,75 s).
+- **Test `ShipWakesTrailBehindTheHullWithKelvinArms`:**
+  - Die Spur beginnt am Heck, der Bug liegt vorn.
+  - Der Schaum nimmt mit dem Alter ab, die Spur wird breiter.
+  - Der Armabstand ist v·a·tan 19,47°.
+  - Am Anleger entsteht kein neuer Schaum.
+  - Motorboot vor Fähre bei der Gischt.
+- **Werkzeug:** `dotnet run -c Release -- wakes bosphorus_a [t]` (CSV für die Draufsicht).
+
+![Kielwasser, Draufsicht aus dem Modell (keine Spielaufnahme)](img/wakes_plan.png)
+
+**Ehrlich:**
+- **Nicht in Unity gesehen:** Der Shader `Apex/Wake` kompiliert erst im Editor.
+- **Keine Wasserverformung:** Die Wellen sind Schaum auf der Oberfläche. Die Wasseroberfläche selbst verformt sich nicht, und Boote in der Nähe schaukeln nicht in der Bugwelle.
+- **Keine Gischt-Partikel am Bug.**
+
 ## 3. Werkzeuge
 ```sh
 cd build/Apex.Tuning
@@ -326,5 +354,5 @@ cd tools/carrender && APEX_PAGE=env.html APEX_VIEWS='name|eye|target|fov|&tod=go
    - Barrieren und Zaun der Dolmabahçe Caddesi.
    - Prüfung aus Verfolger-, Cockpit- und TV-Sicht (Vorschau; Unity-Prüfung durch dich).
 4. **Übertragung:** Gebäudefamilien mit Balkonen, Erkern, Klimageräten und Markisen; Flaggenverteilung; Ufertypen (historisch, urban, natürlich); Infrastruktur-Abgleich; Sektor-Charaktere.
-5. **Atmosphäre:** Zuschauerzonen, Boote, Flaggenwind und Geräusche umgesetzt (Abschnitt 2e). Goldene Stunde (glühende Fenster, Dunst je Blickrichtung): implementiert und getestet, siehe `docs/LIGHTING_AND_GRAPHICS.md` Abschnitt 6, im Editor nicht gesehen. Offen: Kielwasser.
+5. **Atmosphäre:** Zuschauerzonen, Boote, Flaggenwind und Geräusche umgesetzt (Abschnitt 2e). Goldene Stunde (glühende Fenster, Dunst je Blickrichtung): implementiert und getestet, siehe `docs/LIGHTING_AND_GRAPHICS.md` Abschnitt 6, im Editor nicht gesehen. Kielwasser: implementiert und getestet (Abschnitt 2g), im Editor nicht gesehen.
 6. **Tests und Leistung:** Fahrbarkeit, KI, Sichtachsen und Messwerkzeug umgesetzt (Abschnitt 2f). Offen: Messreihe in Unity auf PC und Mobil, danach gezielte Optimierung.
