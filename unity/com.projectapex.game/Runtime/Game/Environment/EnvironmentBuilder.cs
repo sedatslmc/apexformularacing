@@ -124,7 +124,7 @@ namespace Apex.Game
             Safe("landmarks", () => BuildLandmarks(root.transform, env, ci, realPalaces));
             if (monumental) Safe("monumental flag", () => MonumentalFlagBuilder.Build(root.transform, env, field, def.monumentalFlag.Value.east, def.monumentalFlag.Value.north));
             Safe("trackside", () => BuildTrackside(root.transform, env, ci));
-            Safe("ships", () => BuildShips(root.transform, env, def, field.land));
+            Safe("ships", () => BuildShips(root.transform, env, def, field));
             Safe("gulls", () => BuildGulls(root.transform, env, ci));
             Safe("ambience", () => BuildAmbience(root.transform, env, ci, allLots));
             return env;
@@ -1219,13 +1219,25 @@ namespace Apex.Game
 
         // --- Ships, gulls, ambience -------------------------------------------------------------------
 
-        static void BuildShips(Transform root, EnvironmentInstance env, CircuitDefinition def, LandModel land)
+        static void BuildShips(Transform root, EnvironmentInstance env, CircuitDefinition def, TerrainField field)
         {
-            var routes = MarineRoute.ForCircuit(def, land);
+            var routes = MarineRoute.ForCircuit(def, field.land);
             if (routes.Count == 0) return;
             var go = new GameObject("MarineTraffic");
             go.transform.SetParent(root, false);
             var mt = go.AddComponent<MarineTrafficComponent>();
+            // Wakes (ShipWake): foam behind the stern and the Kelvin arms; skipped where the shader is unavailable.
+            ShipWakeComponent wakes = null;
+            var wakeMaterial = EnvironmentMaterials.Wake;
+            if (wakeMaterial != null)
+            {
+                var wgo = new GameObject("Wakes");
+                wgo.transform.SetParent(go.transform, false);
+                wakes = wgo.AddComponent<ShipWakeComponent>();
+                wakes.material = wakeMaterial;
+                wakes.field = field;
+                wakes.step = Quality == 0 ? 1.5f : 0.75f;
+            }
             var ferry = new LandmarkGeometry(1);
             ferry.Ferry();
             var freighter = new LandmarkGeometry(1);
@@ -1245,7 +1257,9 @@ namespace Apex.Game
                     var lg = r.vesselKind == MarineRoute.VesselFerry ? ferry : r.vesselKind == MarineRoute.VesselTourBoat ? tour
                         : r.vesselKind == MarineRoute.VesselMotorBoat ? motor : freighter;
                     var v = AddMeshObject(go.transform, r.name + "_" + k, lg.parts, true, false);
-                    mt.Add(r, v.transform, r.CycleTime * k / count + LandModel.Hash(k, r.points.Count) * 20f, WaterY);
+                    float offset = r.CycleTime * k / count + LandModel.Hash(k, r.points.Count) * 20f;
+                    mt.Add(r, v.transform, offset, WaterY);
+                    if (wakes != null) wakes.Add(r, offset, WaterY);
                 }
             }
         }
@@ -1345,8 +1359,46 @@ namespace Apex.Game
         static readonly Dictionary<Color, Material> solids = new Dictionary<Color, Material>();
         static Texture2D facadeAlbedo, facadeEmission, facadeGlint, waterNormal, flagTex;
         public static Material Flag { get; private set; }
-        static Material sunGlint;
-        static bool sunGlintTried;
+        static Material sunGlint, wake;
+        static bool sunGlintTried, wakeTried;
+
+        /// <summary>Alpha-blended ship wake foam (Apex/Wake) with a tiling noise; null where the shader is unavailable.</summary>
+        public static Material Wake
+        {
+            get
+            {
+                if (wakeTried) return wake;
+                wakeTried = true;
+                var shader = Resources.Load<Shader>("Shaders/ApexWake");
+                if (shader == null || !shader.isSupported || GraphicsSettings.currentRenderPipeline == null) return null;
+                const int n = 128;
+                var tex = new Texture2D(n, n, TextureFormat.R8, true) { name = "WakeNoise", wrapMode = TextureWrapMode.Repeat };
+                var px = new Color[n * n];
+                // Tiling value noise in three octaves (integer cell counts keep it seamless).
+                for (int y = 0; y < n; y++)
+                    for (int x = 0; x < n; x++)
+                    {
+                        float v = 0f, amp = 0.55f;
+                        for (int o = 0, cells = 8; o < 3; o++, cells *= 2, amp *= 0.5f)
+                        {
+                            float fx = x * cells / (float)n, fy = y * cells / (float)n;
+                            int x0 = Mathf.FloorToInt(fx), y0 = Mathf.FloorToInt(fy);
+                            float tx = fx - x0, ty = fy - y0;
+                            tx = tx * tx * (3f - 2f * tx); ty = ty * ty * (3f - 2f * ty);
+                            float H(int i, int j) => LandModel.Hash(((i % cells) + cells) % cells + o * 101, ((j % cells) + cells) % cells) * 0.5f + 0.5f;
+                            float a = Mathf.Lerp(H(x0, y0), H(x0 + 1, y0), tx), b = Mathf.Lerp(H(x0, y0 + 1), H(x0 + 1, y0 + 1), tx);
+                            v += amp * Mathf.Lerp(a, b, ty);
+                        }
+                        px[y * n + x] = new Color(v, v, v, 1f);
+                    }
+                tex.SetPixels(px);
+                tex.Apply(true);
+                wake = new Material(shader) { name = "Env_Wake" };
+                wake.SetTexture("_NoiseTex", tex);
+                wake.SetFloat("_FoamAlbedo", WaterOptics.FoamAlbedo);
+                return wake;
+            }
+        }
 
         /// <summary>
         /// Additive golden-hour window glint (Apex/SunGlint) over the facade window mask; null where the shader is

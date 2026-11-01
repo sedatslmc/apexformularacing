@@ -864,3 +864,120 @@ namespace Apex.Game
         }
     }
 }
+
+namespace Apex.Game
+{
+    /// <summary>
+    /// Wakes of the ships (Apex.Environment.ShipWake): per vessel one mesh with the turbulent centre wake behind the
+    /// stern and the two Kelvin arms from the bow, each a ribbon three vertices wide (foam fades to the edges).
+    /// Rebuilt <see cref="Rate"/> times per second for vessels within <see cref="Range"/> of the camera; foam over land
+    /// (piers, quays) is cut by the terrain's water mask.
+    /// </summary>
+    public sealed class ShipWakeComponent : MonoBehaviour
+    {
+        public Material material;
+        public Apex.Environment.TerrainField field;
+        /// <summary>Seconds between wake samples (coarser on mobile).</summary>
+        public float step = 0.75f;
+        public const float Rate = 12f, Range = 3000f, Lift = 0.04f;
+
+        sealed class Vessel
+        {
+            public Apex.Environment.MarineRoute route;
+            public float offset, waterY;
+            public Mesh mesh;
+            public MeshRenderer renderer;
+        }
+
+        readonly List<Vessel> vessels = new List<Vessel>();
+        readonly List<Apex.Environment.ShipWake.Sample> samples = new List<Apex.Environment.ShipWake.Sample>();
+        readonly List<Vector3> verts = new List<Vector3>();
+        readonly List<Color32> colours = new List<Color32>();
+        readonly List<int> tris = new List<int>();
+        float next;
+
+        public void Add(Apex.Environment.MarineRoute route, float offset, float waterY)
+        {
+            var go = new GameObject("Wake_" + route.name);
+            go.transform.SetParent(transform, false);
+            var mesh = new Mesh { name = "Wake" };
+            mesh.MarkDynamic();
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = material;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = true;
+            vessels.Add(new Vessel { route = route, offset = offset, waterY = waterY, mesh = mesh, renderer = mr });
+        }
+
+        void Update()
+        {
+            if (Time.unscaledTime < next) return;
+            next = Time.unscaledTime + 1f / Rate;
+            var cam = Camera.main;
+            var camPos = cam != null ? cam.transform.position : Vector3.zero;
+            // The same clock as MarineTrafficComponent, so the wake starts at the hull.
+            double t = Time.timeSinceLevelLoad;
+            foreach (var v in vessels)
+            {
+                v.route.Sample(t, v.offset, out var p, out _, out _);
+                bool near = cam == null || (new Vector3(p.X, v.waterY, p.Y) - camPos).sqrMagnitude < Range * Range;
+                v.renderer.enabled = near;
+                if (!near) continue;
+                Apex.Environment.ShipWake.Trail(v.route, t, v.offset, step, samples);
+                Build(v);
+            }
+        }
+
+        void Build(Vessel v)
+        {
+            verts.Clear(); colours.Clear(); tris.Clear();
+            float y = v.waterY + Lift;
+            // Centre wake behind the stern.
+            Ribbon(y, s => s.stern, s => s.halfWidth, s => s.foam);
+            // Kelvin arms: crest bands on both sides of the course, widening as they travel.
+            Ribbon(y, s => s.bow + s.right * s.armOffset, s => 1.2f + 0.03f * s.armOffset, s => s.armFoam);
+            Ribbon(y, s => s.bow - s.right * s.armOffset, s => 1.2f + 0.03f * s.armOffset, s => s.armFoam);
+            v.mesh.Clear();
+            v.mesh.SetVertices(verts);
+            v.mesh.SetColors(colours);
+            v.mesh.SetTriangles(tris, 0);
+            v.mesh.RecalculateBounds();
+        }
+
+        void Ribbon(float y, System.Func<Apex.Environment.ShipWake.Sample, System.Numerics.Vector2> centre,
+            System.Func<Apex.Environment.ShipWake.Sample, float> halfWidth, System.Func<Apex.Environment.ShipWake.Sample, float> foam)
+        {
+            if (samples.Count < 2) return;
+            int start = verts.Count;
+            foreach (var s in samples)
+            {
+                var c = centre(s);
+                float w = halfWidth(s);
+                var l = c - s.right * w;
+                var r = c + s.right * w;
+                byte a = (byte)Mathf.Clamp(Mathf.RoundToInt(foam(s) * 255f), 0, 255);
+                Add(l.X, y, l.Y, 0);
+                Add(c.X, y, c.Y, a);
+                Add(r.X, y, r.Y, 0);
+            }
+            for (int i = 0; i < samples.Count - 1; i++)
+            {
+                int a0 = start + i * 3, b0 = a0 + 3;
+                for (int k = 0; k < 2; k++)
+                {
+                    tris.Add(a0 + k); tris.Add(b0 + k); tris.Add(a0 + k + 1);
+                    tris.Add(a0 + k + 1); tris.Add(b0 + k); tris.Add(b0 + k + 1);
+                }
+            }
+        }
+
+        void Add(float x, float y, float z, byte a)
+        {
+            // No foam on land: quays, piers and the shore cut the wake.
+            if (a > 0 && field != null && !field.IsWater(x, z)) a = 0;
+            verts.Add(new Vector3(x, y, z));
+            colours.Add(new Color32(255, 255, 255, a));
+        }
+    }
+}

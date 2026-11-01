@@ -781,6 +781,30 @@ else if (mode == "golden")
         Console.WriteLine($"            haze toward sun {Apex.Environment.GoldenHour.Haze(l, 0.98f, 0f)}  side {Apex.Environment.GoldenHour.Haze(l, 0f, 0f)}  away {Apex.Environment.GoldenHour.Haze(l, -0.95f, 0f)}");
     }
 }
+else if (mode == "wakes")
+{
+    // Ship wakes (ShipWake) at time t as CSV for a plan view: route,kind,part,x,z,foam (part: c centre, l/r Kelvin arms).
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    double t = args.Length > 2 ? double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 400.0;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(def);
+    var routes = Apex.Environment.MarineRoute.ForCircuit(def, bed.terrain.land);
+    var samples = new System.Collections.Generic.List<Apex.Environment.ShipWake.Sample>();
+    var ci = System.Globalization.CultureInfo.InvariantCulture;
+    Console.WriteLine("route,kind,part,x,z,foam,water");
+    foreach (var r in routes)
+    {
+        Apex.Environment.ShipWake.Trail(r, t, 0f, 0.75f, samples);
+        foreach (var sm in samples)
+        {
+            void Row(string part, System.Numerics.Vector2 p, float f) => Console.WriteLine(string.Format(ci, "{0},{1},{2},{3:F1},{4:F1},{5:F3},{6}", r.name, r.vesselKind, part, p.X, p.Y, f, bed.terrain.IsWater(p.X, p.Y) ? 1 : 0));
+            Row("c", sm.stern, sm.foam);
+            Row("l", sm.bow - sm.right * sm.armOffset, sm.armFoam);
+            Row("r", sm.bow + sm.right * sm.armOffset, sm.armFoam);
+        }
+    }
+}
 else if (mode == "sight")
 {
     // Sightlines from the cockpit (Apex.Environment.DriverSight): sight distance around the lap and what ends it,

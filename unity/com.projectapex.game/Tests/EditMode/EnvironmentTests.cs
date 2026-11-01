@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Apex.Environment;
 using Apex.Tracks;
 using Apex.Weather;
@@ -151,6 +152,56 @@ namespace Apex.Tests
             var wind = WindField.ForCircuit(308f);
             Assert.That(wind.towardsDeg, Is.EqualTo((25f + 180f + 308f) % 360f).Within(1e-3f));
             for (double t = 0; t < 600; t += 13) Assert.That(wind.Speed(t), Is.InRange(2f, 14f));
+        }
+
+        [Test]
+        public void ShipWakesTrailBehindTheHullWithKelvinArms()
+        {
+            var (def, _, field) = Bosphorus();
+            var routes = MarineRoute.ForCircuit(def, field.land);
+            var samples = new System.Collections.Generic.List<ShipWake.Sample>();
+            Assert.That(ShipWake.KelvinTan, Is.EqualTo(MathF.Tan(MathF.Asin(1f / 3f))).Within(1e-3f), "Kelvin angle asin(1/3)");
+            foreach (var r in routes)
+            {
+                var (length, _) = ShipWake.Hull(r.vesselKind);
+                // A moment when the vessel is under way at full speed (transits: mid-strait, away from the re-entry).
+                double t = r.shuttle ? 0 : r.CycleTime * 0.5;
+                for (; t < r.CycleTime; t += 1.0)
+                {
+                    r.Sample(t, 0f, out _, out _, out float v);
+                    if (v >= r.speed * 0.99f) break;
+                }
+                r.Sample(t, 0f, out var pos, out float heading, out _);
+                ShipWake.Trail(r, t, 0f, 0.75f, samples);
+                Assert.That(samples.Count, Is.GreaterThan(5), r.name);
+                var first = samples[0];
+                Assert.That(first.age, Is.EqualTo(0f));
+                Assert.That(Vector2.Distance(first.stern, pos), Is.EqualTo(0.5f * length).Within(0.01f), "the wake starts at the stern");
+                var fwd = new Vector2(MathF.Sin(heading), MathF.Cos(heading));
+                Assert.That(Vector2.Dot(first.bow - first.stern, fwd), Is.GreaterThan(0f), "the bow is ahead of the stern");
+                Assert.That(first.foam, Is.GreaterThan(0.2f), $"{r.name}: fresh foam at speed");
+                for (int i = 1; i < samples.Count; i++)
+                {
+                    Assert.That(samples[i].foam, Is.LessThanOrEqualTo(samples[i - 1].foam + 0.02f), "foam fades with age");
+                    Assert.That(samples[i].halfWidth, Is.GreaterThan(samples[i - 1].halfWidth), "the wake spreads");
+                    Assert.That(samples[i].armOffset, Is.LessThanOrEqualTo(ShipWake.MaxArmOffset));
+                }
+                var last = samples[samples.Count - 1];
+                Assert.That(last.foam, Is.LessThan(0.05f), "old wake has faded");
+                Assert.That(last.age, Is.LessThanOrEqualTo(ShipWake.Lifetime(r.vesselKind) + 0.01f));
+                // Mid-course (no turns yet): the arm crest lies at v·a·tan 19.47° beside the course.
+                var s5 = samples[Math.Min(8, samples.Count - 1)];
+                r.Sample(t - s5.age, 0f, out _, out _, out float v5);
+                if (v5 >= r.speed * 0.99f) Assert.That(s5.armOffset, Is.EqualTo(Math.Min(ShipWake.MaxArmOffset, v5 * s5.age * ShipWake.KelvinTan)).Within(0.01f));
+            }
+            // A planing motor boat throws more white water than a ferry; a stopped ferry none.
+            Assert.That(ShipWake.Strength(12f, 9f), Is.GreaterThan(ShipWake.Strength(7.5f, 70f)));
+            Assert.That(ShipWake.Strength(0f, 70f), Is.EqualTo(0f));
+            // A ferry waiting at the pier leaves no new wake.
+            var ferry = routes.Find(r => r.shuttle && r.vesselKind == MarineRoute.VesselFerry);
+            float travel = ferry.Length / ferry.speed;
+            ShipWake.Trail(ferry, travel + ferry.dwell * 0.9, 0f, 0.75f, samples);
+            Assert.That(samples[0].foam, Is.EqualTo(0f), "moored: no fresh foam");
         }
 
         [Test]
