@@ -40,11 +40,30 @@ namespace Apex.Game
 
         public void Snap() => initialised = false;
 
+        // Start sequence sweep (IntroCamera) and fixed shots (podium).
+        float introTime = -1f;
+        bool hold;
+        Vector3 holdPos, holdLook;
+
+        /// <summary>Plays the start sweep around the car that blends into the driving camera.</summary>
+        public void PlayIntro() => introTime = 0f;
+        public bool IntroPlaying => introTime >= 0f && introTime < Apex.UI.IntroCamera.Seconds;
+
+        /// <summary>Holds a fixed shot (e.g. the podium) until <see cref="ClearHold"/>.</summary>
+        public void Hold(Vector3 position, Vector3 lookAt) { hold = true; holdPos = position; holdLook = lookAt; }
+        public void ClearHold() => hold = false;
+
         Transform visualsOwner;
         CarVisuals visuals;
 
         void LateUpdate()
         {
+            if (hold)
+            {
+                if (cam) cam.fieldOfView = 42f;
+                transform.SetPositionAndRotation(holdPos, Quaternion.LookRotation(holdLook - holdPos, Vector3.up));
+                return;
+            }
             if (target == null) return;
             float dt = Time.deltaTime;
             Vector3 fwd = target.forward;
@@ -96,6 +115,19 @@ namespace Apex.Game
                     transform.SetPositionAndRotation(pos, Quaternion.LookRotation(look - pos, Vector3.up));
                     break;
                 }
+            }
+            if (introTime >= 0f)
+            {
+                introTime += dt;
+                float w = Apex.UI.IntroCamera.Blend(introTime);
+                if (w >= 1f) { introTime = -1f; return; }
+                Apex.UI.IntroCamera.Pose(introTime, out float angle, out float dist, out float height);
+                // Angle 0 = in front of the car looking back at it.
+                var dir = Quaternion.AngleAxis(angle, Vector3.up) * flat;
+                Vector3 ip = target.position + dir * dist + Vector3.up * height;
+                var ir = Quaternion.LookRotation(target.position + Vector3.up * 0.4f - ip, Vector3.up);
+                transform.SetPositionAndRotation(Vector3.Lerp(ip, transform.position, w), Quaternion.Slerp(ir, transform.rotation, w));
+                if (visuals != null && w < 0.9f) visuals.FirstPerson = false;
             }
         }
     }

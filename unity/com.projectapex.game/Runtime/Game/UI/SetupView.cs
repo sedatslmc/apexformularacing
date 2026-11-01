@@ -130,7 +130,7 @@ namespace Apex.Game
             var head = new VisualElement { pickingMode = PickingMode.Ignore };
             ApexUi.Place(head, m, 56, LeftW, -1);
             layer.Add(head);
-            ApexUi.Caption(head, champ ? "Saison · Apex Series" : "Rennvorbereitung");
+            ApexUi.Caption(head, champ ? Loc.T("Saison · Apex Series") : Loc.T("Rennvorbereitung"));
             ApexUi.Text(head, SetupModel.Title(data.mode).ToUpperInvariant(), ApexUi.DisplayStrong, UiTokens.H1, ApexUi.C(UiTokens.Ivory), 4f).style.marginTop = 6;
             var accent = ApexUi.Box(head, ApexUi.C(UiTokens.Cyan));
             accent.style.width = 64; accent.style.height = 3; accent.style.marginTop = 10;
@@ -154,16 +154,16 @@ namespace Apex.Game
             layer.Add(actions);
             if (champ && data.championshipActive)
             {
-                AddButton(actions, "Nächste Runde", data.nextRound, true, () => StartRequested?.Invoke());
-                AddButton(actions, "Aufgeben", "", false, Abandon);
+                AddButton(actions, Loc.T("Nächste Runde"), data.nextRound, true, () => StartRequested?.Invoke());
+                AddButton(actions, Loc.T("Aufgeben"), "", false, Abandon);
             }
             else
-                AddButton(actions, champ ? "Saison starten" : "Start", data.summary(), true, () => StartRequested?.Invoke());
-            AddButton(actions, "Zurück", "", false, () => BackRequested?.Invoke());
+                AddButton(actions, champ ? Loc.T("Saison starten") : Loc.T("Start"), data.summary(), true, () => StartRequested?.Invoke());
+            AddButton(actions, Loc.T("Zurück"), "", false, () => BackRequested?.Invoke());
 
             if (!data.mobile)
             {
-                var hints = ApexUi.Text(layer, "↑↓  Auswählen     ←→  Ändern     Enter  Bestätigen     Esc  Zurück", ApexUi.Body, 14, ApexUi.C(UiTokens.Steel), 0.5f);
+                var hints = ApexUi.Text(layer, Loc.T("↑↓  Auswählen     ←→  Ändern     Enter  Bestätigen     Esc  Zurück"), ApexUi.Body, 14, ApexUi.C(UiTokens.Steel), 0.5f);
                 ApexUi.Place(hints, m, 1036);
             }
 
@@ -264,7 +264,7 @@ namespace Apex.Game
 
         void BuildCalendarList()
         {
-            ApexUi.Caption(listContent, "Kalender").style.marginBottom = 8;
+            ApexUi.Caption(listContent, Loc.T("Kalender")).style.marginBottom = 8;
             foreach (var r in data.calendar)
             {
                 var row = ApexUi.Panel(listContent, r.state == RoundState.Next ? UiTokens.PanelStrongAlpha : UiTokens.PanelAlpha);
@@ -279,10 +279,10 @@ namespace Apex.Game
                 ApexUi.Text(row, $"R{r.number}", ApexUi.DisplayStrong, 24, ApexUi.C(UiTokens.Steel), 1f).style.width = 56;
                 ApexUi.Text(row, r.name.ToUpperInvariant(), ApexUi.DisplayStrong, 24, ApexUi.C(r.state == RoundState.Done ? UiTokens.Steel : UiTokens.Ivory), 1.5f);
                 var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; row.Add(sp);
-                string st = r.state == RoundState.Done ? "GEFAHREN" : r.state == RoundState.Next ? "NÄCHSTE RUNDE" : "AUSSTEHEND";
+                string st = r.state == RoundState.Done ? Loc.T("GEFAHREN") : r.state == RoundState.Next ? Loc.T("NÄCHSTE RUNDE") : Loc.T("AUSSTEHEND");
                 ApexUi.Text(row, st, ApexUi.BodyStrong, UiTokens.Label, ApexUi.C(r.state == RoundState.Next ? UiTokens.Cyan : UiTokens.Steel), 2f, TextAnchor.MiddleRight);
             }
-            ApexUi.Text(listContent, "Punkte " + SetupModel.PointsScheme(), ApexUi.Body, 15, ApexUi.C(UiTokens.Steel)).style.marginTop = 10;
+            ApexUi.Text(listContent, Loc.T("Punkte ") + SetupModel.PointsScheme(), ApexUi.Body, 15, ApexUi.C(UiTokens.Steel)).style.marginTop = 10;
         }
 
         // --- Right side: track presentation / championship ----------------------------------------------------
@@ -318,7 +318,7 @@ namespace Apex.Game
             }
             else
             {
-                ApexUi.Caption(head, "Strecke");
+                ApexUi.Caption(head, Loc.T("Strecke"));
                 ApexUi.Text(head, f.name.ToUpperInvariant(), ApexUi.DisplayStrong, 64, ApexUi.C(UiTokens.Ivory), 3f).style.marginTop = 4;
             }
 
@@ -335,7 +335,7 @@ namespace Apex.Game
             ApexUi.Place(legend, 20, 16);
             legend.style.flexDirection = FlexDirection.Row;
             mapPanel.Add(legend);
-            var sc = new[] { UiTokens.Red, UiTokens.Cyan, UiTokens.Amber };
+            var sc = new[] { UiPalette.Current.sector1, UiPalette.Current.sector2, UiPalette.Current.sector3 };
             for (int s = 0; s < Mathf.Min(f.sectors, 3); s++)
             {
                 var sw = ApexUi.Box(legend, ApexUi.C(sc[s])); sw.style.width = 14; sw.style.height = 3; sw.style.marginTop = 7; sw.style.marginRight = 6;
@@ -356,11 +356,11 @@ namespace Apex.Game
             facts.style.flexDirection = FlexDirection.Row;
             presentation.Add(facts);
             float tw = (w - 4 * 12f) / 5f;
-            Fact(facts, tw, "Länge", $"{f.lengthKm:0.00} km".Replace('.', ','));
-            Fact(facts, tw, "Kurven", f.corners.ToString());
-            Fact(facts, tw, "Richtung", f.clockwise ? "Uhrzeigersinn" : "Gegen Uhrzeiger");
-            Fact(facts, tw, "Höhenunterschied", $"{f.elevationRange:0} m");
-            Fact(facts, tw, "Deine Bestzeit", f.bestLap > 0 ? MainMenuModel.FormatLap(f.bestLap) : "–", f.bestLap > 0);
+            Fact(facts, tw, Loc.T("Länge"), $"{f.lengthKm:0.00} km".Replace('.', ','));
+            Fact(facts, tw, Loc.T("Kurven"), f.corners.ToString());
+            Fact(facts, tw, Loc.T("Richtung"), f.clockwise ? Loc.T("Uhrzeigersinn") : Loc.T("Gegen Uhrzeiger"));
+            Fact(facts, tw, Loc.T("Höhenunterschied"), $"{f.elevationRange:0} m");
+            Fact(facts, tw, Loc.T("Deine Bestzeit"), f.bestLap > 0 ? MainMenuModel.FormatLap(f.bestLap) : "–", f.bestLap > 0);
 
             // Track cards (pointer shortcut for the "Strecke" option).
             var cards = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -400,7 +400,7 @@ namespace Apex.Game
             c.style.width = w; c.style.height = 100; c.style.marginRight = 12;
             c.style.paddingLeft = 18; c.style.paddingTop = 16;
             ApexUi.Caption(c, caption);
-            ApexUi.Text(c, value, ApexUi.DisplayStrong, 30, best ? ApexUi.C(UiTokens.Best) : ApexUi.C(UiTokens.Ivory)).style.marginTop = 8;
+            ApexUi.Text(c, value, ApexUi.DisplayStrong, 30, best ? ApexUi.C(UiPalette.Current.best) : ApexUi.C(UiTokens.Ivory)).style.marginTop = 8;
         }
 
         void BuildChampionshipRight()
@@ -412,8 +412,8 @@ namespace Apex.Game
                 var head = new VisualElement { pickingMode = PickingMode.Ignore };
                 ApexUi.Place(head, 0, 56, w, -1);
                 presentation.Add(head);
-                ApexUi.Caption(head, "Kalender");
-                ApexUi.Text(head, $"{data.calendar.Count} RENNEN", ApexUi.DisplayStrong, 64, ApexUi.C(UiTokens.Ivory), 3f).style.marginTop = 4;
+                ApexUi.Caption(head, Loc.T("Kalender"));
+                ApexUi.Text(head, Loc.Format("{0} RENNEN", data.calendar.Count), ApexUi.DisplayStrong, 64, ApexUi.C(UiTokens.Ivory), 3f).style.marginTop = 4;
                 var row = new VisualElement { pickingMode = PickingMode.Ignore };
                 ApexUi.Place(row, 0, 210, w, 420);
                 row.style.flexDirection = FlexDirection.Row;
@@ -429,7 +429,7 @@ namespace Apex.Game
                         var e = ApexUi.Box(card, ApexUi.C(UiTokens.Red));
                         ApexUi.Place(e, 0, 0, -1, 3); e.style.right = 0;
                     }
-                    var cap = ApexUi.Caption(card, $"Runde {r.number}");
+                    var cap = ApexUi.Caption(card, Loc.Format("Runde {0}", r.number));
                     ApexUi.Place(cap, 22, 20);
                     var nm = ApexUi.Text(card, r.name.ToUpperInvariant(), ApexUi.DisplayStrong, 28, ApexUi.C(UiTokens.Ivory), 1.5f);
                     ApexUi.Place(nm, 22, 42);
@@ -441,7 +441,7 @@ namespace Apex.Game
                     var meta = ApexUi.Text(card, $"{ti.facts.lengthKm:0.00} km · {ti.facts.corners} Kurven · {ti.facts.Direction}".Replace('.', ','), ApexUi.Body, 14, ApexUi.C(UiTokens.Steel));
                     ApexUi.Place(meta, 22, 376);
                 }
-                var pts = ApexUi.Text(presentation, "Punkte " + SetupModel.PointsScheme(), ApexUi.Body, 16, ApexUi.C(UiTokens.Steel));
+                var pts = ApexUi.Text(presentation, Loc.T("Punkte ") + SetupModel.PointsScheme(), ApexUi.Body, 16, ApexUi.C(UiTokens.Steel));
                 ApexUi.Place(pts, 0, 660);
                 return;
             }
@@ -449,7 +449,7 @@ namespace Apex.Game
             var panel = ApexUi.Panel(presentation, UiTokens.PanelStrongAlpha);
             ApexUi.Place(panel, 0, 56, w, 940);
             panel.style.paddingLeft = 28; panel.style.paddingRight = 28; panel.style.paddingTop = 22;
-            ApexUi.Caption(panel, "Fahrerwertung");
+            ApexUi.Caption(panel, Loc.T("Fahrerwertung"));
             foreach (var s in data.standings)
             {
                 var row = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -596,7 +596,7 @@ namespace Apex.Game
             foreach (var it in items)
                 if (it.option == null && it.action == (Action)Abandon)
                 {
-                    it.label.text = abandonArmed ? "WIRKLICH AUFGEBEN?" : "AUFGEBEN";
+                    it.label.text = abandonArmed ? Loc.T("WIRKLICH AUFGEBEN?") : Loc.T(Loc.T("Aufgeben")).ToUpperInvariant();
                     it.label.style.color = abandonArmed ? ApexUi.C(UiTokens.Amber) : ApexUi.C(UiTokens.Ivory);
                 }
         }

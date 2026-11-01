@@ -21,7 +21,7 @@ namespace Apex.UI
         /// <summary>Named corners in lap order (empty when the track has no authored corner names).</summary>
         public readonly List<string> cornerNames = new List<string>();
 
-        public string Direction => clockwise ? "im Uhrzeigersinn" : "gegen den Uhrzeigersinn";
+        public string Direction => Loc.T(clockwise ? "im Uhrzeigersinn" : "gegen den Uhrzeigersinn");
 
         public static TrackFacts From(CircuitDefinition def, TrackGeometry g, double bestLap)
         {
@@ -58,6 +58,10 @@ namespace Apex.UI
         public float startX, startY;
         public float[] cornerX = new float[0], cornerY = new float[0];
         public int Count => x.Length;
+        // Projection (world east/north to map pixels), for cars on the minimap.
+        public float scale, offsetX, offsetY, minEast, maxNorth;
+        public float MapX(float east) => offsetX + (east - minEast) * scale;
+        public float MapY(float north) => offsetY + (maxNorth - north) * scale;
     }
 
     public static class TrackMap
@@ -98,7 +102,7 @@ namespace Apex.UI
 
             int step = Math.Max(1, (g.Count + maxPoints - 1) / Math.Max(2, maxPoints));
             int n = (g.Count + step - 1) / step;
-            var line = new TrackMapLine { x = new float[n], y = new float[n], sector = new int[n] };
+            var line = new TrackMapLine { x = new float[n], y = new float[n], sector = new int[n], scale = scale, offsetX = ox, offsetY = oy, minEast = minX, maxNorth = maxZ };
             for (int k = 0; k < n; k++)
             {
                 int i = k * step;
@@ -173,7 +177,7 @@ namespace Apex.UI
                 int i = order[k];
                 bool me = i == 0;
                 var d = me ? default : Roster.Drivers[Math.Min(i - 1, Roster.Drivers.Length - 1)];
-                return new StandingRow { position = k + 1, points = points[i], player = me, team = me ? playerTeam : d.team, name = me ? "Du" : d.name, code = me ? "DU" : d.code };
+                return new StandingRow { position = k + 1, points = points[i], player = me, team = me ? playerTeam : d.team, name = me ? Loc.T("Du") : d.name, code = me ? "DU" : d.code };
             }
             int shown = Math.Min(rows, order.Count);
             for (int k = 0; k < shown; k++) list.Add(Row(k));

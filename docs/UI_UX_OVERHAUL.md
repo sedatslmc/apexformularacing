@@ -227,9 +227,9 @@ Rennen: Grid → Fahrt ⇄ Boxenfunk/Strategie ⇄ Pause → Ergebnisse → (Pod
    - Bühne mit Lichtring; Istanbul-Kulisse aus dem Spiel ab Stufe Mittel.
    - Erledigt, siehe Abschnitt 8.
 3. **Spielmodi:** Rennvorbereitung (Grand Prix, Zeitfahren, Training), Meisterschaftsübersicht, Streckenauswahl (Istanbul-Auftritt). Implementiert, siehe Abschnitt 9; der Grand-Prix-Hub zwischen Qualifying und Rennen folgt mit dem Ergebnisbildschirm (Phase 5).
-4. **Renn-HUD:** Turm, Dash mit Shift-LEDs, Timing, Reifen, Ereignis-Feed, Presets, HUD-Editor, Startsequenz mit Kamerafahrt, mobile Anpassung.
-5. **Weitere Oberflächen:** Garage (Kameraperspektiven, Drehen/Zoom), Boxenstrategie, Pause, Ergebnisse/Podium, Fahrerprofil, Einstellungen mit Kategorien.
-6. **Feinschliff:** Übergänge, Musik, Lokalisierung (Deutsch/Englisch), Leistung, Barrierefreiheit (Textgröße, Kontrast, Farbenblind-Modi, Untertitel für Boxenfunk).
+4. **Renn-HUD:** Turm, Dash mit Shift-LEDs, Timing, Reifen, Ereignis-Feed, Presets, HUD-Editor, Startampel. Implementiert, siehe Abschnitt 10; Kamerafahrt vor dem Start und die Abstimmung mit den Touch-Tasten sind offen.
+5. **Weitere Oberflächen:** Garage (Kameraperspektiven, Drehen/Zoom), Boxenfunk, Pause, Ergebnisse/Podium, Fahrerprofil, Einstellungen mit Kategorien. Implementiert, siehe Abschnitt 11.
+6. **Feinschliff:** Übergänge, Musik, Lokalisierung (Deutsch/Englisch), Barrierefreiheit (Textgröße, Kontrast, Farbsehen). Implementiert, siehe Abschnitt 11.
 
 ## 7. Fehlende Assets
 
@@ -238,7 +238,7 @@ Rennen: Grid → Fahrt ⇄ Boxenfunk/Strategie ⇄ Pause → Ergebnisse → (Pod
 | UI-Schrift | Barlow / Barlow Condensed (OFL), im Projekt | – |
 | Logo „APEX“ als Grafik | Text-Logo in der Schrift | Grafikdesign (Auftrag oder intern), eigenes Markenzeichen |
 | Icons (Einstellungen, Reifen, Wetter, Flaggen, Funk, Kamera) | einfache Formen im Code | Icon-Set (z. B. eigenes SVG-Set oder OFL/MIT-Set, Lizenz prüfen) |
-| Menümusik | keine | lizenzfreie Produktion oder Auftrag (Musiklizenz für Spiele, Freigabe nötig) |
+| Menümusik | synthetischer Platzhalter-Loop (`MenuMusic`) | lizenzfreie Produktion oder Auftrag (Musiklizenz für Spiele, Freigabe nötig) |
 | UI-Sounds hoher Qualität | prozedural | Sounddesign-Auftrag oder CC0-Bibliothek |
 | Motor-Startsound für Rennstart | vorhandener Motorsound | Aufnahmen (Lizenz) oder Synthese verfeinern |
 | Konfetti, Pokal, Fahrer fürs Podium | Podium und Pokal prozedural (`EventGeometry`), keine Fahrerfiguren | Charaktermodelle (siehe `ORTAKOY_REFERENCE.md`), Partikel |
@@ -310,6 +310,79 @@ gegen den Uhrzeigersinn), Karte genordet und eingepasst mit allen Sektoren, Kale
 3. Lesbarkeit der rechten Seite über der Showroom-Kamera (Abdunklung 55 %).
 4. Zeilenumbruch der Kurvennamen unter der Karte.
 
-## 10. Nächste Phasen
-4 HUD (Presets, Editor, Ereignisse, Startampel) ·
-5 Garage, Pause, Ergebnis, Podium, Einstellungskategorien · 6 Feinschliff, Musik, Lokalisierung.
+## 10. Umsetzung Phase 4: Renn-HUD
+
+**Status: implementiert, Simulationsteil getestet; in Unity nicht geprüft.** `tools/verify.sh` läuft durch
+(205 NUnit-Tests grün; Runtime, URP-Pfad, Editor und Tests kompilieren ohne Fehler und Warnungen).
+
+### 10.1 Was gebaut ist
+| Teil | Datei | Inhalt |
+|---|---|---|
+| Layout und Presets | `Runtime/Simulation/UI/HudModel.cs` | Elemente Positionsturm, Rennstatus, Ereignisse, Cockpit-Anzeige, Reifen, Streckenkarte, Zeiten mit Ankern (rechte Elemente bleiben bei 21:9 am rechten Rand); Presets Minimal (Anzeige, Status, Ereignisse), Standard (alles), Erweitert (plus Telemetrie), Aus (nur Startampel und Flaggen); Freihaltezone vor dem Auto; Konfliktprüfung |
+| HUD-Editor | ebenda, `HudEditor` | Element wählen, verschieben (bleibt auf dem Bildschirm), Größe 70–140 %, Deckkraft 30–100 %, zurücksetzen; gespeichert in `SettingsData.hudLayout` (repariert beschädigte Einträge) |
+| Schaltlichter, Reifen | ebenda | 15 LEDs (5 grün, 5 rot, 5 blau) ab 72 % der Begrenzerdrehzahl, Blinken am Schaltpunkt; Reifentemperatur kalt/optimal/heiß wie bisher |
+| Ereignisse | `Runtime/Simulation/UI/RaceEventFeed.cs` | Banner mit Priorität (Flagge vor Strafe vor Rekord vor Positionswechsel), Warteschlange, keine Wiederholung binnen 3 s; `RaceEventDetector`: Gelb (nur am eigenen Ort), VSC, Safety Car, Grün nach Neutralisierung, Positionswechsel erst nach 1,5 s (kein Flackern im Zweikampf), letzte Runde, Ziel |
+| Ansicht | `Runtime/Game/UI/RaceHudView.cs` | UI Toolkit, Broadcast-Stil laut Mockup; Minikarte aus den Streckendaten mit Autos; Startampel mit fünf Doppelleuchten; Editor-Overlay mit Freihaltezone, Rahmen, Werten, Hinweisen (Tastatur, Gamepad, Maus ziehen) |
+| Anbindung | `ApexGame.RaceHud.cs` | füllt jedes Bild alle Werte aus der Simulation (dieselben wie das alte HUD); Spielmeldungen (Strafen, Funkantworten) laufen in das Banner; Taste H und Einstellungen: Preset; Pause → „HUD anpassen“ |
+
+IMGUI bleibt für Boxenfunk, Boxenstopp-Timer, Telemetrie, Touch-Tasten, Pause-/Funk-Knöpfe und die Layoutprüfung (F2)
+sowie als vollständiger Rückfall ohne UI Toolkit.
+
+### 10.2 Tests
+`UiModelTests`: Presets, Standardlayout ohne Überdeckung von Fahrbahn und Elementen bei 16:9, 21:9 und 16:10, rechte
+Anker bei Ultrawide, Editor (verschieben, Rand, Größe, Deckkraft, Zurücksetzen, Konfliktmeldung, beschädigte Daten,
+Einstellungs-Migration), Schaltlichter monoton mit Farbfolge, Reifenbänder, Ereignis-Priorität, Entprellung,
+Warteschlange, Detektor (Flaggen, gehaltene und rückgängig gemachte Überholmanöver, letzte Runde, Ziel), Kartenprojektion.
+
+### 10.3 Offen und in Unity zu prüfen
+1. Lesbarkeit und Größe im Fahrbetrieb (Verfolger- und Cockpitkamera), Leistung bei 20 Autos.
+2. `style.transformOrigin` und Skalierung der Elemente; Mausziehen im Editor.
+3. Touch-Tasten (IMGUI) gegen die neuen Elemente: die F2-Prüfung kennt die UI-Toolkit-Elemente noch nicht.
+4. Reihenfolge IMGUI über UI Toolkit (Funk, Telemetrie über dem HUD).
+5. Nicht umgesetzt: Kamerafahrt vor dem Start, Boxenfunk mit Wellenform (Mockup) – der Funk bleibt vorerst IMGUI.
+
+## 11. Umsetzung Phasen 5 und 6
+
+**Status: implementiert, Simulationsteil getestet; in Unity nicht geprüft.** `tools/verify.sh` läuft durch
+(210 NUnit-Tests grün; Runtime, URP-Pfad, Editor und Tests kompilieren ohne Fehler und Warnungen).
+
+### 11.1 Was gebaut ist
+| Teil | Dateien | Inhalt |
+|---|---|---|
+| Pause | `PauseModel` (`ScreensModel.cs`), `PauseView.cs` | Rennen bleibt sichtbar, Seitenpanel rechts mit Session, Runde, Position; Einträge je Session (im Rennen kein Zurücksetzen/Neustart); „Rennen aufgeben“ mit zweiter Bestätigung; „HUD anpassen“ |
+| Ergebnisse | `ResultsModel`, `ResultsView.cs` | Schlagzeile (SIEG / PODIUM / Pn / POLE POSITION / NICHT IM ZIEL), Wochenend-Zeitleiste Qualifying ✓ › Startaufstellung › Rennen (der „Grand-Prix-Hub“), Tabelle mit Teamfarben, XP und Level, Meisterschaftswertung, nächste Schritte; nach Platz 1–3 auf einer Strecke mit Podium (Bosphorus) zuerst 4 s Podiumsaufnahme (Kamera auf Podest und Pokal, jede Taste überspringt) |
+| Einstellungen | `SettingsCatalog`, `OptionsView.cs` | Kategorien Grafik, Steuerung, Fahrverhalten, Audio, HUD, Barrierefreiheit; alle bisherigen Einstellungen, neu: Musik, Sprache, Farbsehen, Hoher Kontrast, Textgröße |
+| Garage | `GarageOrbit`, `OptionsView.cs` | Lackierung (mit Farbfeld), Team und Startnummer, Setup (Fahrprofil, TC, ABS, Lenkhilfe, Automatik, Bremsbalance – dieselben Einstellungen), Fortschritt; Kameras Front / Seite / Heck / Oben, Ziehen dreht, Mausrad zoomt |
+| Boxenfunk | `RaceHudView.SetRadio` | Funkpanel im HUD (Amber, animierte Wellenform des offenen Kanals, Einträge per Taste, Maus oder Zahl); Touch behält das IMGUI-Layout seiner Tasten. Funkantworten erscheinen als Text im Ereignisbanner (Untertitel) |
+| Startsequenz | `IntroCamera`, `RaceCamera.PlayIntro` | Kamerafahrt um das Auto in die Fahrkamera (3,2 s, nur Rennen, nicht bei reduzierter Bewegung) |
+| Übergänge | `ScreenFade.cs` | kurze Blende aus Navy bei Bildschirmwechseln (nicht bei Pause/Fortsetzen) |
+| Musik | `MenuMusic.cs` | Platzhalter: 16-s-Loop, zur Laufzeit synthetisiert, nur in den Menüs, eigene Lautstärke |
+| Sprache | `Loc.cs` | Deutsch/Englisch für die neuen Bildschirme und ihre Modelle |
+| Farbsehen | `UiPalette.cs` | Paletten für Deutan-, Protan- und Tritanopie (Schneller/Langsamer, Reifen kalt/heiß, Sektoren); Simulation nach Machado et al. 2009 |
+| Kontrast, Text | `ApexUi` | Hoher Kontrast: deckende Panels, hellere Sekundärschrift; Textgröße 100–130 % für die Menüs |
+| F2-Prüfung | `AddHudZones` | kennt jetzt die UI-Toolkit-HUD-Elemente (Überlappung mit Touch-Tasten und Safe Area) |
+
+### 11.2 Tests
+`UiModelTests`: Pause (Einträge je Session, Bestätigung), Bestätigungslogik, Schlagzeilen, Wochenend-Zeitleiste,
+Folgeaktionen, Podium-Bedingung, Garagenkamera (Voreinstellungen, kürzester Weg, Grenzen, reduzierte Bewegung),
+Startkamera, Farbpaletten (jedes Bedeutungspaar bleibt unter der passenden Simulation unterscheidbar, ΔE > 30 bzw. > 20;
+die Standardpalette ist für Deuteranopie schlechter), Englisch deckt alle Modelltexte ab (keine fehlende Übersetzung).
+
+### 11.3 Ehrliche Grenzen
+- **Sprache:** Englisch gilt für die neuen UI-Toolkit-Bildschirme und ihre Modelle. Deutsch bleiben: Streckenbeschreibungen,
+  Kurvennamen, Teamnamen, Funkantworten und Strafmeldungen des Spiels, Belohnungsnamen, Hilfe und die IMGUI-Rückfallbildschirme.
+- **Musik** ist ein synthetischer Platzhalter, keine Komposition; ein lizenzierter oder beauftragter Soundtrack fehlt (Abschnitt 7).
+- **Farbsehen** betrifft die bedeutungstragenden HUD-Farben; Flaggenfarben (Gelb, Grün, Safety Car) und die Startampel bleiben
+  normgerecht, Schaltlichter sind zusätzlich an ihrer Position lesbar.
+- **Leistung** ist nicht gemessen (kein Unity); Texte werden nur bei Änderung neu gesetzt.
+
+### 11.4 In Unity zu prüfen
+1. Alle neuen Bildschirme: Darstellung, Maus/Tastatur/Gamepad, Esc-Kette (Optionen → Kategorien → Schließen).
+2. Podiumsaufnahme: Kameraposition vor dem Podest (lokales Podest-Koordinatensystem, Annahme: Vorderseite −z).
+3. Startkamera: Übergang in Cockpit- und Verfolgerkamera, Fahrzeugmodell sichtbar während der Fahrt.
+4. Menümusik: Lautstärke, Loop-Übergang; Blende bei Ladevorgängen.
+5. Sprachwechsel: neu aufgebaute Bildschirme, HUD nach Rückkehr ins Menü.
+
+## 12. Nächste Schritte
+Prüfung in Unity (Abschnitte 8.3, 9.3, 10.3, 11.4); danach die IMGUI-Rückfallbildschirme entfernen, ein gezeichnetes Logo und
+ein Icon-Set beauftragen, Musik lizenzieren.

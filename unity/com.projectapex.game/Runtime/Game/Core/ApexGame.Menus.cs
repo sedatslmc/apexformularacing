@@ -53,7 +53,7 @@ namespace Apex.Game
             {
                 case GameState.MainMenu:
                     // The main menu is the UI Toolkit view (MainMenuView); the IMGUI one is only the fallback.
-                    if (settingsOpen) DrawSettings();
+                    if (settingsOpen) { if (settingsView == null) DrawSettings(); }
                     else if (menuView == null) DrawMainMenu();
                     break;
                 case GameState.TrackSelect:
@@ -63,7 +63,7 @@ namespace Apex.Game
                     else DrawSetup();
                     break;
                 case GameState.Garage:
-                    DrawGarage();
+                    if (garageView == null) DrawGarage();
                     break;
                 case GameState.Loading:
                     DrawLoading();
@@ -78,11 +78,12 @@ namespace Apex.Game
                     break;
                 case GameState.Pause:
                     DrawHud();
-                    if (settingsOpen) DrawSettings();
-                    else DrawPause();
+                    if (hudView != null && hudView.Editing) break;   // the HUD editor replaces the pause menu
+                    if (settingsOpen) { if (settingsView == null) DrawSettings(); }
+                    else if (pauseView == null) DrawPause();
                     break;
                 case GameState.Results:
-                    DrawResults();
+                    if (resultsView == null) DrawResults();
                     break;
             }
             if (helpOpen) DrawHelp();
@@ -472,6 +473,8 @@ namespace Apex.Game
                 new Row { label = "Tastengröße", value = () => $"{s.touchButtonScale * 100f:0} %", change = d => s.touchButtonScale += (d == 0 ? 1 : d) * 0.1f },
                 new Row { label = "Tasten-Deckkraft", value = () => $"{s.touchButtonOpacity * 100f:0} %", change = d => s.touchButtonOpacity += (d == 0 ? 1 : d) * 0.1f },
                 new Row { label = "HUD-Größe", value = () => $"{s.hudScale * 100f:0} %", change = d => s.hudScale += (d == 0 ? 1 : d) * 0.05f },
+                new Row { label = "HUD-Preset (Taste H)", value = () => Apex.UI.HudLayout.PresetName((Apex.UI.HudPreset)s.hudPreset),
+                    change = d => s.hudPreset = Wrap(s.hudPreset + (d < 0 ? -1 : 1), 4) },
                 new Row { label = "Geschwindigkeit", value = () => s.speedInMph ? "mph" : "km/h", change = d => s.speedInMph = !s.speedInMph },
                 new Row { label = "Reduzierte Bewegung", value = () => OnOff(s.reducedMotion), change = d => s.reducedMotion = !s.reducedMotion },
                 new Row { label = "Grafikstufe", value = () => GraphicsTierLabel(s.graphicsTier),
@@ -503,6 +506,7 @@ namespace Apex.Game
                     value = () => GraphicsQuality.Current.motionBlur <= 0f ? "– (ab Hoch)" : s.reducedMotion ? "aus (reduzierte Bewegung)" : OnOff(s.motionBlur),
                     change = d => s.motionBlur = !s.motionBlur });
             }
+            AddUiSettingRows(rows);
             return rows;
         }
 
@@ -585,6 +589,7 @@ namespace Apex.Game
                 items.Add(("Session neu starten", () => { var k = kind; var t = currentType; sm.TryTransition(GameState.Loading); EndSession(); kind = k; currentType = t; StartCoroutine(LoadSession(null)); }));
             }
             items.Add(("Einstellungen", () => { settingsOpen = true; focus = 0; }));
+            if (hudView != null) items.Add(("HUD anpassen", () => { swallowClickFrame = Time.frameCount; hudView.OpenEditor(); }));
             items.Add(("Steuerung & Hilfe", () => helpOpen = true));
             items.Add((Race != null && Race.Type == SessionType.Race ? "Rennen aufgeben (Hauptmenü)" : "Zum Hauptmenü", () => sm.TryTransition(GameState.MainMenu)));
             MenuList(x, y + 100f, w, 70f, items, 27);

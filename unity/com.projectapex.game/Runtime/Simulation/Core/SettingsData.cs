@@ -59,6 +59,20 @@ namespace Apex.Core
         public bool leftHanded;
         public bool speedInMph;
         public float hudScale = 1f;
+        /// <summary>HUD preset (<see cref="Apex.UI.HudPreset"/>: 0 Minimal, 1 Standard, 2 Erweitert, 3 Aus).</summary>
+        public int hudPreset = 1;
+        /// <summary>Player's HUD editor adjustments (position, size, opacity per element).</summary>
+        public Apex.UI.HudLayoutData hudLayout = new Apex.UI.HudLayoutData();
+        /// <summary>UI language of the new screens (<see cref="Apex.UI.Language"/>).</summary>
+        public int language;
+        /// <summary>HUD colours for colour-vision deficiencies (<see cref="Apex.UI.ColourVision"/>).</summary>
+        public int colourVision;
+        /// <summary>Opaque panels and brighter secondary text.</summary>
+        public bool highContrast;
+        /// <summary>Text size of the new screens (1.0 .. 1.3).</summary>
+        public float uiTextScale = 1f;
+        /// <summary>Menu music volume (0 = off).</summary>
+        public float musicVolume = 0.5f;
         /// <summary>Environment density: 0 = low (mobile), 1 = medium, 2 = high, 3 = extreme (PC).</summary>
         public int environmentDetail = 1;
         /// <summary>Camera motion blur at the tier's strength (High and above); off = no blur.</summary>
@@ -109,6 +123,13 @@ namespace Apex.Core
             changed |= ClampField(ref touchButtonScale, 0.7f, 1.5f);
             changed |= ClampField(ref touchButtonOpacity, 0.1f, 1f);
             changed |= ClampField(ref hudScale, 0.75f, 1.25f);
+            changed |= ClampInt(ref hudPreset, 0, 3);
+            changed |= ClampInt(ref language, 0, 1);
+            changed |= ClampInt(ref colourVision, 0, 3);
+            changed |= ClampField(ref uiTextScale, 1f, 1.3f);
+            changed |= ClampField(ref musicVolume, 0f, 1f);
+            if (hudLayout == null) { hudLayout = new Apex.UI.HudLayoutData(); changed = true; }
+            changed |= hudLayout.Normalize();
             changed |= ClampField(ref brakeBiasFront, 0.5f, 0.65f);
             changed |= ClampInt(ref tractionLevel, 0, 3);
             changed |= ClampInt(ref steeringAssistLevel, 0, 2);

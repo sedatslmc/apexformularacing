@@ -103,6 +103,8 @@ namespace Apex.Game
             input.ApplySettings(Settings);
             sm.Changed += OnStateChanged;
             CreateMenuView();
+            CreateHudView();
+            CreateScreenViews();
             sm.TryTransition(GameState.MainMenu);
         }
 
@@ -509,6 +511,7 @@ namespace Apex.Game
         void UpdateShowroomCamera()
         {
             if (showroom == null) return;
+            if (sm.Current == GameState.Garage && UpdateGarageCamera()) return;
             if (sm.Current == GameState.MainMenu && !settingsOpen)
             {
                 MenuStage.MenuCamera(cam, showroom.transform, menuViewHeading, Time.unscaledTime, Settings.reducedMotion);
@@ -618,7 +621,12 @@ namespace Apex.Game
             input.legacyHandling = Race.Player.car.setup.legacy;
             if (kind == SessionKind.Practice || kind == SessionKind.TimeTrial) Race.Director.rules.sessionSeconds = 0f;
             Race.Input = input;
-            Race.Message += (t, c, p) => ShowMessage(t, c, p >= 2 ? 3f : 2.2f, p >= 1);
+            Race.Message += (t, c, p) =>
+            {
+                // The UI Toolkit HUD shows the fastest lap as its own event (BindHudToSession).
+                if (hudView != null && t.StartsWith("Schnellste Runde")) return;
+                ShowMessage(t, c, p >= 2 ? 3f : 2.2f, p >= 1);
+            };
             Race.SessionComplete += OnSessionComplete;
             Race.Player.entry.timer.LapCompleted += OnPlayerLap;
             Race.Player.entry.timer.SectorCompleted += OnPlayerSector;
@@ -644,9 +652,13 @@ namespace Apex.Game
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);
             ResetSectorColours();
+            BindHudToSession();
             raceCam.target = playerCar.transform;
             raceCam.SetMode(Settings.cameraMode);
             raceCam.enabled = true;
+            raceCam.ClearHold();
+            // Start sequence: a sweep around the car into the driving camera (not with reduced motion).
+            if (type == SessionType.Race && !Settings.reducedMotion) raceCam.PlayIntro();
             input.ReleaseAll();
             ApplyAssists();
             calibrating = Settings.controlPreset == ControlPreset.Tilt;
@@ -712,6 +724,7 @@ namespace Apex.Game
             menuView?.SetVisible(to == GameState.MainMenu);
             if (to == GameState.TrackSelect) ShowSetupView();
             setupView?.SetVisible(to == GameState.TrackSelect);
+            OnScreenStateChanged(from, to);
         }
 
         // --- Timing events ----------------------------------------------------------------
@@ -743,11 +756,13 @@ namespace Apex.Game
             if (valid && SaveService.SubmitLap(Settings, trackId, time))
             {
                 sessionRecord = time;
-                ShowMessage("Neuer Rekord  " + ApexStyle.FormatTime(time), ApexStyle.Best, 3f, true);
+                if (hudView != null) eventFeed.Post(Apex.UI.HudEventKind.Record, "NEUER REKORD", ApexStyle.FormatTime(time), Apex.UI.HudTone.Best, Time.unscaledTime);
+                else ShowMessage("Neuer Rekord  " + ApexStyle.FormatTime(time), ApexStyle.Best, 3f, true);
             }
             else if (personalBest)
             {
-                ShowMessage("Persönliche Bestzeit  " + ApexStyle.FormatTime(time), ApexStyle.Faster, 2.5f, false);
+                if (hudView != null) eventFeed.Post(Apex.UI.HudEventKind.PersonalBest, "PERSÖNLICHE BESTZEIT", ApexStyle.FormatTime(time), Apex.UI.HudTone.Good, Time.unscaledTime);
+                else ShowMessage("Persönliche Bestzeit  " + ApexStyle.FormatTime(time), ApexStyle.Faster, 2.5f, false);
             }
         }
 
@@ -766,6 +781,8 @@ namespace Apex.Game
             public int levelAfter;
             public List<int> order;
             public string[] championshipLines;
+            public readonly List<Color> teams = new List<Color>();
+            public bool playerFinished;
             public bool championshipFinished;
         }
 
@@ -792,10 +809,13 @@ namespace Apex.Game
                     ApexStyle.FormatTime(e.BestLap), e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
                     Race.Type == SessionType.Race ? d.PointsFor(e).ToString() : "",
                 });
+                var tm = Roster.Teams[rc.teamIndex];
+                res.teams.Add(new Color(tm.r, tm.g, tm.b));
                 if (e.isPlayer)
                 {
                     res.playerRow = res.rows.Count - 1;
                     res.playerPosition = e.position;
+                    res.playerFinished = e.finished;
                 }
             }
             res.levelBefore = Career.Level;
@@ -857,6 +877,7 @@ namespace Apex.Game
 
         void ShowMessage(string text, Color color, float duration, bool high)
         {
+            if (PostToHud(text, color, duration, high)) return;
             var t = new Toast { text = text, color = color, time = duration };
             if (high) toastHigh = t;
             else toastLow = t;
@@ -877,6 +898,7 @@ namespace Apex.Game
                 ShowMessage("Screenshot gespeichert", Color.white, 1.5f, false);
             }
             if (input.HelpPressed) helpOpen = !helpOpen;
+            UpdateScreenViews();
 
             switch (sm.Current)
             {
@@ -893,9 +915,9 @@ namespace Apex.Game
                         if (!overlay)
                         {
                             menuView.Tick(Time.unscaledDeltaTime, navUp, navDown, navConfirm);
-                            if (input.PausePressed && menuView.Back()) break;
+                            if (BackPressed && menuView.Back()) break;
                         }
-                        else if (input.PausePressed)
+                        else if (BackPressed)
                         {
                             MenuBack();
                             RefreshMenu();
@@ -906,13 +928,13 @@ namespace Apex.Game
                     if (sm.Current == GameState.TrackSelect && setupView != null && !helpOpen)
                     {
                         setupView.Tick(Time.unscaledDeltaTime, navUp, navDown, navLeft, navRight, navConfirm);
-                        if (input.PausePressed && sm.Current == GameState.TrackSelect) setupView.Back();
+                        if (BackPressed && sm.Current == GameState.TrackSelect) setupView.Back();
                         break;
                     }
-                    if (input.PausePressed) MenuBack();
+                    if (BackPressed) MenuBack();
                     break;
                 case GameState.Results:
-                    if (input.PausePressed) sm.TryTransition(GameState.MainMenu);
+                    if (BackPressed) sm.TryTransition(GameState.MainMenu);
                     break;
                 case GameState.Grid:
                 case GameState.Driving:
@@ -922,7 +944,7 @@ namespace Apex.Game
                     UpdateInRace();
                     break;
                 case GameState.Pause:
-                    if (input.PausePressed)
+                    if (BackPressed && !(hudView != null && hudView.Editing))
                     {
                         if (settingsOpen) settingsOpen = false;
                         else sm.Resume();
@@ -930,6 +952,7 @@ namespace Apex.Game
                     break;
             }
             if (Race != null) input.vehicleSpeed = Mathf.Abs(Race.Player.Sim.ForwardSpeed);
+            UpdateHudView();
         }
 
         void MenuBack()
@@ -942,7 +965,7 @@ namespace Apex.Game
         void UpdateInRace()
         {
             if (Race == null) return;
-            if (input.PausePressed)
+            if (BackPressed)
             {
                 if (radioOpen) CloseRadio();
                 else sm.TryTransition(GameState.Pause);
@@ -954,7 +977,11 @@ namespace Apex.Game
             if (input.TelemetryPressed) showTelemetry = !showTelemetry;
             if (input.TowerPressed) towerExpanded = !towerExpanded;
             if (input.MapPressed) showMap = !showMap;
-            if (input.HudPresetPressed) hudPreset = (hudPreset + 1) % 3;
+            if (input.HudPresetPressed)
+            {
+                if (hudView != null) CycleHudPreset();
+                else hudPreset = (hudPreset + 1) % 3;
+            }
             if (input.LayoutDebugPressed) layoutDebug = !layoutDebug;
             if (input.ShiftUpPressed) Race.Player.Sim.RequestShiftUp();
             if (input.ShiftDownPressed) Race.Player.Sim.RequestShiftDown();
