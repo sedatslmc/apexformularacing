@@ -507,7 +507,8 @@ if (Array.IndexOf(args, "--environment") >= 0)
         var orn = new Dictionary<string, MeshBuilder>();
         MeshBuilder O(string k) { if (!orn.TryGetValue(k, out var m)) orn[k] = m = new MeshBuilder(); return m; }
         int fronts = 0;
-        foreach (var b in osm.buildings) { EnvironmentGeometry.FacadeOrnaments(O, b, 2); if (b.front != null && Array.IndexOf(b.front, true) >= 0) fronts++; }
+        int ornLevel = Math.Clamp(quality, 0, 2);
+        foreach (var b in osm.buildings) { EnvironmentGeometry.FacadeOrnaments(O, b, ornLevel); if (b.front != null && Array.IndexOf(b.front, true) >= 0) fronts++; }
         // With --crop: street-front relief (balconies, cumba, awnings, AC units, hanging flags) inside the crop goes into the OBJ.
         int cri = Array.IndexOf(args, "--crop");
         if (cri >= 0 && cri + 1 < args.Length)
@@ -521,7 +522,7 @@ if (Array.IndexOf(args, "--environment") >= 0)
             }
         }
         int ornTris = 0; foreach (var kv in orn) ornTris += kv.Value.TriangleCount;
-        Console.WriteLine($"street fronts: {fronts} buildings, ornament triangles (level 2): {ornTris}");
+        Console.WriteLine($"street fronts: {fronts} buildings, ornament triangles (level {ornLevel}, as in the game): {ornTris}");
         foreach (var kv in orn) Console.WriteLine($"  ornaments {kv.Key}: {kv.Value.TriangleCount}");
         int fi = Array.IndexOf(args, "--frontage");
         if (fi >= 0 && fi + 1 < args.Length)

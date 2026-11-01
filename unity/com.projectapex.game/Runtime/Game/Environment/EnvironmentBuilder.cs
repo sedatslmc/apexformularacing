@@ -115,7 +115,7 @@ namespace Apex.Game
                 Debug.Log($"[Apex] Real city: {osm.buildings.Count} buildings, {osm.trees.Count} trees (OSM).");
             }
             Safe("waterfront edge", () => BuildWaterEdge(root.transform, env, ci, osm));
-            Safe("generic city", () => BuildCity(root.transform, city));
+            Safe("generic city", () => BuildCity(root.transform, city, def.trueNorthBearing));
             Safe("trees", () => BuildTrees(root.transform, env, city));
             // Turkish flags on selected rooftops near the circuit, gathered around the focal points.
             foreach (var f in new RooftopFlagLayout(allLots, field, def, g, q).flags)
@@ -306,10 +306,11 @@ namespace Apex.Game
 
         // --- City -------------------------------------------------------------------------------
 
-        static void BuildCity(Transform root, CityLayout city)
+        static void BuildCity(Transform root, CityLayout city, float trueNorth)
         {
             var cityRoot = new GameObject("City").transform;
             cityRoot.SetParent(root, false);
+            BuildSunGlint(cityRoot, city, trueNorth);
             // Chunk lots so distant chunks cull and near chunks switch to simple boxes.
             var chunks = new Dictionary<(int, int, int), List<CityLayout.Lot>>();
             foreach (var lot in city.lots)
@@ -349,6 +350,73 @@ namespace Apex.Game
                 });
                 lg.RecalculateBounds();
             }
+        }
+
+        /// <summary>
+        /// Golden-hour window glint (GoldenHour.Glint): an additive copy of the walls of the mid and far city that face
+        /// the evening sun – above all the west-facing Asian shore –, grouped by wall direction (10°) and 1 km tile so
+        /// each group gets its own strength from its direction to the camera (SunGlintComponent).
+        /// </summary>
+        static void BuildSunGlint(Transform cityRoot, CityLayout city, float trueNorth)
+        {
+            var material = EnvironmentMaterials.SunGlint;
+            if (material == null) return;
+            var golden = SkyModel.Get(Apex.Weather.TimeOfDay.GoldenHour);
+            var sun = GoldenHour.SunDirection(golden.azimuthTrue, golden.elevation, trueNorth);
+            var sunFlat = new Vector3(sun.X, 0f, sun.Z).normalized;
+            const float tile = 1000f;
+            var groups = new Dictionary<(int, int, int), MeshBuilder>();
+            float tileH = CityLayout.FloorHeight * EnvironmentGeometry.TileBays, tileW = EnvironmentGeometry.BayWidth * EnvironmentGeometry.TileBays;
+            foreach (var lot in city.lots)
+            {
+                if (lot.band == 0) continue;
+                float s = Mathf.Sin(lot.yaw), c = Mathf.Cos(lot.yaw);
+                Vector3 L(float u, float v) => new Vector3(lot.x + c * u + s * v, 0f, lot.z - s * u + c * v);
+                float hw = lot.w * 0.5f, hd = lot.d * 0.5f;
+                var corners = new[] { L(-hw, -hd), L(hw, -hd), L(hw, hd), L(-hw, hd) };
+                // Same facade UVs as EnvironmentGeometry.Building, so the glint sits on the windows.
+                float u0 = (lot.x * 0.37f + lot.z * 0.11f) % tileW;
+                for (int i = 0; i < 4; i++)
+                {
+                    var a = corners[i]; var b = corners[(i + 1) % 4];
+                    float len = (b - a).magnitude;
+                    var outward = (Vector3.Cross(b - a, Vector3.up) * -1f).normalized;
+                    float ua = u0 / tileW, ub = (u0 + len) / tileW;
+                    u0 += len;
+                    if (Vector3.Dot(outward, sunFlat) < 0.17f) continue;   // more than 80° away from the evening sun
+                    int bin = Mathf.FloorToInt(Mathf.Repeat(Mathf.Atan2(outward.x, outward.z) * Mathf.Rad2Deg, 360f) / 10f);
+                    var key = (bin, Mathf.FloorToInt(lot.x / tile), Mathf.FloorToInt(lot.z / tile));
+                    if (!groups.TryGetValue(key, out var mb)) groups[key] = mb = new MeshBuilder();
+                    float y0 = lot.ground, y1 = lot.ground + lot.height;
+                    float vb = -0.6f / tileH, vt = (lot.height - 0.6f) / tileH;
+                    var lift = outward * 0.08f;
+                    mb.QuadFacing(new Vector3(a.x, y0, a.z) + lift, new Vector3(b.x, y0, b.z) + lift, new Vector3(b.x, y1, b.z) + lift, new Vector3(a.x, y1, a.z) + lift,
+                        new Vector2(ua, vb), new Vector2(ub, vb), new Vector2(ub, vt), new Vector2(ua, vt), outward);
+                }
+            }
+            if (groups.Count == 0) return;
+            var go = new GameObject("SunGlint");
+            go.transform.SetParent(cityRoot, false);
+            var comp = go.AddComponent<SunGlintComponent>();
+            comp.trueNorth = trueNorth;
+            int quads = 0;
+            foreach (var kv in groups)
+            {
+                var mb = kv.Value;
+                quads += mb.TriangleCount / 2;
+                var mesh = mb.ToMesh("SunGlint");
+                var child = new GameObject($"Glint_{kv.Key.Item1 * 10:000}_{kv.Key.Item2}_{kv.Key.Item3}");
+                child.transform.SetParent(go.transform, false);
+                child.AddComponent<MeshFilter>().sharedMesh = mesh;
+                var mr = child.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = material;
+                mr.shadowCastingMode = ShadowCastingMode.Off;
+                mr.receiveShadows = true;
+                mr.enabled = false;
+                float az = (kv.Key.Item1 + 0.5f) * 10f * Mathf.Deg2Rad;
+                comp.Add(mr, new Vector3(Mathf.Sin(az), 0f, Mathf.Cos(az)), mesh.bounds.center);
+            }
+            Debug.Log($"[Apex] Golden-hour window glint: {quads} walls in {groups.Count} groups.");
         }
 
         /// <summary>
@@ -1275,8 +1343,30 @@ namespace Apex.Game
         };
 
         static readonly Dictionary<Color, Material> solids = new Dictionary<Color, Material>();
-        static Texture2D facadeAlbedo, facadeEmission, waterNormal, flagTex;
+        static Texture2D facadeAlbedo, facadeEmission, facadeGlint, waterNormal, flagTex;
         public static Material Flag { get; private set; }
+        static Material sunGlint;
+        static bool sunGlintTried;
+
+        /// <summary>
+        /// Additive golden-hour window glint (Apex/SunGlint) over the facade window mask; null where the shader is
+        /// missing or unsupported (then the city simply has no glint).
+        /// </summary>
+        public static Material SunGlint
+        {
+            get
+            {
+                if (sunGlintTried) return sunGlint;
+                sunGlintTried = true;
+                if (facadeAlbedo == null) BuildFacadeTextures();
+                var shader = Resources.Load<Shader>("Shaders/ApexSunGlint");
+                if (shader == null || !shader.isSupported || GraphicsSettings.currentRenderPipeline == null) return null;
+                sunGlint = new Material(shader) { name = "Env_SunGlint", enableInstancing = true };
+                sunGlint.SetTexture("_MainTex", facadeGlint);
+                sunGlint.SetVector("_GlintColor", Vector4.zero);
+                return sunGlint;
+            }
+        }
 
         public static Material Solid(Color c)
         {
@@ -1306,8 +1396,11 @@ namespace Apex.Game
             const int n = 256, cell = 32;
             facadeAlbedo = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "FacadeAlbedo", wrapMode = TextureWrapMode.Repeat, anisoLevel = 2 };
             facadeEmission = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "FacadeEmission", wrapMode = TextureWrapMode.Repeat };
+            // Glass mask for the golden-hour glint: every pane, each at its own brightness (panes are not all in one plane).
+            facadeGlint = new Texture2D(n, n, TextureFormat.RGBA32, true) { name = "FacadeGlint", wrapMode = TextureWrapMode.Repeat };
             var a = new Color[n * n];
             var e = new Color[n * n];
+            var gl = new Color[n * n];
             var rng = new System.Random(1071);
             var wall = new Color(0.95f, 0.95f, 0.95f);
             var glass = new Color(0.16f, 0.18f, 0.22f);
@@ -1320,20 +1413,22 @@ namespace Apex.Game
                     var warm = shop ? new Color(1f, 0.9f, 0.75f) : Color.Lerp(new Color(1f, 0.78f, 0.5f), new Color(0.9f, 0.92f, 1f), (float)rng.NextDouble() * 0.4f);
                     bool shutters = !shop && rng.NextDouble() < 0.18;
                     var awning = rng.NextDouble() < 0.5 ? new Color(0.62f, 0.12f, 0.1f) : new Color(0.15f, 0.35f, 0.25f);
+                    // Separate generator: the glint mask must not change the facade's existing random pattern.
+                    float pane = 0.25f + 0.75f * (float)new System.Random(fy * 131 + bx * 17 + 5).NextDouble();
                     for (int y = 0; y < cell; y++)
                         for (int x = 0; x < cell; x++)
                         {
-                            Color c = wall, em = Color.black;
+                            Color c = wall, em = Color.black, glint = Color.black;
                             if (shop)
                             {
-                                if (x >= 2 && x < 30 && y >= 3 && y < 23) { c = glass * 0.8f; if (lit) em = warm * 0.9f; }
+                                if (x >= 2 && x < 30 && y >= 3 && y < 23) { c = glass * 0.8f; if (lit) em = warm * 0.9f; glint = Color.white * (0.6f * pane); }
                                 else if (x >= 1 && x < 31 && y >= 23 && y < 28) c = awning;
                             }
                             else
                             {
                                 bool inWin = x >= 10 && x < 22 && y >= 9 && y < 27;
                                 bool inFrame = x >= 9 && x < 23 && y >= 8 && y < 28;
-                                if (inWin) { c = shutters ? new Color(0.45f, 0.38f, 0.3f) : glass; if (lit && !shutters) em = warm; }
+                                if (inWin) { c = shutters ? new Color(0.45f, 0.38f, 0.3f) : glass; if (lit && !shutters) em = warm; if (!shutters) glint = Color.white * pane; }
                                 else if (inFrame) c = frame;
                                 else if (y >= 6 && y < 8 && x >= 8 && x < 24) c = new Color(0.82f, 0.8f, 0.76f);
                                 if (y == cell - 1) c *= 0.85f;
@@ -1342,12 +1437,16 @@ namespace Apex.Game
                             int px = bx * cell + x, py = fy * cell + y;
                             a[py * n + px] = c;
                             e[py * n + px] = em;
+                            glint.a = 1f;
+                            gl[py * n + px] = glint;
                         }
                 }
             facadeAlbedo.SetPixels(a);
             facadeAlbedo.Apply(true);
             facadeEmission.SetPixels(e);
             facadeEmission.Apply(true);
+            facadeGlint.SetPixels(gl);
+            facadeGlint.Apply(true);
         }
 
         static void BuildWaterNormal()

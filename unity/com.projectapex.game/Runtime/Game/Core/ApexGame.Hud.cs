@@ -440,7 +440,7 @@ namespace Apex.Game
         void DrawTelemetry(Rect safe, RaceCar car)
         {
             var sim = car.Sim;
-            var r = new Rect(safe.xMax - 600f, safe.y + 240f, 580f, 386f);
+            var r = new Rect(safe.xMax - 600f, safe.y + 240f, 580f, 432f);
             ApexStyle.Box(r, ApexStyle.Panel);
             Zone("Telemetry", r);
             float y = r.y + 10f;
@@ -470,6 +470,9 @@ namespace Apex.Game
             Line($"{(sim.setup.legacy ? "ALT" : "NEU")}  Schlupf V {useF:0.00} H {useR:0.00}  quer {Mathf.Abs(yaw * lv.z) / 9.81f:0.00} g  Gier {yaw * Mathf.Rad2Deg:+0;-0}°/s  β {beta:+0.0;-0.0}°{(sim.EscActive ? "  ESC" : "")}{(sim.AbsActive ? "  ABS" : "")}");
             Line($"Strecke nass {sim.trackWetness * 100f:0} %  {sim.trackTemperature:0}°C  Physik {1f / Time.fixedDeltaTime:0} Hz");
             Line($"Neigung {input.RollDeg:+0;-0}°  Zuverl. {input.TiltReliability:0.00}");
+            // Performance capture (also F6): a real button so touch devices can measure a lap.
+            string label = perf.Running ? $"MESSUNG STOPPEN ({perf.Travelled:0} m, {perf.Elapsed:0} s)" : "LEISTUNG MESSEN (1 RUNDE)";
+            if (ApexStyle.Button(new Rect(r.x + 14f, r.yMax - 46f, r.width - 28f, 38f), label, perf.Running, 17)) TogglePerfCapture();
         }
 
         void DrawTouchButtons()

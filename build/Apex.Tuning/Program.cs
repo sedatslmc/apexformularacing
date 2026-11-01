@@ -766,6 +766,61 @@ else if (mode == "coast-audit")
             Console.WriteLine($"{k.Item1 * 100,5},{k.Item2 * 100,5}  {a.h0,7:0.0} {a.h15,6:0.0} {a.h40,6:0.0} {a.dem,6:0.0}  {a.td,8:0} {a.ty,8:0.0}");
     }
 }
+else if (mode == "golden")
+{
+    // Golden-hour effects (GoldenHour): glint of a west-facing wall seen from 1.5 km west, haze colour by view angle, haze range.
+    var view = System.Numerics.Vector3.Normalize(new System.Numerics.Vector3(-1500f, -40f, -150f));
+    var west = new System.Numerics.Vector3(-1f, 0f, 0f);
+    foreach (Apex.Weather.TimeOfDay t in Enum.GetValues(typeof(Apex.Weather.TimeOfDay)))
+    {
+        var l = Apex.Environment.SkyModel.Get(t);
+        var s = Apex.Environment.GoldenHour.SunDirection(l.azimuthTrue, l.elevation, 0f);
+        float g = Apex.Environment.GoldenHour.Glint(west, view, s, l.elevation, 0f);
+        var hz = Apex.Environment.GoldenHour.HazeRange(l.elevation, 0f, 0f, true);
+        Console.WriteLine($"{t,-11} sun {l.elevation,5:0.0}  low-sun {Apex.Environment.GoldenHour.LowSun(l.elevation):0.00}  glint {g:0.00} colour {Apex.Environment.GoldenHour.GlintColour(l, g)}  haze {hz.start:0}-{hz.end:0} m");
+        Console.WriteLine($"            haze toward sun {Apex.Environment.GoldenHour.Haze(l, 0.98f, 0f)}  side {Apex.Environment.GoldenHour.Haze(l, 0f, 0f)}  away {Apex.Environment.GoldenHour.Haze(l, -0.95f, 0f)}");
+    }
+}
+else if (mode == "sight")
+{
+    // Sightlines from the cockpit (Apex.Environment.DriverSight): sight distance around the lap and what ends it,
+    // the shortest stretches at speed, and per brake board how early it shows compared with 1.5 s of approach.
+    string id = args.Length > 1 ? args[1] : "bosphorus_a";
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var def = CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/" + id + ".json"));
+    var bed = new CircuitTestBed(def);
+    var clear = new TrackClearance(bed.surface);
+    Apex.Environment.OsmCity city = null;
+    string cityPath = root + "City/" + (string.IsNullOrEmpty(def.cityId) ? id : def.cityId) + ".json";
+    if (File.Exists(cityPath)) city = new Apex.Environment.OsmCity(Apex.Environment.CityData.FromJson(File.ReadAllText(cityPath)), bed.terrain, clear, def, null, 1);
+    var sight = new Apex.Environment.DriverSight(bed.g, clear, bed.terrain, city);
+    sight.Survey();
+    var by = new System.Collections.Generic.Dictionary<Apex.Environment.DriverSight.Blocker, int>();
+    foreach (var p in sight.profile) { by.TryGetValue(p.by, out int n); by[p.by] = n + 1; }
+    Console.WriteLine($"{id}: {sight.profile.Count} points, ends of sight: " + string.Join(", ", System.Linq.Enumerable.Select(by, kv => $"{kv.Key} {kv.Value}")));
+    // Seconds of sight at racing-line speed.
+    var rows = new System.Collections.Generic.List<(float s, float sight, float v, float sec, Apex.Environment.DriverSight.Blocker b)>();
+    foreach (var p in sight.profile)
+    {
+        float v = bed.line.speed[bed.g.IndexAt(p.distance)];
+        rows.Add((p.distance, p.sight, v, p.sight / MathF.Max(v, 1f), p.by));
+    }
+    rows.Sort((a, b) => a.sec.CompareTo(b.sec));
+    Console.WriteLine("shortest sight in seconds at racing speed:");
+    for (int k = 0; k < Math.Min(15, rows.Count); k++)
+        Console.WriteLine($"  {rows[k].s,6:0} m  {rows[k].sight,4:0} m  {rows[k].v * 3.6f,4:0} km/h  {rows[k].sec,4:0.0} s  {rows[k].b}");
+    int fast = 0, fastShort = 0;
+    foreach (var r in rows) if (r.v > 50f) { fast++; if (r.sec < 2f && r.b == Apex.Environment.DriverSight.Blocker.Crest) fastShort++; }
+    Console.WriteLine($"above 180 km/h: {fast} points, {fastShort} with a crest closer than 2 s");
+    Console.WriteLine("brake boards (seen from / needed for 1.5 s):");
+    foreach (var bb in bed.plan.brakeBoards)
+    {
+        float v = bed.line.speed[bed.g.IndexAt(bed.g.Wrap(bb.distance))];
+        float need = v * Apex.Environment.DriverSight.BoardWarning;
+        float seen = sight.BoardVisibleFrom(bb, need);
+        Console.WriteLine($"  corner {bb.corner,2} {bb.metres,3} m board at {bb.distance,6:0} m {(bb.side < 0 ? "L" : "R")}: seen from {seen,4:0} m, needed {need,4:0} m{(seen < need ? "  LATE" : "")}");
+    }
+}
 else if (mode == "landmark-ground")
 {
     // Ground under named waterfront landmarks: footprint min/max terrain height and distance to the water.
