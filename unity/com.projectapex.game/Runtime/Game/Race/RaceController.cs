@@ -477,6 +477,7 @@ namespace Apex.Game
                 states.Add(rc.state);
             }
 
+            ApplyWakes();
             DriveSafetyCar(dt);
             UpdateRaceControl(dt);
             foreach (var rc in Cars)
@@ -493,6 +494,27 @@ namespace Apex.Game
             UpdateFlags(dt);
             UpdateStrategy(dt);
             CheckSessionEnd();
+        }
+
+        readonly List<System.Numerics.Vector3> wakePos = new List<System.Numerics.Vector3>(), wakeFwd = new List<System.Numerics.Vector3>();
+        readonly List<float> wakeSpeed = new List<float>();
+        readonly List<RaceCar> wakeCars = new List<RaceCar>();
+
+        /// <summary>Slipstream and dirty air between the cars on track (cars in the pit lane neither give nor take a tow).</summary>
+        void ApplyWakes()
+        {
+            wakePos.Clear(); wakeFwd.Clear(); wakeSpeed.Clear(); wakeCars.Clear();
+            foreach (var rc in Cars)
+            {
+                if (rc.removed) continue;
+                if (rc.state.inPit) { rc.Sim.wake = Slipstream.Effect.None; continue; }
+                wakeCars.Add(rc);
+                wakePos.Add(rc.state.position);
+                wakeFwd.Add(rc.state.forward);
+                wakeSpeed.Add(rc.state.speed);
+            }
+            for (int i = 0; i < wakeCars.Count; i++)
+                wakeCars[i].Sim.wake = Slipstream.For(i, wakePos, wakeFwd, wakeSpeed);
         }
 
         void DriveCar(RaceCar rc, float dt)

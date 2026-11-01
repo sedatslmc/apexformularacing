@@ -44,7 +44,7 @@ namespace Apex.UI
             ["Rennen"] = "Race", ["Rennstarts"] = "Races", ["Siege"] = "Wins", ["Podien"] = "Podiums", ["Poles"] = "Poles", ["Level"] = "Level", ["XP"] = "XP",
             ["Ø Platz"] = "Avg. finish", ["Distanz"] = "Distance", ["Bestzeiten"] = "Best laps", ["Noch keine gewerteten Runden."] = "No timed laps yet.",
             ["Esc  Zurück"] = "Esc  Back", ["‹  Zurück"] = "‹  Back", ["ISTANBUL WIRD GELADEN"] = "LOADING ISTANBUL",
-            ["Morgen"] = "Morning", ["Mittag"] = "Midday", ["Sonnenuntergang"] = "Sunset", ["Nacht"] = "Night", ["Goldene Stunde"] = "Golden hour",
+            ["WINDSCHATTEN"] = "SLIPSTREAM", ["Morgen"] = "Morning", ["Mittag"] = "Midday", ["Sonnenuntergang"] = "Sunset", ["Nacht"] = "Night", ["Goldene Stunde"] = "Golden hour",
             // Setup.
             ["Strecke & Bedingungen"] = "Track & conditions", ["Rennformat"] = "Race format", ["Feld"] = "Field", ["Regeln"] = "Rules",
             ["Runden pro Rennen"] = "Laps per race", ["KI-Gegner"] = "AI opponents", ["KI-Stärke"] = "AI strength", ["Team"] = "Team",

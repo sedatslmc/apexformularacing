@@ -268,6 +268,10 @@ namespace Apex.Tests
                         maxBeyond = Math.Max(maxBeyond, b);
                     }
                 }
+                // Slipstream and dirty air between the cars (Slipstream), as RaceController.ApplyWakes does.
+                var wp = new System.Numerics.Vector3[n]; var wf = new System.Numerics.Vector3[n]; var ws = new float[n];
+                for (int i = 0; i < n; i++) { wp[i] = rigs[i].Position; wf[i] = rigs[i].Forward; ws[i] = rigs[i].u; }
+                for (int i = 0; i < n; i++) rigs[i].sim.wake = Slipstream.For(i, wp, wf, ws);
                 for (int i = 0; i < n; i++)
                 {
                     var sim = rigs[i].sim;

@@ -69,6 +69,8 @@ namespace Apex.Vehicle
         /// <summary>Damage from impacts; only has effects when <see cref="damageEnabled"/>.</summary>
         public readonly DamageState damage = new DamageState();
         public bool damageEnabled;
+        /// <summary>Wake of the cars ahead (Slipstream): less drag, less downforce. Set each step by the race (None alone).</summary>
+        public Slipstream.Effect wake = Slipstream.Effect.None;
         public readonly TireState[] tires = new TireState[4];
         /// <summary>Simulate tire temperature, wear and compound grip.</summary>
         public bool simulateTires = true;
@@ -488,10 +490,10 @@ namespace Apex.Vehicle
             float floorPart = setup.floorShare * gain * (dmg ? damage.FloorFactor : 1f);
             float cla = setup.downforceArea * (1f - setup.floorShare + floorPart);
             float downforce = cla * q;
-            DownforceFront = downforce * AeroBalance * (dmg ? damage.FrontAeroFactor : 1f);
-            DownforceRear = downforce * (1f - AeroBalance) * (dmg ? damage.RearAeroFactor : 1f);
+            DownforceFront = downforce * AeroBalance * (dmg ? damage.FrontAeroFactor : 1f) * (1f - wake.frontLoss);
+            DownforceRear = downforce * (1f - AeroBalance) * (dmg ? damage.RearAeroFactor : 1f) * (1f - wake.rearLoss);
             float induced = 1f + setup.inducedDragFactor * MathF.Max(0f, gain - 1f);
-            Drag = setup.dragArea * induced * (dmg ? damage.DragFactor : 1f) * 0.5f * setup.airDensity * Speed * Speed;
+            Drag = setup.dragArea * induced * (dmg ? damage.DragFactor : 1f) * (1f - wake.tow) * 0.5f * setup.airDensity * Speed * Speed;
         }
 
         void ComputeLoads(float dt)
