@@ -73,9 +73,31 @@ Nicht verändert wurden Wahrzeichen-Positionen, Küstenlinie, Streckenverlauf un
 In der Vorschau sind die Paläste einfache Grundriss-Körper. Im Spiel stehen dort die detaillierten Landmarken-Modelle.
 
 ### Offen und ehrlich
-- **Streckenhöhe an der Çırağan Caddesi:** 12–15 m. Sie stammt aus demselben Oberflächenmodell, real ist die Straße eher niedriger. Das Gelände schließt jetzt sauber an. Die Strecke selbst neu zu entwerfen (`vertical_alignment.py`) ändert Steigungen und Rundenzeiten und braucht deine **Freigabe**.
+- **Streckenhöhe:** umgesetzt in Abschnitt 2a.
 - **Bäume vor den Palastfassaden:** Die Palastgärten werden dicht bepflanzt. Freie Sicht vom Wasser kommt in Phase 3 (Dolmabahçe-Referenzzone).
 - **In Unity zu prüfen:** Gelände-Shader am neuen Uferstreifen (Gras/Erde/Mauer nach Neigung), Kaimauer-Anschluss, Kollision an Kai und Promenade.
+
+## 2a. Streckenhöhe an der Uferstraße (freigegeben am 2026-11-01)
+Das Straßenprofil (`plan.profile.street`, 10. Perzentil des Oberflächenmodells) hatte am Ufer denselben Fehler wie das
+Gelände. `build_track_a.py` korrigiert es jetzt vor dem Höhenentwurf (`coastal_street`):
+- **Obergrenze:** höchstens Kaihöhe + 0,6 m Fahrbahnwölbung, + 5 % auf den ersten 60 m vom Wasser, danach + 12 %.
+- **Geltungsbereich:** nur bis 260 m vom Wasser. Die Absenkung wird über 160 m verteilt, damit keine Stufe entsteht.
+- **Danach:** derselbe Entwurf gegen die Fahrzeuggrenzen (`vertical_alignment.py`) wie bisher.
+
+**Ergebnis:**
+- **Çırağan Caddesi** (Runde 1,55–2,06 km): um 0,7–2,8 m abgesenkt, auf 7,4–9,4 m statt 9,1–12,1 m.
+- **Rest der Runde:** unverändert.
+- **Länge:** unverändert 8,16 km.
+- **Steigung:** höchstens 11 %.
+- **Tests:** alle 211 grün, darunter die Tastatur-Runden aller Fahrprofile trocken und nass.
+
+**Grenze dieser Korrektur:**
+- Die Bremszone vor der Ortaköy-Kehre (letzte ~300 m) und die freigegebene R20-Kehre behalten ihr Profil (12–14 m bzw. ~10 m).
+- **Versuch mit voller Korrektur** (`APEX_FULL_SHORE=1 python3 tools/geo/build_track_a.py`):
+  - senkt dort um bis zu 11 m ab,
+  - erzeugt aber eine Kuppe in der Bremszone aus 330 km/h (Experten-Tastaturrunde ohne ABS verlässt die Strecke),
+  - verändert die Ideallinie auf dem Platz, sodass Gummiabrieb und Zaun-Mittelwand-Prüfung brechen.
+- Das braucht einen Neuentwurf der R20-Kehre mit Fahrtests. Mein Vorschlag ist ein eigener Schritt.
 
 ## 3. Werkzeuge
 ```sh
