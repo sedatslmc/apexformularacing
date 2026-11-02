@@ -18,10 +18,12 @@ namespace Apex.Tests
         public void CorneringGripRisesWithSpeedAndBothAxlesWork(float kmh, float minG)
         {
             var c = new HandlingBenchmark(null, 1).CorneringCapacity(kmh);
-            TestContext.WriteLine($"{kmh} km/h: {c.maxLateralG:F2} g, balance {c.Balance:F2}");
+            TestContext.WriteLine($"{kmh} km/h: {c.maxLateralG:F2} g, slip balance {c.Balance:F2}, force balance {c.ForceBalance:F2} ({c.frontForce:F2}/{c.rearForce:F2})");
             Assert.That(c.maxLateralG, Is.GreaterThan(minG), "downforce makes fast corners feel different");
-            // Mild understeer at the limit: stable, but the rear does real work (was 1.8-2.0).
-            Assert.That(c.Balance, Is.InRange(1.1f, 1.55f));
+            // Mild understeer at the limit: the front sets the limit, the rear does real work close to its own peak.
+            // (Force use, not slip use: the tyre curve is flat near the peak.)
+            Assert.That(c.ForceBalance, Is.InRange(1.0f, 1.2f));
+            Assert.That(c.rearForce, Is.GreaterThan(0.8f), "both axles work");
         }
 
         [Test]
@@ -66,19 +68,18 @@ namespace Apex.Tests
         }
 
         [Test]
-        public void LegacySetupReproducesThePreOverhaulBaseline()
+        public void LegacySetupReproducesThePreviousHandling()
         {
-            // The in-game A/B switch is only useful if "Alt" really is the old car.
+            // The in-game A/B switch is only useful if "Bisherig" really is the car the player drove (October 2026).
             var legacy = VehicleSetup.Legacy();
-            Assert.That(legacy.escEnabled, Is.False);
             Assert.That(legacy.legacy, Is.True);
+            Assert.That(legacy.antiRollFront, Is.EqualTo(25000f));
+            Assert.That(legacy.antiRollRear, Is.EqualTo(80000f));
             var oldC = new HandlingBenchmark(legacy, 1).CorneringCapacity(80f);
             var newC = new HandlingBenchmark(null, 1).CorneringCapacity(80f);
-            TestContext.WriteLine($"80 km/h: legacy {oldC.maxLateralG:F2} g / {oldC.Balance:F2}, new {newC.maxLateralG:F2} g / {newC.Balance:F2}");
-            Assert.That(oldC.maxLateralG, Is.EqualTo(1.72f).Within(0.05f));
-            Assert.That(oldC.Balance, Is.GreaterThan(1.8f), "old car pushes at the limit");
-            Assert.That(InputTuning.SteerPressRate(1f, true), Is.LessThan(InputTuning.SteerPressRate(1f)));
-            Assert.That(InputTuning.StickSteer(0.5f, true), Is.EqualTo(0.5f), "old stick was linear");
+            TestContext.WriteLine($"80 km/h: previous {oldC.maxLateralG:F2} g / {oldC.Balance:F2}, new {newC.maxLateralG:F2} g / {newC.Balance:F2}");
+            Assert.That(oldC.maxLateralG, Is.EqualTo(1.93f).Within(0.05f), "October baseline (docs/HANDLING_OVERHAUL.md)");
+            Assert.That(newC.maxLateralG, Is.GreaterThan(oldC.maxLateralG + 0.05f), "more grip now");
         }
 
         [Test]

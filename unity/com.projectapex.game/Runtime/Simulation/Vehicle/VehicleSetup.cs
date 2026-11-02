@@ -34,11 +34,17 @@ namespace Apex.Vehicle
         public float springRear = 170000f;
         public float damperBump = 6000f;
         public float damperRebound = 8500f;
-        // Roll stiffness biased to the rear: with 60/40 kN/m the front axle took 57 % of the lateral
-        // load transfer, the inside front unloaded to ~600 N and the car pushed (front/rear slip use
-        // 1.8-2.0 at the limit). 25/80 gives 1.2-1.3: mild understeer, both axles working.
-        public float antiRollFront = 25000f;
-        public float antiRollRear = 80000f;
+        // Roll stiffness (handling brief 2026-11, docs/HANDLING_KEYBOARD.md): the October 25/80 kN/m put most of the
+        // load transfer on the rear to hide the keyboard understeer – which really came from held keys steering the
+        // front past its grip peak. With the front-slip limiter fixing that at its source, a rear-heavy roll
+        // stiffness only made the rear the weak axle in direction changes and under trail braking (spins in the
+        // keyboard slalom at 200 km/h, rear slip ~2 × peak when braking into fast corners). 50/50 kN/m: the front takes
+        // keyboard slalom at 200 km/h, rear slip ~2 × peak when braking into fast corners). 30/70 kN/m with the aero
+        // balance moved back (0.44 → 0.41): slow corners are set by the mechanical balance and keep the rear
+        // working (rotation), fast corners by the aero balance, which now holds the rear down (stability).
+        // Measured with KeyboardHandlingProbe; see docs/HANDLING_KEYBOARD.md.
+        public float antiRollFront = 30000f;
+        public float antiRollRear = 70000f;
         public float bumpStopRate = 900000f;
 
         // Wheels and steering
@@ -73,7 +79,9 @@ namespace Apex.Vehicle
         // Downforce raised from 3.6 m² (1.25 × weight at 240 km/h) towards a modern formula car:
         // ~1.6 × weight at 240 km/h, 4.4 g in fast corners. Balance slightly forward with it.
         public float downforceArea = 4.6f;
-        public float aeroBalanceFront = 0.44f;
+        /// <summary>Front share of the downforce. 0.44 → 0.41 (handling brief 2026-11): more rear downforce for a stable
+        /// rear at 200–300 km/h; slow corners are unaffected (little downforce there).</summary>
+        public float aeroBalanceFront = 0.41f;
         public float airDensity = 1.225f;
 
         // Ground effect (approximation, see docs/PHYSICS_MODEL.md)
@@ -92,8 +100,10 @@ namespace Apex.Vehicle
         public float floorStallHeight = 0.01f;
         /// <summary>Fraction of floor downforce lost when the plank is on the ground.</summary>
         public float floorStallLoss = 0.3f;
-        /// <summary>Front aero balance shift per metre of rake change (dive moves it forward).</summary>
-        public float aeroRakeSensitivity = 1.0f;
+        /// <summary>Front aero balance shift per metre of rake change (dive moves it forward). Was 1.0: under hard
+        /// braking at 250–300 km/h the dive moved up to 6 % of the downforce to the front and lightened the rear
+        /// right where the driver turns in (entry oversteer in fast corners). 0.3 keeps the effect, a third as strong.</summary>
+        public float aeroRakeSensitivity = 0.3f;
         /// <summary>Extra drag per unit of floor gain above nominal (induced drag).</summary>
         public float inducedDragFactor = 0.05f;
 
@@ -111,33 +121,36 @@ namespace Apex.Vehicle
         public float absSlipThreshold = 0.12f;
 
         /// <summary>Front tires (narrower).</summary>
-        public TireModel tireFront = new TireModel { nominalLoad = 2800f, muPeak = 1.8f, loadSensitivity = 0.08f, slideFloor = 0.82f };
+        /// <remarks>muPeak 1.8 → 1.95 (handling brief 2026-11): more usable grip, generous for a simcade game, still a
+        /// clear limit. Together with the keyboard fix: 1.84 instead of 1.47 g in a 60 km/h hairpin.</remarks>
+        public TireModel tireFront = new TireModel { nominalLoad = 2800f, muPeak = 1.95f, loadSensitivity = 0.08f, slideFloor = 0.82f };
         /// <summary>Rear tires: wider, so a higher nominal load and slightly more grip.
         /// This keeps the rear from being the weaker axle despite carrying 55 % of the
         /// weight, which is what makes real open-wheelers stable on turn-in.</summary>
-        public TireModel tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f, loadSensitivity = 0.08f, slideFloor = 0.78f };
+        /// <remarks>Slide floor 0.78 → 0.84: past its peak the rear lets go more gently (a recoverable slide, not a snap).</remarks>
+        public TireModel tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.95f, slipAnglePeak = 0.11f, loadSensitivity = 0.08f, slideFloor = 0.84f };
         public EngineModel engine = new EngineModel();
         public Gearbox gearbox = new Gearbox();
 
         /// <summary>Stability control with the steering assist (new in the October 2026 handling).</summary>
         public bool escEnabled = true;
-        /// <summary>True for <see cref="Legacy"/>: the input layer also uses the old ramps and stick curve.</summary>
+        /// <summary>True for <see cref="Legacy"/>: the input layer also uses the previous keyboard ramps
+        /// (KeyboardSteering.Profile.Classic) and no front-slip limiter.</summary>
         public bool legacy;
 
-        /// <summary>The setup before the October 2026 handling overhaul (PR #10), unchanged, for a
-        /// direct in-game comparison (settings → "Fahrverhalten"). See docs/HANDLING_OVERHAUL.md.</summary>
+        /// <summary>
+        /// The handling before the November 2026 overhaul (the October 2026 car, PR #10 – what the player drove until
+        /// now), unchanged, for a direct in-game comparison (settings → "Fahrverhalten: Bisherig").
+        /// See docs/HANDLING_KEYBOARD.md.
+        /// </summary>
         public static VehicleSetup Legacy() => new VehicleSetup
         {
-            springFront = 140000f,
-            springRear = 125000f,
-            antiRollFront = 60000f,
-            antiRollRear = 40000f,
-            ackermann = 0.12f,
-            downforceArea = 3.6f,
-            aeroBalanceFront = 0.43f,
-            tireFront = new TireModel { nominalLoad = 2800f },
-            tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f },
-            escEnabled = false,
+            antiRollFront = 25000f,
+            antiRollRear = 80000f,
+            aeroRakeSensitivity = 1.0f,
+            aeroBalanceFront = 0.44f,
+            tireFront = new TireModel { nominalLoad = 2800f, muPeak = 1.8f, loadSensitivity = 0.08f, slideFloor = 0.82f },
+            tireRear = new TireModel { nominalLoad = 3900f, muPeak = 1.8f, slipAnglePeak = 0.11f, loadSensitivity = 0.08f, slideFloor = 0.78f },
             legacy = true,
         };
 

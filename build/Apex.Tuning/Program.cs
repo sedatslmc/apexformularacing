@@ -989,6 +989,164 @@ else if (mode == "errors")
             Console.WriteLine($"{name,-6} {pname,-12} | {Row(hb.PowerExit(50f, 1f))} | {Row(hb.PowerExit(90f, 1f))} | {Row(hb.LiftOff(120f))} | {Row(hb.LiftOff(200f))} | {Row(hb.BrakeTurnIn(200f))} | {LimitRow(hb.LimitStep(250f))}");
         }
 }
+else if (mode == "guide")
+{
+    // Racing-line guide: the plan (allowed speed) every 50 m, and the hints for a car at a distance and speed.
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var geo = TrackGeometry.FromDefinition(CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/bosphorus_a.json")));
+    var gd = new Apex.AI.RacingLineGuide(CarPerformance.For(new VehicleSetup()).Line(geo));
+    if (args.Length < 3)
+    {
+        for (float d = 0f; d < geo.Length; d += 50f) Console.WriteLine($"  {d,6:F0} m: plan {gd.Allowed(d, 1f) * 3.6f,5:F0} km/h, curvature {gd.line.CurvatureAt(d) * 1000f,6:F1} /km");
+        return;
+    }
+    float at = float.Parse(args[1], inv), kmh = float.Parse(args[2], inv);
+    var list = new System.Collections.Generic.List<Apex.AI.RacingLineGuide.Dash>();
+    gd.Evaluate(at, kmh / 3.6f, 1f, Apex.AI.RacingLineGuide.Mode.WholeLap, true, list);
+    foreach (var x in list) Console.WriteLine($"  +{x.ahead,5:F0} m ({gd.dashDistance[x.index],6:F0}): {x.hint,-6} plan {gd.Allowed(gd.dashDistance[x.index], 1f) * 3.6f,5:F0}");
+}
+else if (mode == "guide-csv")
+{
+    // Plan view data for docs: road edges and the guide's dashes for a car at <distance> with each speed.
+    // guide-csv <distance> <kmh,kmh,...> [from] [to]
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var geo = TrackGeometry.FromDefinition(CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/bosphorus_a.json")));
+    var gd = new Apex.AI.RacingLineGuide(CarPerformance.For(new VehicleSetup()).Line(geo));
+    float at = float.Parse(args[1], inv);
+    float from = args.Length > 3 ? float.Parse(args[3], inv) : at - 50f, to = args.Length > 4 ? float.Parse(args[4], inv) : at + 700f;
+    Console.WriteLine("kind,speed,x,z,hint,alpha");
+    for (float d = from; d < to; d += 4f)
+    {
+        float w = geo.WidthAt(geo.Wrap(d)) * 0.5f;
+        geo.FrameAt(geo.Wrap(d), out var l, out _, out _, -w); geo.FrameAt(geo.Wrap(d), out var r, out _, out _, w);
+        Console.WriteLine(string.Format(inv, "edge,0,{0:F1},{1:F1},,", l.X, l.Z)); Console.WriteLine(string.Format(inv, "edge2,0,{0:F1},{1:F1},,", r.X, r.Z));
+    }
+    geo.FrameAt(geo.Wrap(at), out var car, out _, out _, gd.line.OffsetAt(at));
+    Console.WriteLine(string.Format(inv, "car,0,{0:F1},{1:F1},,", car.X, car.Z));
+    var list = new System.Collections.Generic.List<Apex.AI.RacingLineGuide.Dash>();
+    foreach (var ks in args[2].Split(','))
+    {
+        float kmh = float.Parse(ks, inv);
+        gd.Evaluate(at, kmh / 3.6f, 1f, Apex.AI.RacingLineGuide.Mode.WholeLap, true, list);
+        foreach (var x in list)
+        {
+            gd.DashFrame(x.index, out var c, out _, out _);
+            Console.WriteLine(string.Format(inv, "dash,{0},{1:F1},{2:F1},{3},{4:F2}", kmh, c.X, c.Z, x.hint, x.alpha));
+        }
+    }
+}
+else if (mode == "kblap")
+{
+    // Keyboard lap on the collider surface with a trace between two distances: kblap <profile 0-2> <from> <to> [keys 0-3]
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    var settings = new Apex.Core.SettingsData();
+    settings.ApplyProfile((Apex.Core.DrivingProfile)int.Parse(args[1]));
+    float from = float.Parse(args[2], inv), to = float.Parse(args[3], inv);
+    var keys = args.Length > 4 ? (Apex.InputLogic.KeyboardSteering.Profile)int.Parse(args[4]) : Apex.InputLogic.KeyboardSteering.Profile.Balanced;
+    string root = Path.Combine(AppContext.BaseDirectory, "../../../../../unity/com.projectapex.game/Runtime/Resources/");
+    var bed = new CircuitTestBed(CircuitDefinition.FromJson(File.ReadAllText(root + "Tracks/bosphorus_a.json")));
+    bed.setupFactory = () =>
+    {
+        var su = args.Contains("legacy") ? VehicleSetup.Legacy() : new VehicleSetup();
+        foreach (var a in args.Skip(5))
+        {
+            if (!a.Contains('=')) continue;
+            var kv = a.Split('=');
+            object target = su; string field = kv[0];
+            if (field.Contains('.')) { var parts = field.Split('.'); target = su.GetType().GetField(parts[0]).GetValue(su); field = parts[1]; }
+            var fi = target.GetType().GetField(field);
+            fi.SetValue(target, Convert.ChangeType(float.Parse(kv[1], inv), fi.FieldType));
+        }
+        return su;
+    };
+    if (args.Contains("legacy")) bed.PlanFor(VehicleSetup.Legacy());
+    var (d0, lat0) = bed.GridSlot(0);
+    float last = -1f;
+    bed.trace = (dist, rig) =>
+    {
+        if (dist < from || dist > to || dist - last < 8f) return;
+        last = dist;
+        var sim = rig.sim;
+        var pr = bed.g.Project(rig.position, -1);
+        Console.WriteLine($"  {dist,6:F0} m lat {pr.lateral,5:F1} (w/2 {bed.g.WidthAt(dist) * 0.5f:F1}) v {rig.ForwardSpeed * 3.6f,5:F0} plan {bed.line.SpeedAt(dist) * 3.6f,5:F0} steer {sim.steer,5:F2} lock {sim.SteerAngle * 57.3f,5:F1}° thr {sim.throttle:F2} brk {sim.brake:F2} front {0.5f * (sim.tireFront.CombinedSlip(sim.wheels[0].slipRatio, sim.wheels[0].slipAngle) + sim.tireFront.CombinedSlip(sim.wheels[1].slipRatio, sim.wheels[1].slipAngle)):F2} rear {sim.RearLateralUse():F2}");
+    };
+    var r = bed.Drive(d0, lat0, 0f, 420f, laps: 1, pace: 0.95f, digitalInput: true, keyboardProfile: keys, configure: sim =>
+    {
+        sim.tractionLevel = settings.tractionLevel; sim.assistAbs = settings.abs;
+        sim.steeringAssist = settings.SteeringAssistStrength; sim.speedSensitiveSteering = settings.speedSensitiveSteering;
+    });
+    Console.WriteLine(r);
+    foreach (var e in r.events) if (e.kind == CircuitTestBed.EventKind.LeftTrack || e.kind == CircuitTestBed.EventKind.Spin) Console.WriteLine("  " + e);
+}
+else if (mode == "brakecurve")
+{
+    // Straight-line full braking on the 6-DOF pad (ABS on): deceleration at each speed band vs the planner's model.
+    foreach (bool legacy in new[] { false, true })
+    {
+        var su = legacy ? VehicleSetup.Legacy() : new VehicleSetup();
+        var perf = CarPerformance.For(su);
+        var hb = new HandlingBenchmark(su, 1);
+        var r = hb.NewRig(330f, out var sim);
+        sim.throttle = 0f; sim.brake = 1f;
+        float lastV = r.ForwardSpeed; int band = 320;
+        Console.WriteLine(legacy ? "previous setup" : "current setup");
+        for (int i = 0; i < 120 * 8 && r.ForwardSpeed > 15f; i++)
+        {
+            r.Step(HandlingBenchmark.Dt);
+            float v = r.ForwardSpeed;
+            float a = (lastV - v) / HandlingBenchmark.Dt; lastV = v;
+            if (v * 3.6f < band)
+            {
+                float planned = 0.85f * perf.mu * (9.81f + perf.downforcePerMass * v * v);
+                Console.WriteLine($"  {band,3} km/h: measured {a / 9.81f:F2} g, planner {planned / 9.81f:F2} g, ratio {a / planned:F2}");
+                band -= 40;
+            }
+        }
+    }
+}
+else if (mode == "capacity")
+{
+    // Cornering capacity and balance at 80/150/250 km/h with setup overrides: capacity [profile] field=value ...
+    int ap = args.Length > 1 ? int.Parse(args[1]) : 1;
+    var su = new VehicleSetup();
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    foreach (var a in args.Skip(2))
+    {
+        if (!a.Contains('=')) continue;
+        var kv = a.Split('=');
+        object target = su; string field = kv[0];
+        if (field.Contains('.')) { var parts = field.Split('.'); target = su.GetType().GetField(parts[0]).GetValue(su); field = parts[1]; }
+        var fi = target.GetType().GetField(field);
+        fi.SetValue(target, Convert.ChangeType(float.Parse(kv[1], inv), fi.FieldType));
+    }
+    var hb = new HandlingBenchmark(su, ap);
+    foreach (float kmh in new[] { 80f, 150f, 250f })
+    {
+        var c = hb.CorneringCapacity(kmh);
+        Console.WriteLine($"  {kmh,3:F0} km/h: {c.maxLateralG:F2} g, balance {c.Balance:F2} ({c.frontUse:F2}/{c.rearUse:F2})");
+    }
+}
+else if (mode == "kbprobe")
+{
+    // Keyboard handling probes (KeyboardHandlingProbe): kbprobe [assistProfile] [keyboardProfile] [legacy]
+    int ap = args.Length > 1 ? int.Parse(args[1]) : 1;
+    var kp = args.Length > 2 ? (Apex.InputLogic.KeyboardSteering.Profile)int.Parse(args[2]) : Apex.InputLogic.KeyboardSteering.Profile.Balanced;
+    var su = args.Length > 3 && args[3] == "legacy" ? VehicleSetup.Legacy() : new VehicleSetup();
+    // Overrides: field=value or sub.field=value (e.g. tireRear.slideFloor=0.85), after the profile arguments.
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    foreach (var a in args.Skip(3))
+    {
+        if (!a.Contains('=')) continue;
+        var kv = a.Split('=');
+        object target = su; string field = kv[0];
+        if (field.Contains('.')) { var parts = field.Split('.'); target = su.GetType().GetField(parts[0]).GetValue(su); field = parts[1]; }
+        var fi = target.GetType().GetField(field);
+        fi.SetValue(target, Convert.ChangeType(float.Parse(kv[1], inv), fi.FieldType));
+    }
+    Console.Write(new KeyboardHandlingProbe(su, ap, kp).Report());
+}
 else if (mode == "handling")
 {
     // Handling benchmark on the 6-DOF rig (flat pad): cornering capacity and balance, steering response, braking, traction.

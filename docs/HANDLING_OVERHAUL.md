@@ -1,5 +1,7 @@
 # Formel-Fahrverhalten – Überarbeitung (Oktober 2026)
 
+> **Abgelöst** durch die Überarbeitung vom November 2026 (`docs/HANDLING_KEYBOARD.md`). Dieses Setup ist dort „Bisherig“ im Vergleichsschalter.
+
 **Status:**
 - **Implementiert**, auf dem 6-DOF-Prüfstand **getestet** (NUnit + `Apex.Tuning`).
 - Im Unity-Editor und auf Geräten **nicht getestet**; das Fahrgefühl mit Gamepad oder Lenkrad muss ein Spieler bestätigen.

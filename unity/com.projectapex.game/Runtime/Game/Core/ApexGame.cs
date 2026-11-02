@@ -648,6 +648,13 @@ namespace Apex.Game
             weatherVisuals.postProcessing = Settings.postProcessing;
             PostFxStack.MotionBlurEnabled = Settings.motionBlur && !Settings.reducedMotion;
             weatherVisuals.Bind(circuit.gameObject);
+            // Dynamic racing line (handling brief 2026-11): planned with the player's car, drawn on the road.
+            var guideGo = new GameObject("RacingLineGuide");
+            guideGo.transform.SetParent(world.transform, false);
+            var guideComp = guideGo.AddComponent<RacingLineGuideComponent>();
+            guideComp.race = Race;
+            guideComp.settings = Settings;
+            guideComp.Build(new Apex.AI.RacingLineGuide(Race.PlayerLine));
 
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);

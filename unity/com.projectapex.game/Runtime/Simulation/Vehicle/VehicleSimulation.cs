@@ -47,6 +47,20 @@ namespace Apex.Vehicle
         public bool speedSensitiveSteering = true;
         /// <summary>Lock margin above the grip limit with speed-sensitive steering and no assist.</summary>
         public float speedSensitiveHeadroom = 1.35f;
+        /// <summary>
+        /// Front-slip steering limiter (handling brief 2026-11, docs/HANDLING_KEYBOARD.md): full input steers the front
+        /// tyres to this share of their peak slip angle (1 = at the grip peak) instead of to a fixed lock; 0 = off.
+        /// Digital input cannot modulate, so without it a held key overdrives the front past its peak (scrubbing
+        /// understeer in slow corners, yaw overshoot at speed). The limit comes from the front axle's velocity
+        /// direction, not from a grip estimate: lock = direction of travel of the front wheels + target slip angle.
+        /// Counter-steer and partial input scale with it; it never adds grip.
+        /// </summary>
+        public float steerSlipTarget;
+        /// <summary>Lock the front-slip limiter currently allows (rad); infinity when off.</summary>
+        public float SlipLimitedLock { get; private set; } = float.PositiveInfinity;
+
+        /// <summary>Lock that full input gives right now (rad): the speed/assist lock, or the front-slip limit if tighter.</summary>
+        public float EffectiveMaxLock => MathF.Min(CurrentMaxLock(), SlipLimitedLock);
 
         public bool assistTraction
         {
@@ -69,6 +83,8 @@ namespace Apex.Vehicle
         /// <summary>Damage from impacts; only has effects when <see cref="damageEnabled"/>.</summary>
         public readonly DamageState damage = new DamageState();
         public bool damageEnabled;
+        /// <summary>Wake of the cars ahead (Slipstream): less drag, less downforce. Set each step by the race (None alone).</summary>
+        public Slipstream.Effect wake = Slipstream.Effect.None;
         public readonly TireState[] tires = new TireState[4];
         /// <summary>Simulate tire temperature, wear and compound grip.</summary>
         public bool simulateTires = true;
@@ -150,6 +166,7 @@ namespace Apex.Vehicle
             tcCut = 0f;
             reverseTimer = 0f;
             SteerAngle = 0f;
+            SlipLimitedLock = float.PositiveInfinity;
             throttle = brake = steer = 0f;
         }
 
@@ -488,10 +505,10 @@ namespace Apex.Vehicle
             float floorPart = setup.floorShare * gain * (dmg ? damage.FloorFactor : 1f);
             float cla = setup.downforceArea * (1f - setup.floorShare + floorPart);
             float downforce = cla * q;
-            DownforceFront = downforce * AeroBalance * (dmg ? damage.FrontAeroFactor : 1f);
-            DownforceRear = downforce * (1f - AeroBalance) * (dmg ? damage.RearAeroFactor : 1f);
+            DownforceFront = downforce * AeroBalance * (dmg ? damage.FrontAeroFactor : 1f) * (1f - wake.frontLoss);
+            DownforceRear = downforce * (1f - AeroBalance) * (dmg ? damage.RearAeroFactor : 1f) * (1f - wake.rearLoss);
             float induced = 1f + setup.inducedDragFactor * MathF.Max(0f, gain - 1f);
-            Drag = setup.dragArea * induced * (dmg ? damage.DragFactor : 1f) * 0.5f * setup.airDensity * Speed * Speed;
+            Drag = setup.dragArea * induced * (dmg ? damage.DragFactor : 1f) * (1f - wake.tow) * 0.5f * setup.airDensity * Speed * Speed;
         }
 
         void ComputeLoads(float dt)
@@ -629,9 +646,74 @@ namespace Apex.Vehicle
         /// <summary>Counter-steer added by the assist when the rear slides past its limit (rad, + = right).</summary>
         public float CounterSteer { get; private set; }
 
+        /// <summary>Speed band (m/s) over which the front-slip limiter fades in (parking speeds keep full lock).</summary>
+        public const float SlipLimiterFadeLow = 4f, SlipLimiterFadeHigh = 9f;
+
+        /// <summary>
+        /// Lock (rad, magnitude) that puts the front tyres at <see cref="steerSlipTarget"/> × peak slip when steering in
+        /// direction <paramref name="dir"/> (+1 right, −1 left). From the last step: the front wheels' direction of travel
+        /// relative to the car is φ = slip angle + wheel angle (load-weighted), and slip = φ − δ, so δ = dir·φ + target·peak.
+        /// </summary>
+        float FrontSlipLock(float dir)
+        {
+            float sum = 0f, wsum = 0f;
+            for (int i = 0; i < 2; i++)
+            {
+                var w = wheels[i];
+                if (!w.contact || w.load <= 0f) continue;
+                sum += w.load * (w.slipAngle + w.steer);
+                wsum += w.load;
+            }
+            if (wsum <= 0f) return float.PositiveInfinity;
+            float phi = sum / wsum;
+            // Friction circle under braking: the front tyres cannot brake hard and turn at their lateral peak at the same
+            // time (ABS then finds no longitudinal grip left and the car runs wide). With the brake pressed the limiter
+            // asks for less lateral slip, leaving room for braking – trail braking as a driver would do it.
+            float target = steerSlipTarget * (1f - BrakePriority * ApexMath.Clamp01(brake));
+            float lockAtTarget = dir * phi + target * tireFront.slipAnglePeak;
+            // Rear guard: as the rear approaches its own limit (lateral slip use above RearGuardStart), ask the front
+            // for less – what a driver does with the wheel when the rear goes light under braking or in a quick
+            // direction change. The yaw demand drops, the rear stays below its peak.
+            float rearUse = RearLateralUse();
+            if (rearUse > RearGuardStart)
+                lockAtTarget *= MathF.Max(RearGuardFloor, 1f - (rearUse - RearGuardStart) * RearGuardGain);
+            return MathF.Max(lockAtTarget, 0.3f * ApexMath.Deg2Rad);
+        }
+
+        /// <summary>Share of the lateral slip target given up at full brake (front-slip limiter).</summary>
+        public const float BrakePriority = 0f;
+
+        /// <summary>Rear guard of the front-slip limiter: starts at this rear lateral slip use, gain, lowest lock share.</summary>
+        public const float RearGuardStart = 0.8f, RearGuardGain = 2f, RearGuardFloor = 0.3f;
+
+        /// <summary>Load-weighted rear lateral slip use (|tan α| / tan α_peak), 1 = at the peak.</summary>
+        public float RearLateralUse()
+        {
+            float tanPeak = MathF.Tan(tireRear.slipAnglePeak), sum = 0f, wsum = 0f;
+            for (int i = 2; i < 4; i++)
+            {
+                var w = wheels[i];
+                if (!w.contact || w.load <= 0f) continue;
+                sum += w.load * MathF.Abs(MathF.Tan(ApexMath.Clamp(w.slipAngle, -1.4f, 1.4f))) / tanPeak;
+                wsum += w.load;
+            }
+            return wsum > 0f ? sum / wsum : 0f;
+        }
+
         void UpdateSteering(float dt)
         {
             float maxLock = CurrentMaxLock();
+            if (steerSlipTarget > 0f && MathF.Abs(steer) > 1e-3f)
+            {
+                float limit = FrontSlipLock(MathF.Sign(steer));
+                // Parking speeds: slip angles are ill-defined, keep the mechanical lock.
+                float fade = ApexMath.SmoothStep01((MathF.Abs(ForwardSpeed) - SlipLimiterFadeLow) / (SlipLimiterFadeHigh - SlipLimiterFadeLow));
+                limit = ApexMath.Lerp(maxLock, MathF.Min(limit, maxLock), fade);
+                // Light low-pass (25 ms): the direction of travel is smooth, but contact noise is not.
+                SlipLimitedLock = float.IsInfinity(SlipLimitedLock) ? limit : SlipLimitedLock + (limit - SlipLimitedLock) * ApexMath.Clamp01(dt / 0.025f);
+                maxLock = MathF.Min(maxLock, SlipLimitedLock);
+            }
+            else SlipLimitedLock = float.PositiveInfinity;
             float target = ApexMath.Clamp(steer, -1f, 1f) * maxLock;
             // Stability assist: when the rear slip angle exceeds ~75 % of its peak and
             // is larger than the front's (oversteer), steer into the slide. The rear

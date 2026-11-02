@@ -21,7 +21,15 @@ namespace Apex.Tracks
 
         public readonly CircuitDefinition def;
         public readonly TrackGeometry g;
-        public readonly RacingLine line;
+        /// <summary>The drivers' racing line, planned with the car's grip (<see cref="PlanFor"/>).</summary>
+        public RacingLine line { get; private set; }
+
+        /// <summary>Re-plans the drivers' line for another car (e.g. the previous handling for an A/B lap).</summary>
+        public void PlanFor(VehicleSetup setup)
+        {
+            var perf = CarPerformance.For(setup);
+            line = perf.Line(g);
+        }
         public readonly TrackInfrastructurePlan plan;
         public readonly RoadSurface surface;
         public readonly TerrainField terrain;
@@ -32,8 +40,12 @@ namespace Apex.Tracks
             def = definition;
             g = TrackGeometry.FromDefinition(def);
             var setup = new VehicleSetup();
-            line = new RacingLine(g, 1.45f, setup.downforceArea * setup.airDensity * 0.5f / setup.mass);
-            plan = new TrackInfrastructurePlan(g, g.CornersFor(def), line.offsets, line.speed);
+            // Layout as in the game (fixed reference); the drivers plan with the car's real grip (CarPerformance).
+            var layoutPerf = CarPerformance.LayoutReference(setup);
+            var layoutLine = new RacingLine(g, layoutPerf.mu, layoutPerf.downforcePerMass);
+            var perf = CarPerformance.For(setup);
+            line = perf.Line(g);
+            plan = new TrackInfrastructurePlan(g, g.CornersFor(def), layoutLine.offsets, layoutLine.speed);
             surface = new RoadSurface(g, def, plan.kerbs.left, plan.kerbs.right, plan.kerbs.height);
             if (withTerrain)
             {
@@ -107,7 +119,8 @@ namespace Apex.Tracks
         public DriveResult Drive(float rawDistance, float lateral, float distance, float maxTime, float initialSpeed = 0f,
             bool throttleOnly = false, float pace = 0.95f, int laps = 0, float groundingImpulse = 5f,
             Func<float, float> lateralAt = null, float speedLimit = float.PositiveInfinity, int seed = 3,
-            Action<VehicleSimulation> configure = null, bool digitalInput = false)
+            Action<VehicleSimulation> configure = null, bool digitalInput = false,
+            InputLogic.KeyboardSteering.Profile keyboardProfile = InputLogic.KeyboardSteering.Profile.Balanced)
         {
             var rig = NewRig(out var sim);
             g.FrameAt(rawDistance, out _, out var f, out _, lateral);
@@ -116,8 +129,10 @@ namespace Apex.Tracks
             var ai = new AIDriver(line, AIPersonality.Make(pace, 0f, 1f, 0.5f, 0.5f), seed) { forcedLateral = throttleOnly ? lateral : float.NaN };
             sim.speedLimit = speedLimit;
             configure?.Invoke(sim);
-            // Keyboard/touch driver: the AI decides, but the car only gets digital keys through the game's ramps.
-            var steerKey = new InputLogic.DigitalAxis();
+            // Keyboard/touch driver: the AI decides, but the car only gets digital keys through the game's input chain
+            // (KeyboardSteering ramp and curve, front-slip limiter) – the previous handling uses the October ramps.
+            var steerKey = new InputLogic.KeyboardSteering { profile = sim.setup.legacy ? InputLogic.KeyboardSteering.Profile.Classic : keyboardProfile };
+            if (digitalInput) sim.steerSlipTarget = InputLogic.KeyboardSteering.SlipTarget(steerKey.profile);
             var thrKey = new InputLogic.DigitalAxis(InputLogic.InputTuning.ThrottleRate, InputLogic.InputTuning.ThrottleRate, InputLogic.InputTuning.ThrottleRate);
             var brkKey = new InputLogic.DigitalAxis(InputLogic.InputTuning.BrakeRate, InputLogic.InputTuning.BrakeRate, InputLogic.InputTuning.BrakeRate);
             var states = new List<CarState>();
@@ -145,18 +160,16 @@ namespace Apex.Tracks
                 foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;
                 ai.gripFactor = grip;
                 ai.wet = sim.trackWetness > 0.25f;
-                ai.maxSteerRad = sim.CurrentMaxLock();
+                // A keyboard driver holds the key until the car turns enough: judge the key against the lock full input
+                // really gives (front-slip limiter included).
+                ai.maxSteerRad = digitalInput ? sim.EffectiveMaxLock : sim.CurrentMaxLock();
                 ai.frontSlipUsage = MathF.Max(MathF.Abs(sim.wheels[0].slipAngle), MathF.Abs(sim.wheels[1].slipAngle)) / sim.tireFront.slipAnglePeak;
                 var c = ai.Drive(st, states, Dt);
                 if (digitalInput)
                 {
-                    float k = ApexMath.Clamp01(rig.ForwardSpeed / 60f);
-                    steerKey.pressRate = InputLogic.InputTuning.SteerPressRate(k, sim.setup.legacy);
-                    steerKey.releaseRate = InputLogic.InputTuning.SteerReleaseRate(k, sim.setup.legacy);
-                    steerKey.reverseRate = InputLogic.InputTuning.SteerReverseRate;
                     float key = 0f;
                     if (MathF.Abs(c.steer) > 0.05f && (c.steer - steerKey.Value) * MathF.Sign(c.steer) > 0.03f) key = MathF.Sign(c.steer);
-                    sim.steer = steerKey.Update(key, Dt);
+                    sim.steer = steerKey.Update(key, rig.ForwardSpeed, Dt);
                     sim.throttle = thrKey.Update(c.throttle > 0.5f ? 1f : 0f, Dt);
                     sim.brake = brkKey.Update(c.brake > 0.25f ? 1f : 0f, Dt);
                 }

@@ -35,7 +35,7 @@ namespace Apex.Game
             public bool wet;
             public string flag;
             public Color flagColour;
-            public string gear = "N", unit = "km/h", assists = "", pitNote = "";
+            public string gear = "N", unit = "km/h", assists = "", pitNote = "", slipstream = "";
             public int speed;
             public float rpmFraction;
             public int shiftLit;
@@ -79,7 +79,7 @@ namespace Apex.Game
         float eventAnim;
         // Dash.
         readonly VisualElement[] leds = new VisualElement[ShiftLights.Count];
-        Label gear, speed, unit, assists, pitNote;
+        Label gear, speed, unit, assists, pitNote, slipstream;
         VisualElement rpmFill;
         // Tyres.
         readonly VisualElement[] tyreFill = new VisualElement[4];
@@ -269,6 +269,9 @@ namespace Apex.Game
             ApexUi.Place(gear, 200, 26, 120, 96);
             assists = ApexUi.Text(p, "", ApexUi.BodyStrong, 13, ApexUi.C(UiTokens.Amber), 1.5f);
             ApexUi.Place(assists, 350, 50, 160, 20);
+            // In the tow of the car ahead (Slipstream), above the assists.
+            slipstream = ApexUi.Text(p, "", ApexUi.BodyStrong, 13, ApexUi.C(UiTokens.Cyan), 1.5f);
+            ApexUi.Place(slipstream, 350, 28, 160, 20);
             pitNote = ApexUi.Text(p, "", ApexUi.BodyStrong, 13, ApexUi.C(UiTokens.Cyan), 1.5f);
             ApexUi.Place(pitNote, 350, 74, 160, 36);
             pitNote.style.whiteSpace = WhiteSpace.Normal;
@@ -531,6 +534,7 @@ namespace Apex.Game
             speed.text = f.speed.ToString();
             unit.text = f.unit;
             assists.text = f.assists;
+            slipstream.text = f.slipstream;
             pitNote.text = f.pitNote;
             rpmFill.style.width = 472f * Mathf.Clamp01(f.rpmFraction);
             bool blink = f.shiftFlash && (ReducedMotion || Mathf.Repeat((float)now * 8f, 1f) < 0.5f);

@@ -37,6 +37,16 @@ namespace Apex.Core
         /// <summary>0 off, 1 light, 2 full.</summary>
         public int steeringAssistLevel = 1;
         public bool autoGearbox = true;
+        /// <summary>Keyboard steering profile (InputLogic.KeyboardSteering.Profile): 0 Direkt, 1 Ausgewogen, 2 Smooth.</summary>
+        public int keyboardProfile = 1;
+        /// <summary>"Lenkempfindlichkeit" 0.5 .. 1.5: ramp rates of the keys, curve of the stick.</summary>
+        public float steeringSensitivity = 1f;
+        /// <summary>"Lenkglättung" 0 .. 1: extra smoothing of digital steering (up to 60 ms).</summary>
+        public float steeringSmoothing;
+        /// <summary>Dynamic racing line: 0 off, 1 corners only, 2 whole lap (Apex.Race.RacingLineGuide).</summary>
+        public int racingLineMode = 2;
+        /// <summary>Colour the racing line by the braking need at the current speed (off = green line only).</summary>
+        public bool dynamicBrakeLine = true;
         /// <summary>Speed-sensitive steering: input filter limiting lock at speed (not a grip aid).</summary>
         public bool speedSensitiveSteering = true;
         /// <summary>Front brake bias (share of brake torque on the front axle).</summary>
@@ -133,6 +143,10 @@ namespace Apex.Core
             changed |= ClampField(ref brakeBiasFront, 0.5f, 0.65f);
             changed |= ClampInt(ref tractionLevel, 0, 3);
             changed |= ClampInt(ref steeringAssistLevel, 0, 2);
+            changed |= ClampInt(ref keyboardProfile, 0, 2);
+            changed |= ClampField(ref steeringSensitivity, 0.5f, 1.5f);
+            changed |= ClampField(ref steeringSmoothing, 0f, 1f);
+            changed |= ClampInt(ref racingLineMode, 0, 2);
             changed |= ClampInt(ref environmentDetail, 0, GraphicsPreset.EnvironmentLevels - 1);
             changed |= ClampInt(ref graphicsTier, -1, GraphicsPreset.TierCount - 1);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))

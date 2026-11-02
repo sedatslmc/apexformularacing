@@ -35,6 +35,7 @@ tools/verify.sh          # holt Referenzen, baut Apex.Simulation, führt alle Te
 - Fahrzeuggeometrie ohne Unity: `cd build/Apex.ModelPreview && dotnet run -c Release -- <out_dir>`, dann
   `python3 tools/render_car_preview.py <out_dir>/car_lod0.obj <bild.png> 0,0.47,0.02` (mit Cockpit-Ansicht).
   Unity-Konvention: Vorderseite, wenn `cross(b−a, c−a)` zum Betrachter zeigt.
+- Handling und Tastatur (`docs/HANDLING_KEYBOARD.md`): `cd build/Apex.Tuning && dotnet run -c Release -- kbprobe|capacity|brakecurve|kblap …`; Ideallinie (`docs/RACING_LINE_GUIDE.md`): `guide`. Planungswerte nur über `CarPerformance` (KI, Ideallinie, Testfahrer), Streckenlayout über `CarPerformance.LayoutReference`.
 - Leistungsmessung im Spiel: F6 bzw. Telemetrie-Knopf (`PerfCapture`, Bericht unter `persistentDataPath/perf`).
 - PBR-Inspektionsrenders (three.js, Headless-Chromium): `tools/carrender/README.md`.
 - UI-Mockups (HTML/CSS, Headless-Chromium): `OUT_DIR=docs/img node tools/uimock/shot.mjs tools/uimock/<seite>.html`. Neue UI = UI Toolkit im Code (`Runtime/Game/UI`), Modelle/Tokens in `Apex.Simulation` (`Apex.UI`); Plan und Prüfstatus: `docs/UI_UX_OVERHAUL.md`.

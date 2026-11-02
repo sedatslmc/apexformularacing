@@ -195,6 +195,8 @@ namespace Apex.Game
             f.rpmFraction = Mathf.InverseLerp(4000f, limiter, sim.EngineRpm);
             f.shiftLit = ShiftLights.Lit(sim.EngineRpm, limiter);
             f.shiftFlash = ShiftLights.Flash(sim.EngineRpm, limiter) && gear > 0;
+            // Shown from 4 % less drag: about 30 m behind at speed.
+            f.slipstream = sim.wake.tow > 0.04f ? Apex.UI.Loc.T("WINDSCHATTEN") : "";
             f.assists = ((sim.TcActive ? "TC  " : "") + (sim.AbsActive ? "ABS  " : "") + (Mathf.Abs(sim.CounterSteer) > 0.01f ? "STAB" : "")).Trim();
             f.pitNote = !float.IsInfinity(sim.speedLimit) ? "PIT LIMIT"
                 : p.pit.stage == PitState.Stage.Requested ? "BOX · " + CompoundSpec.For(p.pit.nextCompound).name.ToUpperInvariant() : "";

@@ -93,11 +93,45 @@ Ausführlicher Bericht mit Kurven-, Brems-, Nässe- und Kerb-Szenarien: [`HANDLI
 Der Prüfstand ist ein ebenes 3-DOF-Modell mit quasistatischer Lastverlagerung. Die Fahrhöhe kommt aus der Federeinfederung. Im Spiel rechnet Unitys Rigidbody mit 6 Freiheitsgraden, Federung und Raycasts. Die Werte sind also Richtwerte. Im Editor müssen sie mit der Telemetrie (F3) bestätigt werden.
 
 ## Offene Physik-Themen (M6)
-Erledigt: Reifentemperatur, Verschleiß, Mischungen, Nässe-Grip, Fahrhöhen-Empfindlichkeit (Bodeneffekt), Motorträgheit, Fahrprofile.
+Erledigt: Reifentemperatur, Verschleiß, Mischungen, Nässe-Grip, Fahrhöhen-Empfindlichkeit (Bodeneffekt), Motorträgheit, Fahrprofile, Windschatten und Dirty Air (2026-11-01, Abschnitt unten).
 Offen:
-- Windschatten und Dirty Air
 - Schäden
 - DRS
 - Sturz und Vorspur als Setup-Parameter
 - Funken beim Aufsetzen
 - Am Limit (gesättigte Vorderachse) ist die Gierbewegung schwach gedämpft (wenige Schwinger, siehe Validierung). Das ist im Editor zu bewerten.
+
+## Windschatten und Dirty Air (`Slipstream`, 2026-11-01)
+**Status:** implementiert und getestet (Prüfstand, KI-Feld). Im Editor nicht gefahren.
+
+- **Nachlauf:** Hinter jedem Auto liegt ein Kegel aus langsamer, verwirbelter Luft.
+  - Halbe Breite 0,9 m am Heck, + 0,045 m je Meter dahinter.
+  - Seitlich fällt er gaußförmig ab. Eine Wagenbreite daneben ist die Luft praktisch frei, das ist der klassische Ausscherer zum Überholen.
+  - Der Kegel wirkt erst ab 70 km/h des Vordermanns und voll ab 160 km/h.
+  - Mehrere Autos davor wirken zusammen als 1 − Π(1 − x).
+  - Autos in der Boxengasse und entgegenkommende Autos zählen nicht.
+- **Windschatten:** weniger Luftwiderstand, höchstens 25 %, Abklinglänge 25 m.
+  - 10 m dahinter: 17 %
+  - 20 m dahinter: 11 %
+  - 40 m dahinter: 5 %
+  - ab etwa 100 m: nichts mehr
+- **Dirty Air:** weniger Abtrieb, insgesamt höchstens 30 %, Abklinglänge 22 m.
+  - Vorn verliert das Auto das 1,35-Fache, hinten das 0,7-Fache: Der Frontflügel trifft es am stärksten, das Auto untersteuert.
+  - Bei 20 m: −16 % vorn, −8 % hinten. Das entspricht heutigen Bodeneffekt-Autos, nicht den 35–50 % älterer Konzepte.
+  - Dirty Air klingt schneller ab als der Windschatten. Mit 30–50 m Abstand bleibt also Sog bei wenig Abtriebsverlust.
+- **Wirkung auf dem Prüfstand:** Zwei Autos fahren 25 m hintereinander mit Vollgas ab 200 km/h.
+  - Nach 6 s ist der Verfolger 7 km/h schneller als ein Auto in freier Luft, und der Abstand ist auf 20 m geschrumpft.
+  - Bei 330 km/h greift der Drehzahlbegrenzer im letzten Gang. Der Sog bringt dann kaum noch Endgeschwindigkeit, nur schnelleres Herankommen.
+- **Im Spiel:**
+  - `RaceController` setzt den Nachlauf in jedem Physikschritt.
+  - Das HUD zeigt „WINDSCHATTEN“ ab 4 % Sog, das entspricht etwa 30 m Abstand bei Tempo.
+  - Die Telemetrie (F3) zeigt Abstand, Sog und Abtriebsverlust je Achse.
+- **KI:** Das KI-Feldrennen auf allen drei Strecken bleibt mit Windschatten und Dirty Air sauber innerhalb der Strecke. Die KI hat noch keine eigene Überholstrategie aus dem Windschatten heraus; sie profitiert nur passiv.
+- **Tests:** `SlipstreamTests` (3) und `AIFieldRacesCleanlyOnRig` (jetzt mit Nachlauf).
+- **Im Editor zu prüfen:**
+  - Ist der Sog auf der Bosporus-Geraden spürbar, aber nicht übermächtig?
+  - Untersteuert das Auto hinter einem anderen in schnellen Kurven (T3, T4, T12, T13) merklich?
+  - Die Stellschrauben stehen in `Slipstream` (MaxTow, TowLength, MaxDirtyAir, DirtyAirLength).
+
+## Handling-Überarbeitung November 2026
+Lenkbegrenzer (Vorderreifen am Haftungsgipfel statt fester Einschlag), Tastaturprofile, Reifen μ 1,95, Stabilisatoren 30/70, Aero-Balance 0,41, gemeinsame Planungsbasis `CarPerformance`: siehe `docs/HANDLING_KEYBOARD.md`. Dynamische Ideallinie: `docs/RACING_LINE_GUIDE.md`.

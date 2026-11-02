@@ -576,6 +576,9 @@ namespace Apex.Game
         /// Rubber atlas: <see cref="TrackInfrastructureGeometry.RubberLevels"/> bands across u, one per opacity
         /// level (up to 55 %); inside a band soft across the strip, streaky along it (v). Alpha-blended.
         /// </summary>
+        /// <summary>Peak opacity of the rubbered line (most-used braking zones).</summary>
+        public const float RubberOpacity = 0.3f;
+
         static Texture2D RubberTexture()
         {
             int levels = TrackInfrastructureGeometry.RubberLevels;
@@ -591,7 +594,9 @@ namespace Apex.Game
                     float u = ((x % band) + 0.5f) / band * 2f - 1f;
                     float across = Mathf.Exp(-u * u * 3f);
                     float streak = 0.6f + 0.4f * TileNoise((x % band) * 4, y, band * 4, 8);
-                    px[y * w + x] = new Color(0f, 0f, 0f, 0.55f * level / (levels - 1f) * across * streak);
+                    // Opacity 0.55 → 0.3 (handling brief 2026-11): the darkened rubbered line read as a "black racing
+                    // line" painted on the road. It stays as a subtle grip-line detail; the guide is the glowing line.
+                    px[y * w + x] = new Color(0f, 0f, 0f, RubberOpacity * level / (levels - 1f) * across * streak);
                 }
             tex.SetPixels(px);
             tex.Apply(true);

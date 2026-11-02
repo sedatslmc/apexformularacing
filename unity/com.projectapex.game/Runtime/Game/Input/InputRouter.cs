@@ -25,7 +25,17 @@ namespace Apex.Game
 
         public float Throttle { get; private set; }
         public float Brake { get; private set; }
+        /// <summary>Steering of the last <see cref="SteerForPhysics"/> step (or the analogue / tilt value).</summary>
         public float Steer { get; private set; }
+
+        /// <summary>How the player steers right now (decides the input curve and the front-slip limiter).</summary>
+        public enum SteerSource { Digital, Stick, Tilt }
+        public SteerSource Source { get; private set; } = SteerSource.Digital;
+        /// <summary>Digital steering key state this frame (−1, 0, +1; keys and touch buttons).</summary>
+        public float SteerKey { get; private set; }
+        float analogSteer;
+        /// <summary>Digital steering ramp and progressive curve (KeyboardSteering), run on the physics clock.</summary>
+        public readonly KeyboardSteering keyboard = new KeyboardSteering();
 
         // Edge-triggered actions (valid for the frame they occur in).
         public bool ShiftUpPressed { get; private set; }
@@ -61,7 +71,6 @@ namespace Apex.Game
         public List<TouchLayout.Button> Buttons { get; private set; } = new List<TouchLayout.Button>();
         public readonly TouchOwnership touch = new TouchOwnership();
 
-        readonly DigitalAxis steerAxis = new DigitalAxis(3.2f, 5f, 7f);
         readonly DigitalAxis throttleAxis = new DigitalAxis(7f, 7f, 7f);
         readonly DigitalAxis brakeAxis = new DigitalAxis(9f, 9f, 9f);
         readonly HashSet<int> heldTouch = new HashSet<int>();
@@ -110,7 +119,7 @@ namespace Apex.Game
         public void ReleaseAll()
         {
             touch.ReleaseAll();
-            steerAxis.Reset();
+            keyboard.Reset();
             throttleAxis.Reset();
             brakeAxis.Reset();
             Throttle = Brake = Steer = 0f;
@@ -220,20 +229,51 @@ namespace Apex.Game
             }
 
             float digitalSteer = Mathf.Clamp(kSteer + tSteer, -1f, 1f);
-            if (analogSteer) Steer = InputTuning.StickSteer(padSteer, legacyHandling);
-            else if (tiltMode && TiltAvailable && digitalSteer == 0f) Steer = tiltSteer;
-            else
+            SteerKey = digitalSteer;
+            if (analogSteer)
             {
-                // Direct but progressive: full digital input takes ~0.18 s when slow and
-                // ~0.33 s at high speed (the lock itself is limited by the simulation).
-                float k = Mathf.Clamp01(vehicleSpeed / 60f);
-                steerAxis.pressRate = InputTuning.SteerPressRate(k, legacyHandling);
-                steerAxis.releaseRate = InputTuning.SteerReleaseRate(k, legacyHandling);
-                steerAxis.reverseRate = InputTuning.SteerReverseRate;
-                Steer = steerAxis.Update(digitalSteer, dt);
+                Source = SteerSource.Stick;
+                this.analogSteer = InputTuning.StickSteer(padSteer, settings.steeringSensitivity);
             }
+            else if (tiltMode && TiltAvailable && digitalSteer == 0f)
+            {
+                Source = SteerSource.Tilt;
+                this.analogSteer = tiltSteer;
+            }
+            else Source = SteerSource.Digital;
+            keyboard.profile = legacyHandling ? KeyboardSteering.Profile.Classic : (KeyboardSteering.Profile)Mathf.Clamp(settings.keyboardProfile, 0, 2);
+            keyboard.sensitivity = settings.steeringSensitivity;
+            keyboard.smoothing = settings.steeringSmoothing;
+            if (Source != SteerSource.Digital) { Steer = this.analogSteer; keyboard.Reset(); }
             Throttle = Mathf.Max(throttleAxis.Update(Mathf.Max(kThrottle, tThrottle), dt), padThrottle);
             Brake = Mathf.Max(brakeAxis.Update(Mathf.Max(kBrake, tBrake), dt), padBrake);
+        }
+
+        /// <summary>
+        /// Steering for this physics step (call once per FixedUpdate): the digital ramp advances on the physics clock,
+        /// so keyboard steering feels the same at 30 and 240 fps; stick and tilt pass through.
+        /// </summary>
+        public float SteerForPhysics(float carSpeed, float dt)
+        {
+            if (Source == SteerSource.Digital) Steer = keyboard.Update(SteerKey, carSpeed, dt);
+            return Steer;
+        }
+
+        /// <summary>
+        /// Front-slip limiter target (VehicleSimulation.steerSlipTarget) for the current input: keys and touch buttons by
+        /// keyboard profile (a key cannot modulate), stick and tilt by steering assist (Aus = raw lock, Leicht 1.15,
+        /// Standard 1.0); none with the previous handling.
+        /// </summary>
+        public float SteerSlipTarget
+        {
+            get
+            {
+                if (legacyHandling) return 0f;
+                if (Source == SteerSource.Digital) return KeyboardSteering.SlipTarget(keyboard.profile);
+                int assist = settings.steeringAssistLevel;
+                if (Source == SteerSource.Tilt) return 1f;
+                return assist <= 0 ? 0f : assist == 1 ? 1.15f : 1f;
+            }
         }
 
         /// <summary>True on the frame a touch button went down.</summary>
