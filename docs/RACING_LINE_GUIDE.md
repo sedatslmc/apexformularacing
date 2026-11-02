@@ -41,7 +41,9 @@ Leuchtende Segmente (3,2 m lang, alle 5,5 m, 64 cm breit, 4 cm über der Fahrbah
   - „Nur Kurven“ zeigt die Kurvenzonen: Krümmung über 1/600 m oder Planung unter 97 % der Höchstgeschwindigkeit, je 40 m erweitert, dazu jede Warnung.
 - **Dynamische Bremsanzeige:** An (Standard) oder Aus. Bei Aus ist die Linie durchgehend grün und zeigt nur die Linienführung.
 - Beide werden gespeichert (`SettingsData.racingLineMode`, `dynamicBrakeLine`).
-- **Bremsempfehlung Anfänger/Standard/Experte** ist nicht umgesetzt (im Auftrag „optional später“) und wird deshalb auch nicht angezeigt.
+- **Bremsempfehlung:** Anfänger, Standard (Standard) oder Experte (`SettingsData.brakeAdvice`, `RacingLineGuide.AdviceScale`).
+  - Anfänger plant mit 8 % niedrigeren Zielgeschwindigkeiten: früheres Rot, langsamere Kurven.
+  - Experte plant mit 5 % höheren, also näher an der echten Grenze. Die Planung hält ohnehin rund ein Viertel Bremsreserve; auch der Experten-Bremspunkt lässt den echten Bremsen genug Weg (Test `BrakingAdviceMovesTheBrakingPoint`).
 
 ## Fehlersuche (2026-11-02: im Editor nicht sichtbar)
 Ohne Unity ließ sich die Ursache nicht eindeutig finden. Die Darstellung ist deshalb an allen denkbaren Stellen robuster:

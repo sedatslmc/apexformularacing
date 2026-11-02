@@ -1007,6 +1007,7 @@ namespace Apex.Game
             if (input.CameraPressed) ShowMessage(RaceCamera.ModeNames[Settings.cameraMode = raceCam.Cycle()] + "-Kamera", Color.white, 1f, false);
             if (input.ResetPressed) Race.ResetPlayerToTrack();
             if (input.TelemetryPressed) showTelemetry = !showTelemetry;
+            raceCam.dynamics.strength = Settings.reducedMotion ? 0f : 1f;
             if (input.PerfPressed) TogglePerfCapture();
             if (perf.Running && perf.Tick(Time.unscaledDeltaTime, Race.Player.raw, PerfHeader()))
                 ShowMessage("Leistungsmessung gespeichert" + (perf.LastFile != null ? "" : " – Fehler, siehe Log"), Color.white, 2.5f, false);

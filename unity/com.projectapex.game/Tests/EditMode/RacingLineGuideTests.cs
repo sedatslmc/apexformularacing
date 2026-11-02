@@ -194,5 +194,24 @@ namespace Apex.Tests
             }
             TestContext.WriteLine($"lift error max {worst * 100f:F1} cm; centreline frame up to {maxBelow * 100f:F1} cm below the real road");
         }
+
+        [Test]
+        public void BrakingAdviceMovesTheBrakingPoint()
+        {
+            var (apex, _) = SlowestCorner();
+            var gd = Guide();
+            float FirstRed(float advice)
+            {
+                var l = new List<RacingLineGuide.Dash>();
+                gd.Evaluate(geo.Wrap(apex - 360f), 300f / 3.6f, 1f, RacingLineGuide.Mode.WholeLap, true, l, advice);
+                return l.Find(x => x.hint == RacingLineGuide.Hint.Red).ahead;
+            }
+            float beginner = FirstRed(RacingLineGuide.AdviceScale(0)), standard = FirstRed(RacingLineGuide.AdviceScale(1)), expert = FirstRed(RacingLineGuide.AdviceScale(2));
+            TestContext.WriteLine($"red starts {beginner:F0} / {standard:F0} / {expert:F0} m ahead (beginner / standard / expert)");
+            Assert.That(beginner, Is.LessThan(standard), "beginners brake earlier");
+            Assert.That(expert, Is.GreaterThan(standard), "experts later");
+            // Even the expert's point leaves the real brakes enough room (the plan keeps a reserve).
+            Assert.That(apex - (geo.Wrap(apex - 360f) + expert), Is.GreaterThan(new HandlingBenchmark(null, 1).Brake(300f, 60f).distance));
+        }
     }
 }

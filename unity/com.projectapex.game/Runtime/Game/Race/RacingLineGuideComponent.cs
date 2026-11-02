@@ -129,7 +129,8 @@ namespace Apex.Game
             // The same grip the AI plans with: tyre temperature, wear and the wet track.
             float grip = 0f;
             foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;
-            guide.Evaluate(race.Player.raw, sim.ForwardSpeed, Mathf.Clamp(grip, 0.3f, 1f), mode, settings.dynamicBrakeLine, dashes);
+            guide.Evaluate(race.Player.raw, sim.ForwardSpeed, Mathf.Clamp(grip, 0.3f, 1f), mode, settings.dynamicBrakeLine, dashes,
+                RacingLineGuide.AdviceScale(settings.brakeAdvice));
             // Targets: visible dashes get their hint colour and fade; everything that was visible fades out.
             for (int k = 0; k < active.Count; k++) target[active[k]].a = 0f;
             foreach (var d in dashes)

@@ -112,7 +112,7 @@ namespace Apex.UI
             ["Bisherig (Okt. 2026)"] = "Previous (Oct 2026)", ["Neu (Nov. 2026)"] = "New (Nov 2026)",
             ["Ideallinie"] = "Racing line", ["Nur Kurven"] = "Corners only", ["Ganze Strecke"] = "Whole lap", ["Dynamische Bremsanzeige"] = "Dynamic braking colours",
             ["Tastatur-Lenkprofil"] = "Keyboard steering profile", ["Direkt"] = "Direct", ["Smooth"] = "Smooth",
-            ["Lenkempfindlichkeit"] = "Steering sensitivity", ["Lenkglättung"] = "Steering smoothing",
+            ["Lenkempfindlichkeit"] = "Steering sensitivity", ["Bremsempfehlung"] = "Braking advice", ["Anfänger"] = "Beginner", ["Experte"] = "Expert", ["Lenkglättung"] = "Steering smoothing",
             ["Neigung: max. Winkel"] = "Tilt: max. angle", ["Neigung: Empfindlichkeit"] = "Tilt: sensitivity", ["Neigung: Totzone"] = "Tilt: dead zone",
             ["Neigung: Glättung"] = "Tilt: smoothing", ["Neigung umkehren"] = "Invert tilt", ["Linkshänder-Layout"] = "Left-handed layout",
             ["Tastengröße"] = "Button size", ["Tasten-Deckkraft"] = "Button opacity", ["HUD-Größe"] = "HUD size", ["HUD-Preset (Taste H)"] = "HUD preset (H key)",

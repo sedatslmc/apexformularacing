@@ -87,7 +87,13 @@ namespace Apex.AI
 
         /// <summary>Planned speed limit (m/s) at a lap distance for the current grip (wet track, tyres).</summary>
         public float Allowed(float distance, float gripScale) =>
-            MathF.Min(RacingLine.MaxSpeed, gripScale >= 0.999f ? line.GripSpeedAt(distance) : line.GripSpeedAt(distance, gripScale));
+            MathF.Min(RacingLine.MaxSpeed, adviceScale * (gripScale >= 0.999f ? line.GripSpeedAt(distance) : line.GripSpeedAt(distance, gripScale)));
+
+        float adviceScale = 1f;
+
+        /// <summary>"Bremsempfehlung": 0 Anfänger (8 % slower targets, earlier braking), 1 Standard, 2 Experte (5 % faster,
+        /// closer to the car's real limit – the plan keeps about a quarter of the braking in reserve).</summary>
+        public static float AdviceScale(int level) => level <= 0 ? 0.92f : level >= 2 ? 1.05f : 1f;
 
         public static float LookAhead(float speed) => ApexMath.Clamp(MathF.Abs(speed) * LookAheadSeconds, LookAheadMin, LookAheadMax);
 
@@ -96,8 +102,9 @@ namespace Apex.AI
         /// <paramref name="speed"/> (m/s). <paramref name="gripScale"/> is the tyre/track grip (1 dry, less in the wet).
         /// Fills <paramref name="result"/> (cleared first) in order of distance; no allocation once the list has grown.
         /// </summary>
-        public void Evaluate(float carDistance, float speed, float gripScale, Mode mode, bool brakeColours, List<Dash> result)
+        public void Evaluate(float carDistance, float speed, float gripScale, Mode mode, bool brakeColours, List<Dash> result, float advice = 1f)
         {
+            adviceScale = advice;
             result.Clear();
             if (mode == Mode.Off) return;
             float range = LookAhead(speed);

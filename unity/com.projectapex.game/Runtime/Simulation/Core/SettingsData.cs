@@ -45,6 +45,8 @@ namespace Apex.Core
         public float steeringSmoothing;
         /// <summary>Dynamic racing line: 0 off, 1 corners only, 2 whole lap (Apex.Race.RacingLineGuide).</summary>
         public int racingLineMode = 2;
+        /// <summary>"Bremsempfehlung" of the racing line: 0 Anfänger, 1 Standard, 2 Experte (RacingLineGuide.AdviceScale).</summary>
+        public int brakeAdvice = 1;
         /// <summary>Colour the racing line by the braking need at the current speed (off = green line only).</summary>
         public bool dynamicBrakeLine = true;
         /// <summary>Speed-sensitive steering: input filter limiting lock at speed (not a grip aid).</summary>
@@ -147,6 +149,7 @@ namespace Apex.Core
             changed |= ClampField(ref steeringSensitivity, 0.5f, 1.5f);
             changed |= ClampField(ref steeringSmoothing, 0f, 1f);
             changed |= ClampInt(ref racingLineMode, 0, 2);
+            changed |= ClampInt(ref brakeAdvice, 0, 2);
             changed |= ClampInt(ref environmentDetail, 0, GraphicsPreset.EnvironmentLevels - 1);
             changed |= ClampInt(ref graphicsTier, -1, GraphicsPreset.TierCount - 1);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
