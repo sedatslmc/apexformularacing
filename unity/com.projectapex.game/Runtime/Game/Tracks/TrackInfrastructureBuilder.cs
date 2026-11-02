@@ -79,11 +79,9 @@ namespace Apex.Game
                 TrackInfrastructureGeometry.ManholeCover(opaque.B(TrackInfrastructureGeometry.Manhole), TrackInfrastructureGeometry.P(g, i, lat, 0.024f), 0.38f);
             }
             EnvironmentBuilder.AddMeshObject(infra, "RoadDetails", opaque.parts, false);
-            var rubber = new MeshBuilder();
-            // Groove under the tyre tracks, tracks above it, lock-up streaks on top (separate lifts avoid z-fighting).
-            foreach (var z in plan.rubber)
-                TrackInfrastructureGeometry.RubberStrip(rubber, g, z, z.brakeMark ? 0.034f : z.width > 1.5f ? 0.028f : 0.031f);
-            EnvironmentBuilder.AddMeshObject(infra, "Rubber", new Dictionary<string, MeshBuilder> { [TrackInfrastructureGeometry.Rubber] = rubber }, false);
+            // The rubbered racing line and lock-up streaks are no longer drawn (PO 2026-11-02): in Unity they showed as a
+            // thick black stripe along the track and read as a broken racing line. The plan keeps the data
+            // (TrackInfrastructurePlan.rubber) for a later, subtler decal; the racing line is RacingLineGuideComponent.
         }
 
         static void BuildPostsAndPanels(CircuitInstance ci, Transform infra)

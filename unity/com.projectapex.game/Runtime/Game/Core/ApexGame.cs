@@ -654,7 +654,8 @@ namespace Apex.Game
             var guideComp = guideGo.AddComponent<RacingLineGuideComponent>();
             guideComp.race = Race;
             guideComp.settings = Settings;
-            guideComp.Build(new Apex.AI.RacingLineGuide(Race.PlayerLine));
+            guideComp.Build(new Apex.AI.RacingLineGuide(Race.PlayerLine), circuit.Surface);
+            racingLineGuide = guideComp;
 
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);
@@ -684,6 +685,8 @@ namespace Apex.Game
         }
 
         readonly PerfCapture perf = new PerfCapture();
+        /// <summary>The dynamic racing line of the running session (diagnostics in the F3 telemetry).</summary>
+        RacingLineGuideComponent racingLineGuide;
 
         /// <summary>Starts a one-lap performance capture, or stops a running one and writes it.</summary>
         void TogglePerfCapture()
