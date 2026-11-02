@@ -464,6 +464,8 @@ namespace Apex.Game
                 new Row { label = "Ideallinie", value = () => s.racingLineMode == 0 ? "Aus" : s.racingLineMode == 1 ? "Nur Kurven" : "Ganze Strecke",
                     change = d => s.racingLineMode = Wrap(s.racingLineMode + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Dynamische Bremsanzeige", value = () => OnOff(s.dynamicBrakeLine), change = d => s.dynamicBrakeLine = !s.dynamicBrakeLine },
+                new Row { label = "Bremsempfehlung", value = () => s.brakeAdvice == 0 ? "Anfänger" : s.brakeAdvice == 1 ? "Standard" : "Experte",
+                    change = d => s.brakeAdvice = Wrap(s.brakeAdvice + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Fahrverhalten (Vergleich, ab nächster Session)", value = () => s.legacyHandling ? "Bisherig (Okt. 2026)" : "Neu (Nov. 2026)",
                     change = d => s.legacyHandling = !s.legacyHandling },
                 new Row { label = "Boxen-Assistent", value = () => OnOff(s.pitAssist), change = d => s.pitAssist = !s.pitAssist },

@@ -134,7 +134,14 @@ Bei 200–300 km/h stand die Front kurz bei 1,3–1,9. Das Auto zuckte hinein (G
 - **Gier-Überschwingen bei Vollausschlag** liegt bei 200–300 km/h weiter bei 40–60 %. Das Auto lenkt sehr bereitwillig ein und beruhigt sich dann. Wer es weicher will, nimmt das Profil Smooth. Ob es sich zu „spitz“ anfühlt, zeigt erst der Editor.
 - **Grobe Fehler bleiben möglich:** Ohne Lenkhilfe und mit dem alten Tastaturprofil überzieht das Auto weiterhin (Test `B_TheLimitIsStillThereForGrossErrors`).
 - **Gefälle beim Bremsen** ist nur in den Rundentests auf der echten Strecke abgedeckt (Barbaros-Abfahrt, Palanga). Der Prüfstand ist eben.
-- **Kamera:** Die Kameradynamik ist unverändert. Der Auftrag sagt zu Recht, dass die Kamera keine schlechte Physik kaschieren darf; zuerst muss die Physik im Editor bestätigt werden.
+- **Kamera** (seit 2026-11-02, `CameraDynamics`):
+  - **Sichtfeld:** bis +6° bei 300 km/h, in Cockpit und T-Cam schwächer.
+  - **Bremsen:** Die Verfolgerkamera rückt bis 0,45 m näher, alle Ansichten neigen sich bis 1,2° nach vorn.
+  - **Beschleunigen:** Die Kamera bleibt bis 0,3 m zurück.
+  - **Kurven:** Die Verfolgerkamera gleitet bis 0,25 m nach außen.
+  - **Glättung:** Alles läuft über eine kritisch gedämpfte Feder (~0,3 s); Kerb-Stöße und Ruckler im Bildtakt kommen nicht durch.
+  - Mit „Reduzierte Bewegung“ ist alles aus.
+  - Bewusst klein gehalten: Die Kamera soll keine Physik kaschieren. Test: `CameraDynamicsTests`.
 
 ## 4. Tests
 - **`HandlingBriefTests`** (Tests A–D aus dem Auftrag):

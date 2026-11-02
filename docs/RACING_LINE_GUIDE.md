@@ -9,7 +9,7 @@
 
 ## Was vorher war
 Es gab keine Ideallinie. Die **schwarze Spur** auf dem Asphalt war der Gummiabrieb entlang der Ideallinie (`TrackInfrastructurePlan`, 6155 Streifen). Er ist ein Umgebungsdetail echter Rennstrecken, wirkte aber wie eine misslungene Fahrhilfe.
-- Seine Deckkraft ist von 0,55 auf 0,3 gesenkt (`TrackInfrastructureBuilder.RubberOpacity`), er bleibt als dezentes Detail.
+- **Entfernt** (2026-11-02): In Unity erschien er als dicker schwarzer Streifen; vermutlich wurde das transparente Material deckend gezeichnet. Er wird nicht mehr gebaut. Die Daten bleiben im Plan für ein späteres, dezentes Detail.
 
 ## Was die Linie zeigt
 Leuchtende Segmente (3,2 m lang, alle 5,5 m, 64 cm breit, 4 cm über der Fahrbahn) entlang der geplanten Linie: außen anfahren, Scheitel, Ausgang nutzen.
@@ -41,7 +41,19 @@ Leuchtende Segmente (3,2 m lang, alle 5,5 m, 64 cm breit, 4 cm über der Fahrbah
   - „Nur Kurven“ zeigt die Kurvenzonen: Krümmung über 1/600 m oder Planung unter 97 % der Höchstgeschwindigkeit, je 40 m erweitert, dazu jede Warnung.
 - **Dynamische Bremsanzeige:** An (Standard) oder Aus. Bei Aus ist die Linie durchgehend grün und zeigt nur die Linienführung.
 - Beide werden gespeichert (`SettingsData.racingLineMode`, `dynamicBrakeLine`).
-- **Bremsempfehlung Anfänger/Standard/Experte** ist nicht umgesetzt (im Auftrag „optional später“) und wird deshalb auch nicht angezeigt.
+- **Bremsempfehlung:** Anfänger, Standard (Standard) oder Experte (`SettingsData.brakeAdvice`, `RacingLineGuide.AdviceScale`).
+  - Anfänger plant mit 8 % niedrigeren Zielgeschwindigkeiten: früheres Rot, langsamere Kurven.
+  - Experte plant mit 5 % höheren, also näher an der echten Grenze. Die Planung hält ohnehin rund ein Viertel Bremsreserve; auch der Experten-Bremspunkt lässt den echten Bremsen genug Weg (Test `BrakingAdviceMovesTheBrakingPoint`).
+
+## Fehlersuche (2026-11-02: im Editor nicht sichtbar)
+Ohne Unity ließ sich die Ursache nicht eindeutig finden. Die Darstellung ist deshalb an allen denkbaren Stellen robuster:
+- **Lage:** Die Segmente liegen jetzt direkt auf den `RoadSurface`-Dreiecken (nur Asphalt, Kerbs, Boxengasse), 5 cm darüber. Sie hängen nicht mehr von Unity-Raycasts ab, deren Kollider beim Aufbau der Session eventuell noch nicht in der Physik angemeldet sind. Test: `TheDashesLieOnTheRoadSurfaceNotUnderIt`.
+- **Shader:** Die Kette lautet `Apex/RacingLine`, dann `Universal Render Pipeline/Particles/Unlit` (transparent eingestellt), dann `Sprites/Default`. Alle drei zeigen die Vertexfarben.
+- **Bounds:** Die Mesh-Bounds sind um 10 m erweitert.
+- **Diagnose in der Konsole:**
+  - Beim Start erscheint `[Apex] Racing line guide: … dashes, …/… corners on the road surface, shader …`.
+  - Zeigt die Linie 3 s lang bei Fahrt nichts, folgt eine Warnung.
+- **Diagnose in der F3-Telemetrie:** die Zeile „Ideallinie: Modus, sichtbare Segmente, Ecken auf der Fahrbahn, Shader“.
 
 ## Technik
 - **Logik** (`Apex.Simulation`, reines C#, testbar):

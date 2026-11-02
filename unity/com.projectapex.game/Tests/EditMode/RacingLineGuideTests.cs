@@ -165,5 +165,53 @@ namespace Apex.Tests
             // Look-ahead grows with speed.
             Assert.That(RacingLineGuide.LookAhead(80f), Is.GreaterThan(RacingLineGuide.LookAhead(30f)));
         }
+
+        [Test]
+        public void TheDashesLieOnTheRoadSurfaceNotUnderIt()
+        {
+            // The line is drawn 4 cm above the real road triangles (RoadSurface), never below the asphalt – the
+            // centreline height alone is not good enough (crown, camber, kerb ramps).
+            var bed = new CircuitTestBed(TestData.Circuit("bosphorus_a"), withTerrain: false);
+            var gd = new RacingLineGuide(CarPerformance.For(new VehicleSetup()).Line(bed.g));
+            var quads = gd.DashQuads(bed.world, 0.04f, out int found);
+            TestContext.WriteLine($"{found} of {quads.Length} dash corners on the road surface");
+            Assert.That(found, Is.EqualTo(quads.Length), "every corner finds the road");
+            float worst = 0f, maxBelow = 0f;
+            for (int i = 0; i < gd.DashCount; i++)
+            {
+                gd.DashFrame(i, out var c, out _, out _);
+                for (int k = 0; k < 4; k++)
+                {
+                    var v = quads[i * 4 + k];
+                    Assert.That(bed.world.Raycast(v + System.Numerics.Vector3.UnitY * 3f, -System.Numerics.Vector3.UnitY, 6f, out var hit), Is.True);
+                    float above = v.Y - hit.point.Y;
+                    Assert.That(above, Is.InRange(0.02f, 0.06f), $"dash {i} corner {k}: {above * 100f:F1} cm above the road");
+                    worst = Math.Max(worst, Math.Abs(above - 0.04f));
+                }
+                // How far the centreline height is from the real surface (why the drop is needed).
+                bed.world.Raycast(c + System.Numerics.Vector3.UnitY * 3f, -System.Numerics.Vector3.UnitY, 6f, out var ch);
+                maxBelow = Math.Max(maxBelow, ch.point.Y - c.Y);
+            }
+            TestContext.WriteLine($"lift error max {worst * 100f:F1} cm; centreline frame up to {maxBelow * 100f:F1} cm below the real road");
+        }
+
+        [Test]
+        public void BrakingAdviceMovesTheBrakingPoint()
+        {
+            var (apex, _) = SlowestCorner();
+            var gd = Guide();
+            float FirstRed(float advice)
+            {
+                var l = new List<RacingLineGuide.Dash>();
+                gd.Evaluate(geo.Wrap(apex - 360f), 300f / 3.6f, 1f, RacingLineGuide.Mode.WholeLap, true, l, advice);
+                return l.Find(x => x.hint == RacingLineGuide.Hint.Red).ahead;
+            }
+            float beginner = FirstRed(RacingLineGuide.AdviceScale(0)), standard = FirstRed(RacingLineGuide.AdviceScale(1)), expert = FirstRed(RacingLineGuide.AdviceScale(2));
+            TestContext.WriteLine($"red starts {beginner:F0} / {standard:F0} / {expert:F0} m ahead (beginner / standard / expert)");
+            Assert.That(beginner, Is.LessThan(standard), "beginners brake earlier");
+            Assert.That(expert, Is.GreaterThan(standard), "experts later");
+            // Even the expert's point leaves the real brakes enough room (the plan keeps a reserve).
+            Assert.That(apex - (geo.Wrap(apex - 360f) + expert), Is.GreaterThan(new HandlingBenchmark(null, 1).Brake(300f, 60f).distance));
+        }
     }
 }

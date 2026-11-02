@@ -20,6 +20,11 @@ namespace Apex.Game
         Camera cam;
         Vector3 smoothedForward = Vector3.forward;
         bool initialised;
+        /// <summary>Speed and weight-transfer feedback (Apex.Core.CameraDynamics); strength 0 with reduced motion.</summary>
+        public readonly Apex.Core.CameraDynamics dynamics = new Apex.Core.CameraDynamics();
+        Rigidbody body;
+        Vector3 lastVelocity;
+        bool haveVelocity;
 
         void Awake()
         {
@@ -79,39 +84,57 @@ namespace Apex.Game
                 if (visuals != null) visuals.FirstPerson = false;
                 visualsOwner = target;
                 visuals = target.GetComponent<CarVisuals>();
+                body = target.GetComponent<Rigidbody>();
+                haveVelocity = false;
+                dynamics.Reset();
             }
+            // Car acceleration in its own frame, from the rigidbody's velocity (filtered by the camera spring).
+            if (body != null && dt > 1e-4f)
+            {
+                var vel = RigidbodyCompat.GetVelocity(body);
+                if (haveVelocity)
+                {
+                    var acc = (vel - lastVelocity) / dt;
+                    dynamics.Update(Vector3.Dot(vel, fwd), Vector3.Dot(acc, fwd), Vector3.Dot(acc, target.right), dt);
+                }
+                lastVelocity = vel;
+                haveVelocity = true;
+            }
+            float fovGain = dynamics.FovOffset;
             if (visuals != null) visuals.FirstPerson = mode == Mode.Cockpit;
             switch (mode)
             {
                 case Mode.Cockpit:
                 {
-                    if (cam) cam.fieldOfView = 70f;
+                    if (cam) cam.fieldOfView = 70f + fovGain * 0.5f;
                     // Driver's eye inside the helmet: steering wheel, halo and mirrors in view.
                     Vector3 eye = target.TransformPoint(new Vector3(0f, 0.47f, 0.02f));
                     Vector3 up = Vector3.Slerp(target.up, Vector3.up, horizonStabilisation);
-                    transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd, up));
+                    var look = Quaternion.LookRotation(fwd, up);
+                    transform.SetPositionAndRotation(eye, look * Quaternion.Euler(dynamics.Pitch * 0.6f, 0f, 0f));
                     smoothedForward = flat;
                     break;
                 }
                 case Mode.TCam:
                 {
-                    if (cam) cam.fieldOfView = 68f;
+                    if (cam) cam.fieldOfView = 68f + fovGain * 0.7f;
                     Vector3 eye = target.TransformPoint(new Vector3(0f, 0.95f, -0.15f));
                     Vector3 up = Vector3.Slerp(target.up, Vector3.up, 0.3f);
-                    transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd, up));
+                    transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd, up) * Quaternion.Euler(dynamics.Pitch * 0.8f, 0f, 0f));
                     smoothedForward = flat;
                     break;
                 }
                 default:
                 {
                     bool far = mode == Mode.FarChase;
-                    if (cam) cam.fieldOfView = far ? 62f : 66f;
-                    float distance = far ? 10f : 6.5f;
+                    if (cam) cam.fieldOfView = (far ? 62f : 66f) + fovGain;
+                    float distance = (far ? 10f : 6.5f) + dynamics.Back;
                     float height = far ? 3.2f : 2f;
                     // Heading lags a little so slides and rotation remain visible.
                     smoothedForward = Vector3.Slerp(smoothedForward, flat, 1f - Mathf.Exp(-5f * dt)).normalized;
-                    Vector3 pos = target.position - smoothedForward * distance + Vector3.up * height;
-                    Vector3 look = target.position + smoothedForward * 6f + Vector3.up * 0.6f;
+                    var side = Vector3.Cross(Vector3.up, smoothedForward);
+                    Vector3 pos = target.position - smoothedForward * distance + Vector3.up * height + side * dynamics.Side;
+                    Vector3 look = target.position + smoothedForward * 6f + Vector3.up * (0.6f - dynamics.Pitch * 0.05f);
                     transform.SetPositionAndRotation(pos, Quaternion.LookRotation(look - pos, Vector3.up));
                     break;
                 }

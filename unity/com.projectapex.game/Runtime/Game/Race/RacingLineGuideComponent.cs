@@ -21,7 +21,7 @@ namespace Apex.Game
         /// <summary>Hint colours (linear-ish sRGB): calm green, yellow, orange, red.</summary>
         public static readonly Color Green = new Color(0.22f, 0.95f, 0.45f), Yellow = new Color(1f, 0.86f, 0.18f),
             Orange = new Color(1f, 0.52f, 0.1f), Red = new Color(1f, 0.16f, 0.12f);
-        public const float BlendRate = 7f, Lift = 0.04f, MaxAlpha = 0.85f;
+        public const float BlendRate = 7f, Lift = 0.05f, MaxAlpha = 0.9f;
 
         RacingLineGuide guide;
         Mesh mesh;
@@ -32,23 +32,30 @@ namespace Apex.Game
         readonly List<int> active = new List<int>();
         readonly HashSet<int> activeSet = new HashSet<int>();
 
-        public void Build(RacingLineGuide g)
+        /// <summary>What the line is doing (F3 telemetry, console): shader, dashes on the road, dashes visible now.</summary>
+        public string Diagnostics { get; private set; } = "";
+        string shaderName = "";
+        int cornersOnRoad, totalCorners, visibleNow;
+        float noDashesFor;
+        bool warned;
+
+        /// <param name="road">the track's road triangles (CircuitInstance.Surface); the dashes are laid on them</param>
+        public void Build(RacingLineGuide g, Apex.Tracks.RoadSurface road)
         {
             guide = g;
             int n = g.DashCount;
-            var verts = new Vector3[n * 4];
-            var uvs = new Vector2[n * 4];
+            // On the RoadSurface triangles (same as the road mesh and its collider), not via Unity physics: the track
+            // colliders may not be in the physics scene yet when the session is built.
+            var world = road != null ? new Apex.Tracks.CollisionWorld(road.All) : null;
+            var quads = g.DashQuads(world, Lift, out cornersOnRoad);
+            totalCorners = quads.Length;
+            var verts = new Vector3[quads.Length];
+            var uvs = new Vector2[quads.Length];
             var tris = new int[n * 6];
-            float half = RacingLineGuide.DashLength * 0.5f, w = RacingLineGuide.DashHalfWidth;
             for (int i = 0; i < n; i++)
             {
-                g.DashFrame(i, out var c, out var f, out var r);
-                var centre = c.ToUnity(); var fwd = f.ToUnity().normalized; var right = r.ToUnity().normalized;
                 int v = i * 4;
-                verts[v] = OnRoad(centre - fwd * half - right * w);
-                verts[v + 1] = OnRoad(centre - fwd * half + right * w);
-                verts[v + 2] = OnRoad(centre + fwd * half + right * w);
-                verts[v + 3] = OnRoad(centre + fwd * half - right * w);
+                for (int k = 0; k < 4; k++) verts[v + k] = quads[v + k].ToUnity();
                 uvs[v] = new Vector2(-1f, 0f); uvs[v + 1] = new Vector2(1f, 0f); uvs[v + 2] = new Vector2(1f, 1f); uvs[v + 3] = new Vector2(-1f, 1f);
                 int t = i * 6;
                 tris[t] = v; tris[t + 1] = v + 2; tris[t + 2] = v + 1;
@@ -60,6 +67,8 @@ namespace Apex.Game
             mesh.uv = uvs;
             mesh.triangles = tris;
             mesh.RecalculateBounds();
+            // A little margin so the whole-lap mesh is never culled by a too-tight box.
+            var b = mesh.bounds; b.Expand(10f); mesh.bounds = b;
             colours = new Color32[verts.Length];
             mesh.colors32 = colours;
             current = new Color[n];
@@ -68,31 +77,43 @@ namespace Apex.Game
             meshRenderer = gameObject.AddComponent<MeshRenderer>();
             meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
             meshRenderer.receiveShadows = false;
-            meshRenderer.sharedMaterial = LineMaterial();
+            meshRenderer.sharedMaterial = LineMaterial(out shaderName);
+            Debug.Log($"[Apex] Racing line guide: {n} dashes, {cornersOnRoad}/{totalCorners} corners on the road surface, shader {shaderName}.");
         }
 
-        static readonly RaycastHit[] hits = new RaycastHit[8];
-
-        /// <summary>Drops a point onto the track collider below it (the real road surface incl. camber), 4 cm above.
-        /// Cars (rigidbodies) on the grid are ignored; the highest static surface within ±3 m wins.</summary>
-        static Vector3 OnRoad(Vector3 p)
-        {
-            int n = Physics.RaycastNonAlloc(p + Vector3.up * 3f, Vector3.down, hits, 6f, ~0, QueryTriggerInteraction.Ignore);
-            float best = float.NegativeInfinity;
-            Vector3 point = p, normal = Vector3.up;
-            for (int i = 0; i < n; i++)
-            {
-                if (hits[i].collider.attachedRigidbody != null) continue;
-                if (hits[i].point.y > best) { best = hits[i].point.y; point = hits[i].point; normal = hits[i].normal; }
-            }
-            return point + normal * Lift;
-        }
-
-        static Material LineMaterial()
+        /// <summary>
+        /// Material for the dashes: the glow shader (Apex/RacingLine); if it is missing or does not compile for this
+        /// platform, URP's particle unlit shader set to alpha blending (it multiplies the vertex colour); last resort
+        /// the built-in sprite shader. Each one shows the vertex colours.
+        /// </summary>
+        static Material LineMaterial(out string used)
         {
             var shader = Resources.Load<Shader>("Shaders/ApexRacingLine");
-            if (shader == null || !shader.isSupported) shader = Shader.Find("Sprites/Default");
-            return new Material(shader) { name = "RacingLineGuide", renderQueue = 2970 };
+            if (shader != null && shader.isSupported)
+            {
+                var m = new Material(shader) { name = "RacingLineGuide" };
+                if (m.passCount > 0) { m.renderQueue = 2970; used = shader.name; return m; }
+            }
+            var particles = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (particles != null && particles.isSupported)
+            {
+                var m = new Material(particles) { name = "RacingLineGuide" };
+                m.SetFloat("_Surface", 1f);
+                m.SetFloat("_Blend", 0f);
+                m.SetOverrideTag("RenderType", "Transparent");
+                m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                m.SetFloat("_ZWrite", 0f);
+                m.SetFloat("_Cull", 0f);
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white * 1.4f);
+                m.renderQueue = 2970;
+                used = particles.name + " (fallback)";
+                return m;
+            }
+            var sprite = Shader.Find("Sprites/Default");
+            used = sprite != null ? sprite.name + " (fallback)" : "none";
+            return sprite != null ? new Material(sprite) { name = "RacingLineGuide", renderQueue = 2970 } : null;
         }
 
         static Color HintColour(RacingLineGuide.Hint h) =>
@@ -108,7 +129,8 @@ namespace Apex.Game
             // The same grip the AI plans with: tyre temperature, wear and the wet track.
             float grip = 0f;
             foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;
-            guide.Evaluate(race.Player.raw, sim.ForwardSpeed, Mathf.Clamp(grip, 0.3f, 1f), mode, settings.dynamicBrakeLine, dashes);
+            guide.Evaluate(race.Player.raw, sim.ForwardSpeed, Mathf.Clamp(grip, 0.3f, 1f), mode, settings.dynamicBrakeLine, dashes,
+                RacingLineGuide.AdviceScale(settings.brakeAdvice));
             // Targets: visible dashes get their hint colour and fade; everything that was visible fades out.
             for (int k = 0; k < active.Count; k++) target[active[k]].a = 0f;
             foreach (var d in dashes)
@@ -131,6 +153,11 @@ namespace Apex.Game
                 if (!colours[v].Equals(c32)) { colours[v] = colours[v + 1] = colours[v + 2] = colours[v + 3] = c32; dirty = true; }
             }
             if (dirty) mesh.colors32 = colours;
+            visibleNow = dashes.Count;
+            Diagnostics = $"Ideallinie: {mode}, {visibleNow} Segmente sichtbar, {cornersOnRoad}/{totalCorners} Ecken auf der Fahrbahn, Shader {shaderName}";
+            // A shown line with nothing to show for 3 s of driving is a fault worth one console line.
+            if (show && visibleNow == 0 && sim.ForwardSpeed > 5f) noDashesFor += Time.deltaTime; else noDashesFor = 0f;
+            if (noDashesFor > 3f && !warned) { warned = true; Debug.LogWarning("[Apex] Racing line guide shows no dashes: " + Diagnostics); }
         }
     }
 }

@@ -654,7 +654,8 @@ namespace Apex.Game
             var guideComp = guideGo.AddComponent<RacingLineGuideComponent>();
             guideComp.race = Race;
             guideComp.settings = Settings;
-            guideComp.Build(new Apex.AI.RacingLineGuide(Race.PlayerLine));
+            guideComp.Build(new Apex.AI.RacingLineGuide(Race.PlayerLine), circuit.Surface);
+            racingLineGuide = guideComp;
 
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);
@@ -684,6 +685,8 @@ namespace Apex.Game
         }
 
         readonly PerfCapture perf = new PerfCapture();
+        /// <summary>The dynamic racing line of the running session (diagnostics in the F3 telemetry).</summary>
+        RacingLineGuideComponent racingLineGuide;
 
         /// <summary>Starts a one-lap performance capture, or stops a running one and writes it.</summary>
         void TogglePerfCapture()
@@ -1004,6 +1007,7 @@ namespace Apex.Game
             if (input.CameraPressed) ShowMessage(RaceCamera.ModeNames[Settings.cameraMode = raceCam.Cycle()] + "-Kamera", Color.white, 1f, false);
             if (input.ResetPressed) Race.ResetPlayerToTrack();
             if (input.TelemetryPressed) showTelemetry = !showTelemetry;
+            raceCam.dynamics.strength = Settings.reducedMotion ? 0f : 1f;
             if (input.PerfPressed) TogglePerfCapture();
             if (perf.Running && perf.Tick(Time.unscaledDeltaTime, Race.Player.raw, PerfHeader()))
                 ShowMessage("Leistungsmessung gespeichert" + (perf.LastFile != null ? "" : " – Fehler, siehe Log"), Color.white, 2.5f, false);

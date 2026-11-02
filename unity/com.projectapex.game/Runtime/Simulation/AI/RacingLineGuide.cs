@@ -87,7 +87,13 @@ namespace Apex.AI
 
         /// <summary>Planned speed limit (m/s) at a lap distance for the current grip (wet track, tyres).</summary>
         public float Allowed(float distance, float gripScale) =>
-            MathF.Min(RacingLine.MaxSpeed, gripScale >= 0.999f ? line.GripSpeedAt(distance) : line.GripSpeedAt(distance, gripScale));
+            MathF.Min(RacingLine.MaxSpeed, adviceScale * (gripScale >= 0.999f ? line.GripSpeedAt(distance) : line.GripSpeedAt(distance, gripScale)));
+
+        float adviceScale = 1f;
+
+        /// <summary>"Bremsempfehlung": 0 Anfänger (8 % slower targets, earlier braking), 1 Standard, 2 Experte (5 % faster,
+        /// closer to the car's real limit – the plan keeps about a quarter of the braking in reserve).</summary>
+        public static float AdviceScale(int level) => level <= 0 ? 0.92f : level >= 2 ? 1.05f : 1f;
 
         public static float LookAhead(float speed) => ApexMath.Clamp(MathF.Abs(speed) * LookAheadSeconds, LookAheadMin, LookAheadMax);
 
@@ -96,8 +102,9 @@ namespace Apex.AI
         /// <paramref name="speed"/> (m/s). <paramref name="gripScale"/> is the tyre/track grip (1 dry, less in the wet).
         /// Fills <paramref name="result"/> (cleared first) in order of distance; no allocation once the list has grown.
         /// </summary>
-        public void Evaluate(float carDistance, float speed, float gripScale, Mode mode, bool brakeColours, List<Dash> result)
+        public void Evaluate(float carDistance, float speed, float gripScale, Mode mode, bool brakeColours, List<Dash> result, float advice = 1f)
         {
+            adviceScale = advice;
             result.Clear();
             if (mode == Mode.Off) return;
             float range = LookAhead(speed);
@@ -175,6 +182,48 @@ namespace Apex.AI
         {
             float d = dashDistance[index];
             g.FrameAt(d, out centre, out forward, out right, line.OffsetAt(d));
+        }
+
+        /// <summary>
+        /// Corner points of every dash (4 per dash: back-left, back-right, front-right, front-left) on the real road
+        /// surface: each corner is dropped onto the RoadSurface triangles (the same triangles as the road mesh and its
+        /// collider) and lifted by <paramref name="lift"/> along the surface normal. Independent of Unity's physics
+        /// scene, so it works while the track colliders are still being registered. <paramref name="found"/> counts the
+        /// corners that hit the surface (the rest keep the centreline height plus the lift).
+        /// </summary>
+        public Vector3[] DashQuads(Apex.Tracks.CollisionWorld road, float lift, out int found)
+        {
+            int n = dashDistance.Length;
+            var verts = new Vector3[n * 4];
+            found = 0;
+            float half = DashLength * 0.5f, w = DashHalfWidth;
+            for (int i = 0; i < n; i++)
+            {
+                DashFrame(i, out var c, out var f, out var r);
+                f = Vector3.Normalize(f); r = Vector3.Normalize(r);
+                var p0 = c - f * half - r * w;
+                var p1 = c - f * half + r * w;
+                var p2 = c + f * half + r * w;
+                var p3 = c + f * half - r * w;
+                verts[i * 4] = Drop(road, p0, lift, ref found);
+                verts[i * 4 + 1] = Drop(road, p1, lift, ref found);
+                verts[i * 4 + 2] = Drop(road, p2, lift, ref found);
+                verts[i * 4 + 3] = Drop(road, p3, lift, ref found);
+            }
+            return verts;
+        }
+
+        static Vector3 Drop(Apex.Tracks.CollisionWorld road, Vector3 p, float lift, ref int found)
+        {
+            // Only the drivable surfaces (asphalt, kerbs, pit lane): never a wall top or the terrain.
+            if (road != null && road.Raycast(p + Vector3.UnitY * 4f, -Vector3.UnitY, 10f, out var hit,
+                    m => m.surface == Apex.Vehicle.SurfaceType.Asphalt || m.surface == Apex.Vehicle.SurfaceType.Kerb || m.surface == Apex.Vehicle.SurfaceType.PitLane))
+            {
+                found++;
+                var nrm = hit.normal.Y < 0f ? -hit.normal : hit.normal;
+                return hit.point + nrm * lift;
+            }
+            return p + Vector3.UnitY * lift;
         }
 
         /// <summary>Lateral offset of the line at a dash (m, + right) and the road half width there.</summary>
