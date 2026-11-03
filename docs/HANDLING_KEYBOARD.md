@@ -188,3 +188,32 @@ Bei 200–300 km/h stand die Front kurz bei 1,3–1,9. Das Auto zuckte hinein (G
 | `VehicleSetup.antiRollFront/Rear` | Querstabilisatoren | Balance in langsamen Kurven |
 | `VehicleSetup.aeroBalanceFront` | Abtriebsverteilung | Balance in schnellen Kurven |
 | `tireFront/Rear.muPeak` | Reifenreibwert | wie viel Grip insgesamt |
+
+## 6. Tastenbelegung und Touch-Lenkrad (2026-11-03)
+**Status:** implementiert und getestet (NUnit). Im Editor und auf dem Gerät nicht bedient.
+
+**Vorgabe:** Am PC wird nur mit Tastatur gespielt. Deshalb gibt es keine eigene Lenkrad- oder Gamepad-Abstimmung; ein angeschlossenes Gamepad funktioniert weiter wie bisher.
+
+### Freie Tastenbelegung (PC)
+- **Wo:** Einstellungen → Steuerung → „Taste: Gas“, „Taste: Bremse“, „Taste: Lenken links“ usw.
+  - Alle Fahr- und HUD-Aktionen sind belegbar, je zwei Tasten.
+  - Nur am PC sichtbar, auf Mobil ausgeblendet.
+- **Bedienung:**
+  - Zeile wählen, dann Enter oder → für die erste Taste, ← für die zweite. Das Feld zeigt „Taste drücken … (Esc: abbrechen)“, die nächste Taste wird übernommen.
+  - Belegt die Taste schon eine andere Aktion, werden die beiden **getauscht**. So steuert keine Taste zwei Dinge, und keine Aktion geht verloren.
+  - „Tastenbelegung zurücksetzen“ stellt den Standard wieder her.
+- **Feste Tasten:** Esc (Pause), Enter, F1–F12 (Hilfe, Telemetrie, Messung …) und 1–9 (Funk).
+- **Hilfe (F1):** Der Hilfebildschirm zeigt die aktuelle Belegung.
+- **Gespeichert** in `SettingsData.keyBindings`. Kaputte oder doppelte Einträge werden beim Laden aufgelöst.
+- **Code und Tests:** `Apex.InputLogic.KeyBindings`, `InputRouter` (Tasten-Cache und Belegungsmodus). Tests: `KeyBindingsTests`.
+
+### Touch-Lenkrad (Mobil)
+- **Wo:** Einstellungen → Steuerung → „Steuerung: Lenkrad (Touch)“.
+- **Lenkzone:** Sie ersetzt die Tasten ◄ ►. Der Daumen setzt irgendwo in der Zone auf, sein seitlicher Weg ist der Lenkeinschlag, und zwar stufenlos.
+  - Kleine Totzone, dann eine leichte Kurve (feiner um die Mitte).
+  - Standard: 12 % der Bildbreite bis Vollausschlag, einstellbar 6–25 % („Touch-Lenkrad: Weg bis Vollausschlag“).
+- **Mitwandernde Mitte:** Schiebt der Daumen über den Vollausschlag hinaus, wandert die Mitte mit. Ein Zurückschieben lenkt dann sofort.
+- **Loslassen** stellt die Lenkung in unter 0,1 s zurück.
+- **Anzeige:** Ein Balken in der Zone zeigt den aktuellen Lenkeinschlag.
+- **Physik:** dieselbe wie überall, mit Lenkbegrenzer 1,0.
+- **Code und Tests:** `Apex.InputLogic.TouchWheel`, `TouchLayout.SteerZone`. Tests: `TouchWheelTests`.

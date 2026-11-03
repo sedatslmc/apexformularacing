@@ -81,7 +81,7 @@ namespace Apex.Game
         static SettingsCategory CategoryOf(string label)
         {
             if (label.StartsWith("Steuerung") || label.StartsWith("Neigung") || label.StartsWith("Linkshänder") || label.StartsWith("Tasten")
-                || label.StartsWith("Tastatur") || label.StartsWith("Lenkempfindlichkeit") || label.StartsWith("Lenkglättung")) return SettingsCategory.Controls;
+                || label.StartsWith("Tastatur") || label.StartsWith("Taste:") || label.StartsWith("Touch-Lenkrad") || label.StartsWith("Lenkempfindlichkeit") || label.StartsWith("Lenkglättung")) return SettingsCategory.Controls;
             if (label.StartsWith("HUD") || label.StartsWith("Geschwindigkeit")) return SettingsCategory.Hud;
             if (label.StartsWith("Reduzierte") || label.StartsWith("Sprache") || label.StartsWith("Farbsehen") || label.StartsWith("Hoher Kontrast") || label.StartsWith("Textgröße"))
                 return SettingsCategory.Accessibility;

@@ -494,6 +494,12 @@ namespace Apex.Game
                     : new Color(1f, 1f, 1f, a * 0.35f);
                 ApexStyle.Box(r, fill);
                 ApexStyle.Text(r, b.label, b.id == TouchLayout.Radio ? 16 : 24, new Color(1f, 1f, 1f, Mathf.Clamp01(a * 2f)), FontStyle.Bold, TextAnchor.MiddleCenter);
+                if (b.id == TouchLayout.SteerZone)
+                {
+                    // Where the steering is: a marker that follows the thumb's travel (centre = straight ahead).
+                    float mx = r.center.x + input.touchWheel.Value * (r.width * 0.5f - 10f);
+                    ApexStyle.Box(new Rect(mx - 4f, r.y + 8f, 8f, r.height - 16f), new Color(0.3f, 0.9f, 1f, Mathf.Clamp01(a * 2.5f)));
+                }
             }
             if (radioOpen)
             {

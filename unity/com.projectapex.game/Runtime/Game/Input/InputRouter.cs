@@ -29,13 +29,17 @@ namespace Apex.Game
         public float Steer { get; private set; }
 
         /// <summary>How the player steers right now (decides the input curve and the front-slip limiter).</summary>
-        public enum SteerSource { Digital, Stick, Tilt }
+        public enum SteerSource { Digital, Stick, Tilt, TouchWheel }
         public SteerSource Source { get; private set; } = SteerSource.Digital;
         /// <summary>Digital steering key state this frame (−1, 0, +1; keys and touch buttons).</summary>
         public float SteerKey { get; private set; }
         float analogSteer;
         /// <summary>Digital steering ramp and progressive curve (KeyboardSteering), run on the physics clock.</summary>
         public readonly KeyboardSteering keyboard = new KeyboardSteering();
+        /// <summary>Virtual steering zone (ControlPreset.TouchWheel).</summary>
+        public readonly TouchWheel touchWheel = new TouchWheel();
+        bool wheelDown;
+        float wheelX;
 
         // Edge-triggered actions (valid for the frame they occur in).
         public bool ShiftUpPressed { get; private set; }
@@ -101,9 +105,78 @@ namespace Apex.Game
             TiltAvailable = GravitySensor.current != null || Accelerometer.current != null;
         }
 
+        /// <summary>The player's key assignment (Einstellungen → Steuerung → "Taste: …").</summary>
+        public KeyBindings Bindings { get; private set; } = new KeyBindings();
+        readonly Key[,] keyCache = new Key[KeyBindings.All.Length, KeyBindings.Slots];
+
+        /// <summary>Waiting for a key to assign (menu row "Taste: …"); null otherwise.</summary>
+        public KeyBindings.Action? CaptureAction { get; private set; }
+        int captureSlot;
+        /// <summary>Set on the frame a capture ended (assigned or cancelled): the game saves the settings.</summary>
+        public bool CaptureFinished { get; private set; }
+
+        /// <summary>Starts waiting for the next key for an action's slot (Esc cancels).</summary>
+        public void BeginKeyCapture(KeyBindings.Action a, int slot)
+        {
+            CaptureAction = a;
+            captureSlot = slot;
+            captureStartFrame = Time.frameCount;
+        }
+        int captureStartFrame;
+
+        void RebuildKeyCache()
+        {
+            foreach (var a in KeyBindings.All)
+                for (int s = 0; s < KeyBindings.Slots; s++)
+                    keyCache[(int)a, s] = System.Enum.TryParse(Bindings.Get(a, s), out Key k) ? k : Key.None;
+        }
+
+        bool KeyHeld(Keyboard kb, KeyBindings.Action a, bool skipArrowsUpDown = false)
+        {
+            for (int s = 0; s < KeyBindings.Slots; s++)
+            {
+                var k = keyCache[(int)a, s];
+                if (k == Key.None) continue;
+                if (skipArrowsUpDown && (k == Key.UpArrow || k == Key.DownArrow)) continue;
+                if (kb[k].isPressed) return true;
+            }
+            return false;
+        }
+
+        bool KeyPressed(Keyboard kb, KeyBindings.Action a)
+        {
+            for (int s = 0; s < KeyBindings.Slots; s++)
+            {
+                var k = keyCache[(int)a, s];
+                if (k != Key.None && kb[k].wasPressedThisFrame) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Capture mode: the next key goes into the slot; Esc cancels; reserved keys are ignored.</summary>
+        void UpdateCapture(Keyboard kb)
+        {
+            if (Time.frameCount <= captureStartFrame || kb == null) return;
+            if (kb.escapeKey.wasPressedThisFrame) { CaptureAction = null; CaptureFinished = true; return; }
+            foreach (var key in kb.allKeys)
+            {
+                if (key == null || !key.wasPressedThisFrame) continue;
+                string name = key.keyCode.ToString();
+                if (KeyBindings.IsReserved(name)) continue;
+                Bindings.Assign(CaptureAction.Value, captureSlot, name);
+                settings.keyBindings = Bindings.Serialize();
+                RebuildKeyCache();
+                CaptureAction = null;
+                CaptureFinished = true;
+                return;
+            }
+        }
+
         public void ApplySettings(SettingsData s)
         {
             settings = s;
+            Bindings = KeyBindings.Parse(s.keyBindings);
+            RebuildKeyCache();
             tilt.maxAngleDeg = s.tiltMaxAngleDeg;
             tilt.deadZoneDeg = s.tiltDeadZoneDeg;
             tilt.sensitivity = s.tiltSensitivity;
@@ -140,20 +213,32 @@ namespace Apex.Game
             float dt = Time.unscaledDeltaTime;
             var kb = Keyboard.current;
             var pad = Gamepad.current;
+            CaptureFinished = false;
+            if (CaptureAction.HasValue)
+            {
+                // While a key is being assigned nothing else reacts to the keyboard (not the menu, not the car).
+                UpdateCapture(kb);
+                ShiftUpPressed = ShiftDownPressed = PausePressed = ResetPressed = CameraPressed = TelemetryPressed = false;
+                ConfirmPressed = RadioPressed = PitPressed = TowerPressed = TowerHeld = MapPressed = HudPresetPressed = false;
+                HelpPressed = LayoutDebugPressed = PerfPressed = RestartPressed = ScreenshotPressed = NavUp = NavDown = false;
+                NumberPressed = 0;
+                return;
+            }
+            if (CaptureFinished) return;
 
-            ShiftUpPressed = (kb != null && kb.eKey.wasPressedThisFrame) || (pad != null && pad.rightShoulder.wasPressedThisFrame);
-            ShiftDownPressed = (kb != null && kb.qKey.wasPressedThisFrame) || (pad != null && pad.leftShoulder.wasPressedThisFrame);
+            ShiftUpPressed = (kb != null && KeyPressed(kb, KeyBindings.Action.ShiftUp)) || (pad != null && pad.rightShoulder.wasPressedThisFrame);
+            ShiftDownPressed = (kb != null && KeyPressed(kb, KeyBindings.Action.ShiftDown)) || (pad != null && pad.leftShoulder.wasPressedThisFrame);
             PausePressed = (kb != null && kb.escapeKey.wasPressedThisFrame) || (pad != null && pad.startButton.wasPressedThisFrame);
-            ResetPressed = (kb != null && kb.backspaceKey.wasPressedThisFrame) || (pad != null && pad.selectButton.wasPressedThisFrame);
-            CameraPressed = (kb != null && kb.cKey.wasPressedThisFrame) || (pad != null && pad.buttonNorth.wasPressedThisFrame);
+            ResetPressed = (kb != null && KeyPressed(kb, KeyBindings.Action.ResetCar)) || (pad != null && pad.selectButton.wasPressedThisFrame);
+            CameraPressed = (kb != null && KeyPressed(kb, KeyBindings.Action.Camera)) || (pad != null && pad.buttonNorth.wasPressedThisFrame);
             TelemetryPressed = kb != null && kb.f3Key.wasPressedThisFrame;
             ConfirmPressed = (kb != null && (kb.enterKey.wasPressedThisFrame || kb.numpadEnterKey.wasPressedThisFrame)) || (pad != null && pad.buttonSouth.wasPressedThisFrame);
-            RadioPressed = (kb != null && kb.rKey.wasPressedThisFrame) || (pad != null && pad.dpad.up.wasPressedThisFrame && !radioOpen);
-            PitPressed = kb != null && kb.pKey.wasPressedThisFrame;
-            TowerPressed = kb != null && kb.tabKey.wasPressedThisFrame;
-            TowerHeld = kb != null && kb.tabKey.isPressed;
-            MapPressed = kb != null && kb.mKey.wasPressedThisFrame;
-            HudPresetPressed = kb != null && kb.hKey.wasPressedThisFrame;
+            RadioPressed = (kb != null && KeyPressed(kb, KeyBindings.Action.Radio)) || (pad != null && pad.dpad.up.wasPressedThisFrame && !radioOpen);
+            PitPressed = kb != null && KeyPressed(kb, KeyBindings.Action.Pit);
+            TowerPressed = kb != null && KeyPressed(kb, KeyBindings.Action.Tower);
+            TowerHeld = kb != null && KeyHeld(kb, KeyBindings.Action.Tower);
+            MapPressed = kb != null && KeyPressed(kb, KeyBindings.Action.Map);
+            HudPresetPressed = kb != null && KeyPressed(kb, KeyBindings.Action.HudPreset);
             HelpPressed = kb != null && kb.f1Key.wasPressedThisFrame;
             LayoutDebugPressed = kb != null && kb.f2Key.wasPressedThisFrame;
             PerfPressed = kb != null && kb.f6Key.wasPressedThisFrame;
@@ -178,11 +263,11 @@ namespace Apex.Game
             bool analogSteer = false;
             if (kb != null)
             {
-                // While the radio is open the arrows navigate it; W/S still drive.
-                if (kb.wKey.isPressed || (kb.upArrowKey.isPressed && !radioOpen)) kThrottle = 1f;
-                if (kb.sKey.isPressed || (kb.downArrowKey.isPressed && !radioOpen)) kBrake = 1f;
-                if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) kSteer -= 1f;
-                if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) kSteer += 1f;
+                // Player key assignment; while the radio is open ↑/↓ navigate it and do not drive.
+                if (KeyHeld(kb, KeyBindings.Action.Throttle, radioOpen)) kThrottle = 1f;
+                if (KeyHeld(kb, KeyBindings.Action.Brake, radioOpen)) kBrake = 1f;
+                if (KeyHeld(kb, KeyBindings.Action.SteerLeft)) kSteer -= 1f;
+                if (KeyHeld(kb, KeyBindings.Action.SteerRight)) kSteer += 1f;
             }
             float padThrottle = 0f, padBrake = 0f, padSteer = 0f;
             if (pad != null)
@@ -230,10 +315,18 @@ namespace Apex.Game
 
             float digitalSteer = Mathf.Clamp(kSteer + tSteer, -1f, 1f);
             SteerKey = digitalSteer;
+            touchWheel.range = settings.touchWheelRange;
+            float wheelSteer = touchWheel.Update(wheelDown, wheelX, dt);
+            bool wheelMode = settings.controlPreset == ControlPreset.TouchWheel;
             if (analogSteer)
             {
                 Source = SteerSource.Stick;
                 this.analogSteer = InputTuning.StickSteer(padSteer, settings.steeringSensitivity);
+            }
+            else if (wheelMode && digitalSteer == 0f)
+            {
+                Source = SteerSource.TouchWheel;
+                this.analogSteer = wheelSteer;
             }
             else if (tiltMode && TiltAvailable && digitalSteer == 0f)
             {
@@ -271,7 +364,7 @@ namespace Apex.Game
                 if (legacyHandling) return 0f;
                 if (Source == SteerSource.Digital) return KeyboardSteering.SlipTarget(keyboard.profile);
                 int assist = settings.steeringAssistLevel;
-                if (Source == SteerSource.Tilt) return 1f;
+                if (Source == SteerSource.Tilt || Source == SteerSource.TouchWheel) return 1f;
                 return assist <= 0 ? 0f : assist == 1 ? 1.15f : 1f;
             }
         }
@@ -300,6 +393,7 @@ namespace Apex.Game
                 touch.SetControls(TouchLayout.ToControls(Buttons));
             }
             touch.BeginFrame();
+            wheelDown = false;
             float w = Mathf.Max(Screen.width, 1), h = Mathf.Max(Screen.height, 1);
             foreach (var t in ETouch.activeTouches)
             {
@@ -310,7 +404,12 @@ namespace Apex.Game
                     continue;
                 }
                 var p = t.screenPosition;
-                touch.Report(t.touchId, new System.Numerics.Vector2(p.x / w, p.y / h), phase == UnityEngine.InputSystem.TouchPhase.Began);
+                int owner = touch.Report(t.touchId, new System.Numerics.Vector2(p.x / w, p.y / h), phase == UnityEngine.InputSystem.TouchPhase.Began);
+                if (owner == TouchLayout.SteerZone)
+                {
+                    wheelDown = true;
+                    wheelX = p.x / w;
+                }
             }
             touch.EndFrame();
         }

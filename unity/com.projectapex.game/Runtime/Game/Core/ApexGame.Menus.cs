@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Apex.Career;
 using Apex.Core;
+using Apex.InputLogic;
 using Apex.Race;
 using Apex.Tracks;
 using Apex.Vehicle;
@@ -40,6 +41,14 @@ namespace Apex.Game
             navLeft = (kb != null && kb.leftArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.left.wasPressedThisFrame);
             navRight = (kb != null && kb.rightArrowKey.wasPressedThisFrame) || (pad != null && pad.dpad.right.wasPressedThisFrame);
             navConfirm = input.ConfirmPressed;
+            if (input.CaptureAction.HasValue) navLeft = navRight = false;   // a key is being assigned
+            if (input.CaptureFinished)
+            {
+                // A key was assigned (or the capture cancelled): keep it and show it.
+                SaveService.SaveSettings(Settings);
+                settingsView?.RefreshValues();
+                navLeft = navRight = navConfirm = false;
+            }
         }
 
         void OnGUI()
@@ -448,8 +457,11 @@ namespace Apex.Game
             var s = Settings;
             var rows = new List<Row>
             {
-                new Row { label = "Steuerung", value = () => s.controlPreset == ControlPreset.Keyboard ? "Tastatur/Gamepad" : s.controlPreset == ControlPreset.TouchButtons ? "Touch-Tasten" : "Neigung (Gyro)",
-                    change = d => s.controlPreset = (ControlPreset)Wrap((int)s.controlPreset + (d < 0 ? -1 : 1), 3) },
+                new Row { label = "Steuerung", value = () => s.controlPreset == ControlPreset.Keyboard ? "Tastatur" : s.controlPreset == ControlPreset.TouchButtons ? "Touch-Tasten"
+                        : s.controlPreset == ControlPreset.TouchWheel ? "Lenkrad (Touch)" : "Neigung (Gyro)",
+                    change = d => s.controlPreset = (ControlPreset)Wrap((int)s.controlPreset + (d < 0 ? -1 : 1), 4) },
+                new Row { label = "Touch-Lenkrad: Weg bis Vollausschlag", value = () => $"{s.touchWheelRange * 100f:0} % Bildbreite",
+                    change = d => s.touchWheelRange += (d == 0 ? 1 : d) * 0.01f },
                 new Row { label = "Fahrprofil", value = () => SettingsData.ProfileName(s.drivingProfile),
                     change = d => s.ApplyProfile((DrivingProfile)Wrap((int)s.drivingProfile + (d < 0 ? -1 : 1), 3)) },
                 new Row { label = "Traktionskontrolle", value = () => TcName(s.tractionLevel),
@@ -502,6 +514,26 @@ namespace Apex.Game
                     change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), GraphicsPreset.EnvironmentLevels) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
             };
+            // Key assignment (PC keyboard): select a row, then press the new key; ← assigns the second key; Esc cancels.
+            if (!Application.isMobilePlatform)
+            {
+                foreach (var a in KeyBindings.All)
+                {
+                    var action = a;
+                    rows.Add(new Row
+                    {
+                        label = "Taste: " + KeyBindings.ActionName(action),
+                        value = () => input.CaptureAction == action ? "Taste drücken … (Esc: abbrechen)" : input.Bindings.Describe(action),
+                        change = d => input.BeginKeyCapture(action, d < 0 ? 1 : 0),
+                    });
+                }
+                rows.Add(new Row
+                {
+                    label = "Tastenbelegung zurücksetzen",
+                    value = () => string.IsNullOrEmpty(s.keyBindings) || s.keyBindings == new KeyBindings().Serialize() ? "Standard" : "Angepasst",
+                    change = d => s.keyBindings = "",
+                });
+            }
             // Only where 4K road textures were fetched (tools/textures/fetch_cc0.py --tier ultra) and not on mobile.
             if (SurfaceTextures.UltraAvailable)
                 rows.Insert(rows.Count - 1, new Row { label = "Straßentexturen (ab nächster Session)", value = () => s.ultraTextures ? "Ultra (4K)" : "Standard (1K)",
@@ -677,17 +709,20 @@ namespace Apex.Game
             float x = (virtualSize.x - w) * 0.5f, y = (virtualSize.y - h) * 0.5f;
             ApexStyle.Box(new Rect(x, y, w, h), ApexStyle.PanelSolid);
             ApexStyle.Text(new Rect(x + 30f, y + 16f, w, 50f), "STEUERUNG & HILFE", 36, ApexStyle.Fg, FontStyle.Bold);
+            // The player's key assignment (Einstellungen → Steuerung → "Taste: …").
+            var kb = input.Bindings;
+            string K(KeyBindings.Action a) => kb.Describe(a);
             string[] left =
             {
-                "W / ↑   Gas          S / ↓   Bremse (im Stand halten: Rückwärts)",
-                "A / ←   links         D / →   rechts",
-                "Q / E   runter-/hochschalten (manuelles Getriebe)",
-                "C   Kamera (Cockpit, T-Cam, Verfolger, weit)",
-                "R   Teamfunk   ·   1–6 Funk-Auswahl",
-                "P   Boxenstopp anfordern (gewählte Reifen)",
-                "Tab   Timing-Tower aufklappen   ·   M   Minimap",
-                "H   HUD-Variante   ·   F3   Telemetrie   ·   F2   Layout-Prüfung   ·   F6   Leistungsmessung",
-                "Rücktaste   Auto zurücksetzen (Training/Zeitfahren)",
+                $"{K(KeyBindings.Action.Throttle)}   Gas          {K(KeyBindings.Action.Brake)}   Bremse (im Stand halten: Rückwärts)",
+                $"{K(KeyBindings.Action.SteerLeft)}   links         {K(KeyBindings.Action.SteerRight)}   rechts",
+                $"{K(KeyBindings.Action.ShiftDown)} / {K(KeyBindings.Action.ShiftUp)}   runter-/hochschalten (manuelles Getriebe)",
+                $"{K(KeyBindings.Action.Camera)}   Kamera (Cockpit, T-Cam, Verfolger, weit)",
+                $"{K(KeyBindings.Action.Radio)}   Teamfunk   ·   1–6 Funk-Auswahl",
+                $"{K(KeyBindings.Action.Pit)}   Boxenstopp anfordern (gewählte Reifen)",
+                $"{K(KeyBindings.Action.Tower)}   Timing-Tower aufklappen   ·   {K(KeyBindings.Action.Map)}   Minimap",
+                $"{K(KeyBindings.Action.HudPreset)}   HUD-Variante   ·   F3   Telemetrie   ·   F2   Layout-Prüfung   ·   F6   Leistungsmessung",
+                $"{K(KeyBindings.Action.ResetCar)}   Auto zurücksetzen (Training/Zeitfahren)",
                 "F5 (2×)   Training neu starten   ·   F9   Screenshot",
                 "Esc / Start   Pause   ·   F1   diese Hilfe",
             };

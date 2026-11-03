@@ -22,6 +22,8 @@ namespace Apex.Game
         public const int Recenter = 7;
         public const int Pause = 8;
         public const int Radio = 9;
+        /// <summary>Virtual steering zone (ControlPreset.TouchWheel).</summary>
+        public const int SteerZone = 10;
         public const int RadioEntry0 = 20;
 
         public struct Button
@@ -66,6 +68,13 @@ namespace Apex.Game
             {
                 float rx = mirror ? right - size * 0.8f : left;
                 list.Add(new Button { id = Recenter, rect = new Rect(rx, bottom, size * 0.8f, size * 0.5f), label = "MITTE" });
+            }
+            else if (s.controlPreset == ControlPreset.TouchWheel)
+            {
+                // One wide zone where the ◄ ► buttons would be: the thumb's sideways travel steers.
+                float zw = 2f * size + pad;
+                float zx = mirror ? right - zw : left;
+                list.Add(new Button { id = SteerZone, rect = new Rect(zx, bottom, zw, size * 1.35f), label = "◄  LENKEN  ►" });
             }
             else
             {
