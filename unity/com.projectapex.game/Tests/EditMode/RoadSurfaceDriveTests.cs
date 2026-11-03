@@ -91,21 +91,26 @@ namespace Apex.Tests
         }
 
         [Test]
-        public void F_PitLaneIsDrivableEntryToExit()
+        [TestCase(0)]
+        [TestCase(10)]
+        [TestCase(19)]
+        public void F_PitLaneIsDrivableEntryToExit(int box)
         {
             var pit = Bed.def.pit;
             var g = Bed.g;
-            float lane(float raw) => pit.side * (g.WidthAt(raw) * 0.5f + pit.laneCentreFromEdge);
-            // As RaceController drives a pit stop: line up on the pit side 160 m before the entry, follow the
-            // lane after the entry, merge back where the pit wall ends (PitMergeLength before the exit).
+            float boxD = g.Wrap(pit.BoxDistance(box));
+            // As RaceController drives a pit stop: line up on the pit side 160 m before the entry, then the fast lane,
+            // turn into the own box and pull out again (Apex.Race.PitLaneLayout), merge back where the pit wall ends.
             float target(float raw)
             {
                 float into = Apex.Core.ApexMath.PosMod(raw - pit.entry, g.Length);
                 float toEntry = Apex.Core.ApexMath.PosMod(pit.entry - raw, g.Length);
                 float span = Apex.Core.ApexMath.PosMod(pit.exit - pit.entry, g.Length);
                 if (toEntry < 160f) return pit.side * (g.WidthAt(raw) * 0.5f - 1.6f);
-                if (into < span - 60f) return lane(raw);
-                return float.NaN;
+                if (into >= span - 60f) return float.NaN;
+                float toBox = Apex.Core.ApexMath.PosMod(boxD - raw, g.Length);
+                if (toBox > g.Length * 0.5f) toBox -= g.Length;
+                return pit.side * (g.WidthAt(raw) * 0.5f + Apex.Race.PitLaneLayout.FromEdge(toBox, toBox < 0f, pit.laneCentreFromEdge));
             }
             var r = Bed.Drive(g.Wrap(pit.entry - 150f), 0f, 150f + Apex.Core.ApexMath.PosMod(pit.exit - pit.entry, g.Length) + 150f, 90f,
                 initialSpeed: 22f, lateralAt: target, speedLimit: pit.SpeedLimit);

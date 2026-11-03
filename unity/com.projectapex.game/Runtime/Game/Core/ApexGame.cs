@@ -656,6 +656,16 @@ namespace Apex.Game
             guideComp.settings = Settings;
             guideComp.Build(new Apex.AI.RacingLineGuide(Race.PlayerLine), circuit.Surface);
             racingLineGuide = guideComp;
+            // Pit crews and the pit stop animation (docs/PIT_LANE.md).
+            if (circuit.Pit != null)
+            {
+                var crewGo = new GameObject("PitCrews");
+                crewGo.transform.SetParent(world.transform, false);
+                var crew = crewGo.AddComponent<PitCrewComponent>();
+                crew.race = Race;
+                crew.quality = Settings.environmentDetail;
+                crew.Build(circuit);
+            }
 
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);

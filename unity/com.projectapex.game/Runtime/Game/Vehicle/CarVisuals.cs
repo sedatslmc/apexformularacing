@@ -112,6 +112,23 @@ namespace Apex.Game
 
         float shownFront = -1f, shownRear = -1f;
 
+        Renderer[][] wheelRenderers;
+        readonly bool[] wheelHidden = new bool[4];
+
+        /// <summary>Hides a wheel while the pit crew has it off the hub (it is drawn in the crew's hands then).</summary>
+        public void SetWheelHidden(int i, bool hidden)
+        {
+            if (i < 0 || i > 3 || wheelHidden[i] == hidden || vehicle == null) return;
+            if (wheelRenderers == null)
+            {
+                wheelRenderers = new Renderer[4][];
+                for (int k = 0; k < 4; k++)
+                    wheelRenderers[k] = vehicle.WheelVisuals[k] != null ? vehicle.WheelVisuals[k].GetComponentsInChildren<Renderer>(true) : new Renderer[0];
+            }
+            wheelHidden[i] = hidden;
+            foreach (var r in wheelRenderers[i]) if (r != null) r.enabled = !hidden;
+        }
+
         /// <summary>Damaged wings droop, destroyed ones are gone; a puncture drops the wheel.</summary>
         void UpdateDamage(VehicleSimulation sim)
         {

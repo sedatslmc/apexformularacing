@@ -267,6 +267,7 @@ namespace Apex.Game
                 Frame(marks, g, d, lat, 6f, 3.6f, 0.15f);
             }
             AddMesh(parent, "PitBoxes", marks.ToMesh("PitBoxes"), new[] { "Marker" }, null);
+            BuildPitLaneMarkings(parent, ci);
             // Garage block behind the outer pit wall (event circuits get the full pit building instead).
             if (EventBrandingBuilder.IsEvent(ci.Definition)) return;
             float start = pit.BoxDistance(0) - 15f, end = pit.BoxDistance(19) + 15f;
@@ -279,6 +280,65 @@ namespace Apex.Game
             garage.AddComponent<MeshFilter>().sharedMesh = CarBuilder.PrimitiveMesh(PrimitiveType.Cube);
             garage.AddComponent<MeshRenderer>().sharedMaterial = ApexMaterials.Get("Building");
             garage.AddComponent<BoxCollider>();
+        }
+
+        /// <summary>
+        /// Lane markings (docs/PIT_LANE.md, Apex.Race.PitLaneLayout): the white line between fast lane and working lane
+        /// along the pit wall, white lines across the lane where the speed limit starts and ends, and a stripe in the
+        /// team colour at the garage end of each box (box b belongs to team b / 2).
+        /// </summary>
+        static void BuildPitLaneMarkings(Transform parent, CircuitInstance ci)
+        {
+            var g = ci.Geometry;
+            var pit = ci.Pit;
+            float side = pit.side;
+            float span = Apex.Core.ApexMath.PosMod(pit.exit - pit.entry, g.Length);
+            var lines = new MeshData(1);
+            float Edge(float d) => g.WidthAt(g.Wrap(d)) * 0.5f;
+            // Divider: from where the pit wall starts to where it ends, in 4 m pieces (follows the curve).
+            for (float s = RaceController.PitMergeLength; s < span - RaceController.PitMergeLength; s += 4f)
+            {
+                float d0 = g.Wrap(pit.entry + s), d1 = g.Wrap(pit.entry + Mathf.Min(s + 4f, span - RaceController.PitMergeLength));
+                float l = side * (Edge(d0) + Apex.Race.PitLaneLayout.Divider);
+                Patch(lines, g, d0, d1, l - 0.075f, l + 0.075f);
+            }
+            // Speed limit lines across the whole lane (apron to the outer wall).
+            foreach (float at in new[] { pit.entry + 10f, pit.exit - 40f })
+            {
+                float d = g.Wrap(at);
+                float a = side * Edge(d), b = side * (Edge(d) + PitOuter - 0.3f);
+                Patch(lines, g, d, g.Wrap(d + 0.4f), Mathf.Min(a, b), Mathf.Max(a, b));
+            }
+            AddMesh(parent, "PitLaneLines", lines.ToMesh("PitLaneLines"), new[] { "Line" }, null);
+            // Team stripes at the garage end of the boxes.
+            var teams = new MeshData(Apex.Core.Roster.Teams.Length);
+            var keys = new string[Apex.Core.Roster.Teams.Length];
+            for (int t = 0; t < keys.Length; t++)
+            {
+                var team = Apex.Core.Roster.Teams[t];
+                keys[t] = "PitTeam" + t;
+                ApexMaterials.Register(keys[t], new Material(EnvironmentMaterials.Solid(new Color(team.r, team.g, team.b))) { name = keys[t] });
+            }
+            for (int box = 0; box < 20; box++)
+            {
+                int t = Mathf.Min(box / 2, keys.Length - 1);
+                float d = g.Wrap(pit.BoxDistance(box));
+                float lat = ci.PitLaneLateral(d);
+                float inner = lat + side * (Apex.Race.PitLaneLayout.BoxWidth * 0.5f + 0.15f), outer = inner + side * 0.6f;
+                Patch(teams, g, g.Wrap(d - 2.8f), g.Wrap(d + 2.8f), Mathf.Min(inner, outer), Mathf.Max(inner, outer), t);
+            }
+            AddMesh(parent, "PitTeamStripes", teams.ToMesh("PitTeamStripes"), keys, null);
+        }
+
+        /// <summary>Flat quad on the road between two distances and two lateral offsets, 1.2 cm up.</summary>
+        static void Patch(MeshData md, TrackGeometry g, float d0, float d1, float l0, float l1, int sub = 0)
+        {
+            const float lift = 0.013f;
+            var a = (g.PositionAt(d0) + g.RightAt(d0) * l0).ToUnity() + Vector3.up * lift;
+            var b = (g.PositionAt(d0) + g.RightAt(d0) * l1).ToUnity() + Vector3.up * lift;
+            var c = (g.PositionAt(d1) + g.RightAt(d1) * l0).ToUnity() + Vector3.up * lift;
+            var e = (g.PositionAt(d1) + g.RightAt(d1) * l1).ToUnity() + Vector3.up * lift;
+            md.Quad(sub, a, b, c, e, Vector2.zero, Vector2.right, Vector2.up, Vector2.one);
         }
 
         /// <summary>Rectangular outline on the road surface (centre distance, lateral, length, width, line width).</summary>
