@@ -1037,6 +1037,28 @@ else if (mode == "guide-csv")
         }
     }
 }
+else if (mode == "pitcrew")
+{
+    // Pit stop choreography as CSV for a plan view: frame,role,x,z,kneel,wheel
+    var car = Apex.Race.PitCrewChoreography.Car.Default;
+    var frames = new (string name, Apex.Race.PitCrewChoreography.Phase phase, float t)[]
+    {
+        ("Warten", Apex.Race.PitCrewChoreography.Phase.Waiting, 0f),
+        ("Bereit", Apex.Race.PitCrewChoreography.Phase.Ready, 2f),
+        ("Heber unter dem Auto", Apex.Race.PitCrewChoreography.Phase.Service, 0.3f),
+        ("Alte Räder ab", Apex.Race.PitCrewChoreography.Phase.Service, 0.8f),
+        ("Neue Räder drauf", Apex.Race.PitCrewChoreography.Phase.Service, 1.4f),
+        ("Freigabe", Apex.Race.PitCrewChoreography.Phase.Service, 2.55f),
+    };
+    var ci = System.Globalization.CultureInfo.InvariantCulture;
+    Console.WriteLine("frame,role,x,z,kneel,wheel");
+    foreach (var f in frames)
+        foreach (var r in Apex.Race.PitCrewChoreography.Roles)
+        {
+            var p = Apex.Race.PitCrewChoreography.PoseOf(r, f.phase, f.t, 2.6f, true, car, -1);
+            Console.WriteLine(string.Format(ci, "{0},{1},{2:F2},{3:F2},{4:F2},{5}", f.name, r, p.position.X, p.position.Z, p.kneel, p.carriesWheel ? 1 : 0));
+        }
+}
 else if (mode == "kblap")
 {
     // Keyboard lap on the collider surface with a trace between two distances: kblap <profile 0-2> <from> <to> [keys 0-3]

@@ -633,9 +633,16 @@ namespace Apex.Game
                     bool auto = !rc.isPlayer || rc.pitAssistActive;
                     if (auto)
                     {
+                        // Fast lane along the pit wall; turn into the working lane only for the own box and pull
+                        // out again after the stop (PitLaneLayout) – never through another team's box.
+                        float boxD = g.Wrap(pit.BoxDistance(rc.boxIndex));
+                        float toOwn = ApexMath.PosMod(boxD - rc.raw, L);
+                        if (toOwn > L * 0.5f) toOwn -= L;
+                        bool served = ps.stage == PitState.Stage.Leaving;
+                        float fromEdge = PitLaneLayout.FromEdge(toOwn, served, pit.laneCentreFromEdge);
                         // Merge back where the pit wall ends (60 m before the exit): at 80 km/h the lane change
                         // takes ~25 m, so releasing only 25 m before the exit could run a car into the wall end.
-                        rc.ai.forcedLateral = sinceEntry > span - PitMergeLength ? float.NaN : laneLat;
+                        rc.ai.forcedLateral = sinceEntry > span - PitMergeLength ? float.NaN : pit.side * (edge + fromEdge);
                         rc.ai.speedCap = pit.SpeedLimit;
                     }
                     if (ps.stage == PitState.Stage.InLane)
