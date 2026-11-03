@@ -63,6 +63,9 @@ namespace Apex.Game
             ui.SetVisible(false);
         }
 
+        /// <summary>Re-reads every option value (e.g. after a key was assigned outside the row's own change).</summary>
+        public void RefreshValues() => rows?.RefreshValues();
+
         public bool Visible { get; private set; }
 
         public void Hide()

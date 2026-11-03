@@ -7,6 +7,8 @@ namespace Apex.Core
         Keyboard = 0,
         TouchButtons = 1,
         Tilt = 2,
+        /// <summary>Virtual steering zone: thumb travel steers (InputLogic.TouchWheel).</summary>
+        TouchWheel = 3,
     }
 
     /// <summary>Assist presets. Balanced is the default: realistic grip and inertia, assists
@@ -37,6 +39,10 @@ namespace Apex.Core
         /// <summary>0 off, 1 light, 2 full.</summary>
         public int steeringAssistLevel = 1;
         public bool autoGearbox = true;
+        /// <summary>Touch steering zone: screen widths of thumb travel for full lock (0.06 .. 0.25).</summary>
+        public float touchWheelRange = 0.12f;
+        /// <summary>Player key assignment (InputLogic.KeyBindings.Serialize); empty = the default keys.</summary>
+        public string keyBindings = "";
         /// <summary>Keyboard steering profile (InputLogic.KeyboardSteering.Profile): 0 Direkt, 1 Ausgewogen, 2 Smooth.</summary>
         public int keyboardProfile = 1;
         /// <summary>"Lenkempfindlichkeit" 0.5 .. 1.5: ramp rates of the keys, curve of the stick.</summary>
@@ -150,6 +156,7 @@ namespace Apex.Core
             changed |= ClampField(ref steeringSmoothing, 0f, 1f);
             changed |= ClampInt(ref racingLineMode, 0, 2);
             changed |= ClampInt(ref brakeAdvice, 0, 2);
+            changed |= ClampField(ref touchWheelRange, 0.06f, 0.25f);
             changed |= ClampInt(ref environmentDetail, 0, GraphicsPreset.EnvironmentLevels - 1);
             changed |= ClampInt(ref graphicsTier, -1, GraphicsPreset.TierCount - 1);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
