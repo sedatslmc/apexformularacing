@@ -7563,7 +7563,10 @@
   "exit": 520,
   "box_start": 200,
   "box_spacing": 9,
-  "speed_limit_kmh": 80
+  "speed_limit_kmh": 80,
+  "limit_end": 400,
+  "entry_taper": 150,
+  "exit_taper": 20
  },
  "corner_names": [
   "Muallim Naci",

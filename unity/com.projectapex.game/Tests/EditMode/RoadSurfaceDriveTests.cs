@@ -98,24 +98,42 @@ namespace Apex.Tests
         {
             var pit = Bed.def.pit;
             var g = Bed.g;
+            float L = g.Length;
             float boxD = g.Wrap(pit.BoxDistance(box));
-            // As RaceController drives a pit stop: line up on the pit side 160 m before the entry, then the fast lane,
-            // turn into the own box and pull out again (Apex.Race.PitLaneLayout), merge back where the pit wall ends.
+            var plan = pit.PlanFor(L);
+            float Since(float raw) => -pit.ToEntry(raw, L);
+            // As RaceController drives a pit stop (Apex.Race.PitLaneLayout.Route): along the entry lane behind the
+            // white line, the fast lane, into the own box and out, then the acceleration lane until it merges.
             float target(float raw)
             {
-                float into = Apex.Core.ApexMath.PosMod(raw - pit.entry, g.Length);
-                float toEntry = Apex.Core.ApexMath.PosMod(pit.entry - raw, g.Length);
-                float span = Apex.Core.ApexMath.PosMod(pit.exit - pit.entry, g.Length);
-                if (toEntry < 160f) return pit.side * (g.WidthAt(raw) * 0.5f - 1.6f);
-                if (into >= span - 60f) return float.NaN;
-                float toBox = Apex.Core.ApexMath.PosMod(boxD - raw, g.Length);
-                if (toBox > g.Length * 0.5f) toBox -= g.Length;
-                return pit.side * (g.WidthAt(raw) * 0.5f + Apex.Race.PitLaneLayout.FromEdge(toBox, toBox < 0f, pit.laneCentreFromEdge));
+                float since = Since(raw);
+                if (since > plan.MergeEnd) return float.NaN;
+                float toBox = Apex.Core.ApexMath.PosMod(boxD - raw, L);
+                if (toBox > L * 0.5f) toBox -= L;
+                return pit.side * (g.WidthAt(raw) * 0.5f + Apex.Race.PitLaneLayout.Route(plan, since, toBox, toBox < 0f, pit.laneCentreFromEdge));
             }
-            var r = Bed.Drive(g.Wrap(pit.entry - 150f), 0f, 150f + Apex.Core.ApexMath.PosMod(pit.exit - pit.entry, g.Length) + 150f, 90f,
-                initialSpeed: 22f, lateralAt: target, speedLimit: pit.SpeedLimit);
-            AssertClean(r, "pit lane");
-            Assert.That(r.distanceDriven, Is.GreaterThan(500f), r.ToString());
+            float limit(float raw) => plan.Limited(Since(raw)) ? pit.SpeedLimit : float.PositiveInfinity;
+            // Speed and lateral where the acceleration lane is about to merge.
+            float mergeSpeed = 0f, laneAt30 = float.NaN;
+            Bed.trace = (raw, rig) =>
+            {
+                float since = Since(raw);
+                if (since > plan.limitSpan + 30f && float.IsNaN(laneAt30)) laneAt30 = pit.side * g.Project(rig.position).lateral - g.WidthAt(raw) * 0.5f;
+                if (since > plan.MergeEnd - 10f && mergeSpeed == 0f) mergeSpeed = rig.ForwardSpeed;
+            };
+            float start = pit.entryTaper + 60f;
+            try
+            {
+                var r = Bed.Drive(g.Wrap(pit.entry - start), 0f, start + plan.MergeEnd + 100f, 120f,
+                    initialSpeed: 22f, lateralAt: target, speedLimitAt: limit);
+                AssertClean(r, "pit lane");
+                Assert.That(r.distanceDriven, Is.GreaterThan(plan.span + start), r.ToString());
+            }
+            finally { Bed.trace = null; }
+            TestContext.WriteLine($"box {box}: {laneAt30:F1} m beyond the edge 30 m after the exit line, {mergeSpeed * 3.6f:F0} km/h at the merge");
+            // The exit lane: still in it 30 m after the exit line, and well over the limit before merging.
+            Assert.That(laneAt30, Is.GreaterThan(1f), "in the acceleration lane behind the white line");
+            Assert.That(mergeSpeed, Is.GreaterThan(pit.SpeedLimit * 1.4f), $"accelerated to {mergeSpeed * 3.6f:F0} km/h before merging");
         }
 
         [Test]

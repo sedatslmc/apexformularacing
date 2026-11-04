@@ -36,6 +36,7 @@ namespace Apex.Tracks
         {
             public float maxGrade2, maxGrade50, maxGradeChange, worstCurvatureUse, minClearance = float.PositiveInfinity;
             public float minCrestRadius = float.PositiveInfinity, minSagRadius = float.PositiveInfinity;
+            public string maxSurfaceOffsetAt = "";
             public float maxSurfaceOffset, maxCrossFall, minWidth = float.PositiveInfinity, heightMin = float.PositiveInfinity, heightMax = float.NegativeInfinity;
             public int samples, gridSlotsOk;
         }
@@ -144,7 +145,11 @@ namespace Apex.Tracks
                         continue;
                     }
                     float off = hit.point.Y - p.Y;
-                    summary.maxSurfaceOffset = MathF.Max(summary.maxSurfaceOffset, MathF.Abs(off));
+                    if (MathF.Abs(off) > summary.maxSurfaceOffset)
+                    {
+                        summary.maxSurfaceOffset = MathF.Abs(off);
+                        summary.maxSurfaceOffsetAt = $"{hit.part} at {g.Distances[i]:F0} m, lateral {l:F1}";
+                    }
                     if (hit.part != "Road" && hit.part != "PitApron" && hit.part != "PitLane" && !(hit.part == "Kerbs" && MathF.Abs(l) > hw - 0.1f))
                         Add(Severity.Critical, "foreign surface", i, off, 0f, $"{hit.part} at lateral {l:F1} m");
                     else if (MathF.Abs(off) > SurfaceTolerance && hit.part == "Road")
@@ -204,7 +209,7 @@ namespace Apex.Tracks
             sb.AppendLine($"samples {s.samples} (every {bed.g.Spacing:F2} m), height {s.heightMin:F1}..{s.heightMax:F1} m, width min {s.minWidth:F1} m");
             sb.AppendLine($"grade max {s.maxGrade2 * 100:F1} % (2 m), {s.maxGrade50 * 100:F1} % (50 m); grade change max {s.maxGradeChange * 100:F2} %/10 m");
             sb.AppendLine($"vertical radius min: crest {s.minCrestRadius:F0} m, sag {s.minSagRadius:F0} m; worst use of the vehicle limit {s.worstCurvatureUse * 100:F0} %; min body clearance {s.minClearance * 1000:F0} mm");
-            sb.AppendLine($"collider surface vs design max {s.maxSurfaceOffset * 1000:F1} mm, cross-fall max {s.maxCrossFall * 100:F2} %, grid slots ok {s.gridSlotsOk}/20");
+            sb.AppendLine($"collider surface vs design max {s.maxSurfaceOffset * 1000:F1} mm ({s.maxSurfaceOffsetAt}), cross-fall max {s.maxCrossFall * 100:F2} %, grid slots ok {s.gridSlotsOk}/20");
             int crit = Critical, warn = findings.FindAll(f => f.severity == Severity.Warning).Count;
             sb.AppendLine($"findings: {crit} critical, {warn} warnings, {findings.Count - crit - warn} info");
             int k = 0;

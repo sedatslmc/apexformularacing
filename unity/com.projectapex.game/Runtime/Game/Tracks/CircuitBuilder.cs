@@ -292,23 +292,37 @@ namespace Apex.Game
             var g = ci.Geometry;
             var pit = ci.Pit;
             float side = pit.side;
-            float span = Apex.Core.ApexMath.PosMod(pit.exit - pit.entry, g.Length);
+            var plan = pit.PlanFor(g.Length);
             var lines = new MeshData(1);
             float Edge(float d) => g.WidthAt(g.Wrap(d)) * 0.5f;
-            // Divider: from where the pit wall starts to where it ends, in 4 m pieces (follows the curve).
-            for (float s = RaceController.PitMergeLength; s < span - RaceController.PitMergeLength; s += 4f)
+            // Divider: along the pit wall, in 4 m pieces (follows the curve).
+            float wallStart = RoadSurface.PitWallStart;
+            for (float s = wallStart; s < plan.WallEnd; s += 4f)
             {
-                float d0 = g.Wrap(pit.entry + s), d1 = g.Wrap(pit.entry + Mathf.Min(s + 4f, span - RaceController.PitMergeLength));
+                float d0 = g.Wrap(pit.entry + s), d1 = g.Wrap(pit.entry + Mathf.Min(s + 4f, plan.WallEnd));
                 float l = side * (Edge(d0) + Apex.Race.PitLaneLayout.Divider);
                 Patch(lines, g, d0, d1, l - 0.075f, l + 0.075f);
             }
-            // Speed limit lines across the whole lane (apron to the outer wall).
-            foreach (float at in new[] { pit.entry + 10f, pit.exit - 40f })
+            // Speed limit lines across the whole lane (apron to the outer wall): limit on after the entry, off at the exit line.
+            foreach (float at in new[] { pit.entry + CircuitDefinition.PitLane.LimiterStart, pit.entry + plan.limitSpan })
             {
                 float d = g.Wrap(at);
                 float a = side * Edge(d), b = side * (Edge(d) + PitOuter - 0.3f);
                 Patch(lines, g, d, g.Wrap(d + 0.4f), Mathf.Min(a, b), Mathf.Max(a, b));
             }
+            // Solid white lines along the track edge: the entry line from where the entry lane opens to the entry, the
+            // exit line beside the acceleration lane from the end of the pit wall until the lane has narrowed.
+            void EdgeLine(float from, float length)
+            {
+                for (float s = 0f; s < length; s += 4f)
+                {
+                    float d0 = g.Wrap(from + s), d1 = g.Wrap(from + Mathf.Min(s + 4f, length));
+                    float l = side * (Edge(d0) + 0.2f);
+                    Patch(lines, g, d0, d1, l - 0.1f, l + 0.1f);
+                }
+            }
+            EdgeLine(pit.entry - pit.entryTaper, pit.entryTaper + wallStart);
+            EdgeLine(pit.entry + plan.WallEnd, plan.span - plan.WallEnd + pit.exitTaper * 0.85f);
             AddMesh(parent, "PitLaneLines", lines.ToMesh("PitLaneLines"), new[] { "Line" }, null);
             // Team stripes at the garage end of the boxes.
             var teams = new MeshData(Apex.Core.Roster.Teams.Length);

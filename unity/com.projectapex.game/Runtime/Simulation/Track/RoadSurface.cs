@@ -68,11 +68,17 @@ namespace Apex.Tracks
         public const float PitOuter = 13.5f;
         /// <summary>Pit wall offset from the track edge.</summary>
         public const float PitWallFromEdge = 2.1f;
+        /// <summary>The pit wall starts this far after the pit entry (the entry lane has fully opened by then).</summary>
+        public const float PitWallStart = Apex.Race.PitLaneLayout.WallStart;
 
         public readonly TrackGeometry geometry;
         public readonly CircuitDefinition definition;
         public readonly float[] kerbLeft, kerbRight, kerbHeight;
+        /// <summary>Between pit entry and exit (pit wall, boxes, garages).</summary>
         public readonly bool[] pitMask;
+        /// <summary>Width of the pit area beside the track edge (m): PitOuter in the pit, growing over the entry lane,
+        /// shrinking over the exit lane, 0 elsewhere.</summary>
+        public readonly float[] pitWidth;
         public readonly float[] wallLeft, wallRight;
         public readonly SurfaceMesh road, kerbs, runoff, barriers, skirt;
         public readonly SurfaceMesh pitApron, pitLane, pitWall;
@@ -96,8 +102,13 @@ namespace Apex.Tracks
             kerbHeight = kerbH;
             int n = g.Count;
             pitMask = new bool[n];
+            pitWidth = new float[n];
             if (def.pit != null)
-                for (int i = 0; i < n; i++) pitMask[i] = def.pit.Contains(g.Distances[i], g.Length);
+                for (int i = 0; i < n; i++)
+                {
+                    pitMask[i] = def.pit.Contains(g.Distances[i], g.Length);
+                    pitWidth[i] = PitOuter * def.pit.Coverage(g.Distances[i], g.Length);
+                }
             wallLeft = new float[n];
             wallRight = new float[n];
             for (int i = 0; i < n; i++)
@@ -120,8 +131,15 @@ namespace Apex.Tracks
             float[] r = side < 0 ? g.RunoffLeft : g.RunoffRight;
             float[] kerb = side < 0 ? kerbLeft : kerbRight;
             // Run-off is measured from the track edge; a kerb lies inside it.
-            return g.Widths[i] * 0.5f + MathF.Max(r != null ? r[i] : RunoffWidth, kerb[i] + 0.2f);
+            float normal = g.Widths[i] * 0.5f + MathF.Max(r != null ? r[i] : RunoffWidth, kerb[i] + 0.2f);
+            // Entry and exit lanes: the barrier steps out to make room for the lane where it is wider than the run-off.
+            if (definition?.pit != null && side == definition.pit.side && pitWidth != null && pitWidth[i] > 0f)
+                normal = MathF.Max(normal, g.Widths[i] * 0.5f + pitWidth[i]);
+            return normal;
         }
+
+        /// <summary>Entry or exit lane here (pit area, but not between entry and exit).</summary>
+        bool PitTaper(int i) => pitWidth != null && pitWidth[i] > 0.01f && !pitMask[i];
 
         public static Vector3 P(TrackGeometry g, int i, float lateral, float height) =>
             g.Positions[i] + g.Rights[i] * lateral + new Vector3(0f, height, 0f);
@@ -220,8 +238,9 @@ namespace Apex.Tracks
                 Ribbon(runoffMesh, 0, g, i =>
                 {
                     float inner = g.Widths[i] * 0.5f + k[i];
-                    // The pit lane replaces the run-off on its side.
-                    float outer = pitSide && pitMask[i] ? inner : WallOffset(i, false, side);
+                    // The pit lane replaces the run-off on its side; beside the entry/exit lanes it starts outside them.
+                    if (pitSide && PitTaper(i)) inner = MathF.Max(inner, g.Widths[i] * 0.5f + pitWidth[i]);
+                    float outer = pitSide && pitMask[i] ? inner : MathF.Max(inner, WallOffset(i, false, side));
                     return side < 0 ? new Vector4(-outer, -RunoffDrop, -inner, 0f) : new Vector4(inner, 0f, outer, -RunoffDrop);
                 });
                 for (int i = 0; i < n; i++)
@@ -229,7 +248,10 @@ namespace Apex.Tracks
                     int j = (i + 1) % n;
                     bool pi = pitSide && pitMask[i], pj = pitSide && pitMask[j];
                     float oi = side * WallOffset(i, pi, side), oj = side * WallOffset(j, pj, side);
-                    float yi = pi ? 0f : -RunoffDrop, yj = pj ? 0f : -RunoffDrop;
+                    // On the level of the pit lane where the barrier stands at its outer edge (pit, and the lanes'
+                    // wide part); on the run-off level elsewhere.
+                    bool li = pi || (pitSide && PitTaper(i) && WallAtLane(i)), lj = pj || (pitSide && PitTaper(j) && WallAtLane(j));
+                    float yi = li ? 0f : -RunoffDrop, yj = lj ? 0f : -RunoffDrop;
                     float v = g.Distances[i] * 0.25f;
                     int sub = ((int)(g.Distances[i] / 6f)) % 2;
                     var bi = P(g, i, oi, yi - 0.4f);
@@ -245,6 +267,16 @@ namespace Apex.Tracks
             }
         }
 
+        /// <summary>The barrier stands at the lane's outer edge (lane wider than the run-off).</summary>
+        bool WallAtLane(int i)
+        {
+            var g = geometry;
+            float[] r = definition.pit.side < 0 ? g.RunoffLeft : g.RunoffRight;
+            float[] kerb = definition.pit.side < 0 ? kerbLeft : kerbRight;
+            float runoff = MathF.Max(r != null ? r[i] : RunoffWidth, kerb[i] + 0.2f);
+            return pitWidth[i] >= runoff - 0.01f;
+        }
+
         void BuildPit(out SurfaceMesh apron, out SurfaceMesh lane, out SurfaceMesh wall)
         {
             var g = geometry;
@@ -252,19 +284,23 @@ namespace Apex.Tracks
             float side = pit.side;
             apron = new SurfaceMesh("PitApron", 1, SurfaceType.Asphalt);
             lane = new SurfaceMesh("PitLane", 1, SurfaceType.PitLane);
+            // Apron (first 2 m) and lane, in the entry and exit lanes as wide as the pit area there.
             Ribbon(apron, 0, g, i =>
             {
-                if (!pitMask[i]) return Vector4.Zero;
+                float wdt = MathF.Min(2f, pitWidth[i]);
+                if (wdt <= 0.01f) return Vector4.Zero;
                 float e = g.Widths[i] * 0.5f;
-                return side < 0 ? new Vector4(-(e + 2f), 0f, -e, 0f) : new Vector4(e, 0f, e + 2f, 0f);
+                return side < 0 ? new Vector4(-(e + wdt), 0f, -e, 0f) : new Vector4(e, 0f, e + wdt, 0f);
             });
             Ribbon(lane, 0, g, i =>
             {
-                if (!pitMask[i]) return Vector4.Zero;
+                if (pitWidth[i] <= 2.01f) return Vector4.Zero;
                 float e = g.Widths[i] * 0.5f;
-                return side < 0 ? new Vector4(-(e + PitOuter), 0f, -(e + 2f), 0f) : new Vector4(e + 2f, 0f, e + PitOuter, 0f);
+                return side < 0 ? new Vector4(-(e + pitWidth[i]), 0f, -(e + 2f), 0f) : new Vector4(e + 2f, 0f, e + pitWidth[i], 0f);
             });
-            // Pit wall between the merge zones.
+            // Pit wall from the entry to just after the exit line (the speed-limited lane); the entry and exit lanes beyond it are
+            // separated from the track by white lines only (CircuitBuilder.BuildPitLaneMarkings).
+            float wallEnd = pit.PlanFor(g.Length).WallEnd;
             wall = new SurfaceMesh("PitWall", 1, SurfaceType.Wall);
             int n = g.Count;
             for (int i = 0; i < n; i++)
@@ -272,7 +308,7 @@ namespace Apex.Tracks
                 int j = (i + 1) % n;
                 float di = ApexMath.PosMod(g.Distances[i] - pit.entry, g.Length);
                 float span = ApexMath.PosMod(pit.exit - pit.entry, g.Length);
-                if (!pitMask[i] || !pitMask[j] || di < 60f || di > span - 60f) continue;
+                if (!pitMask[i] || !pitMask[j] || di < PitWallStart || di > wallEnd) continue;
                 float oi = side * (g.Widths[i] * 0.5f + PitWallFromEdge), oj = side * (g.Widths[j] * 0.5f + PitWallFromEdge);
                 wall.Quad(0, P(g, i, oi, -0.2f), P(g, i, oi, 1.0f), P(g, j, oj, -0.2f), P(g, j, oj, 1.0f),
                     Vector2.Zero, Vector2.UnitY, Vector2.UnitX, Vector2.One, true);

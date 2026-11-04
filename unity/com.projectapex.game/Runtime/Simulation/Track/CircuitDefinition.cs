@@ -38,7 +38,58 @@ namespace Apex.Tracks
             public float laneCentreFromEdge = 7.5f;
             public float laneWidth = 10f;
 
+            /// <summary>
+            /// Entry lane before <see cref="entry"/>: over this distance the lane opens beside the track, marked by the
+            /// white entry line along the track edge (docs/PIT_LANE.md).
+            /// </summary>
+            public float entryTaper = 150f;
+            /// <summary>
+            /// Exit lane after <see cref="exit"/> (the end of the speed limit and the pit wall): an acceleration lane
+            /// beside the track, behind a white line, narrowing to nothing over this distance.
+            /// </summary>
+            public float exitTaper = 170f;
+            /// <summary>
+            /// Pit exit line (raw distance): the speed limit ends here and the acceleration lane begins. NaN = at
+            /// <see cref="exit"/>. Set earlier where the track leaves no room for an exit lane after the pit area
+            /// (bosphorus_a: the circuit doubles back right behind it) – the cars then accelerate in the lane itself.
+            /// </summary>
+            public float limitEnd = float.NaN;
+            /// <summary>Speed limit line after the entry (m).</summary>
+            public const float LimiterStart = Apex.Race.PitLaneLayout.LimiterStart;
+
             public float SpeedLimit => speedLimitKmh / 3.6f;
+
+            /// <summary>
+            /// Share of the full pit width (0..1) at a lap distance: 1 between entry and exit, rising smoothly over the
+            /// entry lane before it and falling over the exit lane after it, 0 elsewhere.
+            /// </summary>
+            public float Coverage(float raw, float length)
+            {
+                float span = Apex.Core.ApexMath.PosMod(exit - entry, length);
+                float since = Apex.Core.ApexMath.PosMod(raw - entry, length);
+                if (since <= span) return 1f;
+                float toEntry = Apex.Core.ApexMath.PosMod(entry - raw, length);
+                float afterExit = since - span;
+                float w = 0f;
+                if (toEntry < entryTaper) w = Math.Max(w, 1f - toEntry / entryTaper);
+                if (afterExit < exitTaper) w = Math.Max(w, 1f - afterExit / exitTaper);
+                return w * w * (3f - 2f * w);
+            }
+
+            /// <summary>Lane plan for the lap length (Apex.Race.PitLaneLayout).</summary>
+            public Apex.Race.PitLaneLayout.Plan PlanFor(float length)
+            {
+                float span = Apex.Core.ApexMath.PosMod(exit - entry, length);
+                float limit = float.IsNaN(limitEnd) ? span : Math.Min(span, Apex.Core.ApexMath.PosMod(limitEnd - entry, length));
+                return new Apex.Race.PitLaneLayout.Plan(span, limit, entryTaper, exitTaper);
+            }
+
+            /// <summary>Metres to the entry (before it, &gt; 0) – negative once past it.</summary>
+            public float ToEntry(float raw, float length)
+            {
+                float d = Apex.Core.ApexMath.PosMod(entry - raw, length);
+                return d > length * 0.5f ? d - length : d;
+            }
 
             /// <summary>Is the raw distance between entry and exit (handles wrap-around)?</summary>
             public bool Contains(float raw, float length)
@@ -178,6 +229,9 @@ namespace Apex.Tracks
                     boxStart = Num(pd, "box_start", 0f),
                     boxSpacing = Num(pd, "box_spacing", 10f),
                     speedLimitKmh = Num(pd, "speed_limit_kmh", 80f),
+                    entryTaper = Num(pd, "entry_taper", 150f),
+                    exitTaper = Num(pd, "exit_taper", 170f),
+                    limitEnd = Num(pd, "limit_end", float.NaN),
                 };
             }
             if (root.TryGetValue("corners", out var cm) && cm is List<object> cml)

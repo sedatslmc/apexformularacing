@@ -339,7 +339,10 @@ def main(argv=None):
         "start_line_distance": round(lead, 2),
         "points": rows,
         "pit": {"side": -1, "entry": round(lead - 170), "exit": round(lead + 230), "box_start": round(lead - 90),
-                "box_spacing": 9, "speed_limit_kmh": 80},
+                "box_spacing": 9, "speed_limit_kmh": 80,
+                # The circuit doubles back 1-3 m beside the pit area right after its end: the exit line (end of the
+                # limit) lies 120 m earlier, the cars accelerate in the lane and merge before the end (docs/PIT_LANE.md).
+                "limit_end": round(lead + 110), "entry_taper": 150, "exit_taper": 20},
         "corner_names": [c["name"] for c in plan["corners"]],
         # Approved corners: raw distance of the apex (file distance = lap distance + LEAD) and direction.
         "corners": [dict({"name": c["name"], "distance": round((c["s"] + lead) % L, 1), "right": c["dir"] == "rechts",
