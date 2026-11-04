@@ -333,7 +333,19 @@ namespace Apex.Game
                     }
                     break;
                 default:
-                    if (prev == PitCrewChoreography.Phase.Service) { box.phase = PitCrewChoreography.Phase.Return; box.t = 0f; }
+                    if (prev == PitCrewChoreography.Phase.Service)
+                    {
+                        // Released: the crew stays where it finished (EndSpot) until the car has driven clear of the box,
+                        // then walks back – nobody crosses the path of the leaving car.
+                        float signed = ApexMath.PosMod(g.Wrap(pit.BoxDistance(box.index)) - rc.raw + g.Length * 0.5f, g.Length) - g.Length * 0.5f;
+                        if (ps.stage == PitState.Stage.Leaving && signed > -PitCrewChoreography.ClearDistance)
+                        {
+                            box.t = box.service;
+                            break;
+                        }
+                        box.phase = PitCrewChoreography.Phase.Return;
+                        box.t = 0f;
+                    }
                     if (box.phase == PitCrewChoreography.Phase.Return)
                     {
                         box.t += dt;
@@ -345,7 +357,8 @@ namespace Apex.Game
             // Work around the car where it actually stopped (up to a few metres off the box centre).
             Vector3 targetPos = box.position;
             Quaternion targetRot = box.rotation;
-            if (box.phase == PitCrewChoreography.Phase.Service && rc.car != null)
+            // Around the car while it stands; once released the crew frame stays at the box (the crew does not follow the car).
+            if (box.phase == PitCrewChoreography.Phase.Service && ps.stage == PitState.Stage.Stopped && rc.car != null)
             {
                 var ct = rc.car.transform;
                 targetPos = new Vector3(ct.position.x, box.position.y, ct.position.z);

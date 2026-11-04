@@ -17,11 +17,17 @@ namespace Apex.UI
             public static Rgb Hex(uint v) => new Rgb(((v >> 16) & 255) / 255f, ((v >> 8) & 255) / 255f, (v & 255) / 255f);
         }
 
-        public static readonly Rgb Navy = Rgb.Hex(0x101820);
-        public static readonly Rgb Carbon = Rgb.Hex(0x18232E);
-        public static readonly Rgb Surface = Rgb.Hex(0x253440);
-        public static readonly Rgb Cyan = Rgb.Hex(0x20D9E8);
+        // Race Control 2.0 palette: Midnight Navy, Deep Graphite, Carbon Black, Racing White; accents Apex Cyan,
+        // Turkish Red, Racing Gold, Electric Blue (docs/UI_UX_OVERHAUL.md section 13).
+        public static readonly Rgb Navy = Rgb.Hex(0x0B1220);
+        public static readonly Rgb Carbon = Rgb.Hex(0x151D2A);
+        public static readonly Rgb CarbonBlack = Rgb.Hex(0x090D14);
+        public static readonly Rgb Surface = Rgb.Hex(0x222C3B);
+        public static readonly Rgb Cyan = Rgb.Hex(0x00D9E8);
         public static readonly Rgb Red = Rgb.Hex(0xC8102E);
+        public static readonly Rgb Gold = Rgb.Hex(0xD8AD57);
+        public static readonly Rgb ElectricBlue = Rgb.Hex(0x3478F6);
+        /// <summary>Warnings (status yellow).</summary>
         public static readonly Rgb Amber = Rgb.Hex(0xF4B544);
         public static readonly Rgb Ivory = Rgb.Hex(0xF5F7FA);
         public static readonly Rgb Steel = Rgb.Hex(0x9BA8B5);

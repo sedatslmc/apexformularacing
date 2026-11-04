@@ -35,11 +35,23 @@ namespace Apex.Game
             public IList<string> trackIds = new List<string>();
             public Func<string, TrackInfo> track;
             public bool mobile;
+            /// <summary>Extra options of the car step from the garage (livery, number), SetupOption keys "livery"/"number".</summary>
+            public Func<List<SetupOption>> carOptions;
+            /// <summary>Switch the mode in the first step (rebuilds the view through the game).</summary>
+            public Action<SetupMode> selectMode;
+            /// <summary>Summary card (label, value) for the last step.</summary>
+            public Func<List<(string, string)>> summaryCard;
+            /// <summary>Start in this step (QuickRace may open the summary directly).</summary>
+            public SetupStep startStep = SetupStep.Track;
             // Championship.
             public bool championshipActive;
             public string seasonLine = "", nextRound = "";
             public List<CalendarRound> calendar = new List<CalendarRound>();
             public List<StandingRow> standings = new List<StandingRow>();
+            public List<(int team, int points)> teamStandings = new List<(int, int)>();
+            public int playerTeam;
+            /// <summary>Rounds done / total (season progress bar).</summary>
+            public int roundsDone, roundsTotal;
         }
 
         /// <summary>Start the session (setup) or the next championship round.</summary>
@@ -77,6 +89,13 @@ namespace Apex.Game
         }
 
         sealed class Arrow { public Item item; public int dir; }
+        sealed class StepChip { public SetupStep step; }
+        sealed class ModeChoice { public SetupMode mode; }
+
+        // Race preparation steps (RaceSetupFlow): mode → track → conditions → car & team → summary.
+        SetupStep step = SetupStep.Track;
+        Label explain;
+        bool Stepped => data != null && data.mode != SetupMode.Championship;
         sealed class TrackCard { public string id; }
 
         public SetupView(UiSounds sounds)
@@ -101,6 +120,7 @@ namespace Apex.Game
         public void Show(Data d)
         {
             data = d;
+            step = d.startStep;
             focus = 0;
             abandonArmed = false;
             scroll = scrollTarget = 0f;
@@ -136,6 +156,26 @@ namespace Apex.Game
             accent.style.width = 64; accent.style.height = 3; accent.style.marginTop = 10;
             if (champ && data.championshipActive)
                 ApexUi.Text(head, data.seasonLine, ApexUi.Body, UiTokens.Body, ApexUi.C(UiTokens.Steel)).style.marginTop = 12;
+            if (Stepped)
+            {
+                // Step bar: the five steps, the current one in cyan; clicking a chip jumps to it.
+                var bar = new VisualElement { pickingMode = PickingMode.Ignore };
+                bar.style.flexDirection = FlexDirection.Row;
+                bar.style.marginTop = 16;
+                head.Add(bar);
+                for (int k = 0; k < RaceSetupFlow.Steps.Length; k++)
+                {
+                    var st = RaceSetupFlow.Steps[k];
+                    bool cur = st == step, done = (int)st < (int)step;
+                    var chip = new VisualElement { pickingMode = PickingMode.Position, userData = new StepChip { step = st } };
+                    chip.style.marginRight = 18;
+                    bar.Add(chip);
+                    ApexUi.Text(chip, $"{k + 1}  {RaceSetupFlow.Name(st).ToUpperInvariant()}", ApexUi.BodyStrong, UiTokens.Label + 1,
+                        ApexUi.C(cur ? UiTokens.Cyan : done ? UiTokens.Ivory : UiTokens.Steel, cur || done ? 1f : 0.7f), 1.8f);
+                    var u = ApexUi.Box(chip, ApexUi.C(cur ? UiTokens.Cyan : UiTokens.Surface));
+                    u.style.height = 2; u.style.marginTop = 4;
+                }
+            }
 
             listViewport = new VisualElement { pickingMode = PickingMode.Ignore };
             ApexUi.Place(listViewport, m, ListTop, LeftW, ListHeight);
@@ -149,7 +189,7 @@ namespace Apex.Game
 
             // Actions below the list.
             var actions = new VisualElement { pickingMode = PickingMode.Ignore };
-            ApexUi.Place(actions, m, ListTop + ListHeight + 40f, LeftW, -1);
+            ApexUi.Place(actions, m, ListTop + ListHeight + (Stepped ? 64f : 40f), LeftW, -1);
             actions.style.flexDirection = FlexDirection.Row;
             layer.Add(actions);
             if (champ && data.championshipActive)
@@ -157,9 +197,14 @@ namespace Apex.Game
                 AddButton(actions, Loc.T("Nächste Runde"), data.nextRound, true, () => StartRequested?.Invoke());
                 AddButton(actions, Loc.T("Aufgeben"), "", false, Abandon);
             }
+            else if (Stepped && step != SetupStep.Summary)
+                AddButton(actions, Loc.T("Weiter"), Loc.Format("Nächster Schritt: {0}", RaceSetupFlow.Name(RaceSetupFlow.Steps[(int)step + 1])), true, () => GoStep((SetupStep)((int)step + 1)));
             else
-                AddButton(actions, champ ? Loc.T("Saison starten") : Loc.T("Start"), data.summary(), true, () => StartRequested?.Invoke());
-            AddButton(actions, Loc.T("Zurück"), "", false, () => BackRequested?.Invoke());
+                AddButton(actions, champ ? Loc.T("Saison starten") : data.mode == SetupMode.GrandPrix ? Loc.T("Rennen starten") : Loc.T("Start"), data.summary(), true, () => StartRequested?.Invoke());
+            AddButton(actions, Loc.T("Zurück"), "", false, StepBack);
+            explain = ApexUi.Text(layer, "", ApexUi.Body, UiTokens.Body, ApexUi.C(UiTokens.Ivory, 0.8f), 0.2f);
+            ApexUi.Place(explain, m, ListTop + ListHeight + 6f, LeftW);
+            explain.style.whiteSpace = WhiteSpace.Normal;
 
             if (!data.mobile)
             {
@@ -176,10 +221,39 @@ namespace Apex.Game
             ApplyFocus(true);
         }
 
+        List<SetupOption> StepOptions()
+        {
+            var all = data.options();
+            if (!Stepped) return all;
+            if (data.carOptions != null) all.AddRange(data.carOptions());
+            return RaceSetupFlow.OptionsFor(step, all);
+        }
+
+        /// <summary>Goes to a step of the race preparation (rebuilds the left side).</summary>
+        void GoStep(SetupStep s)
+        {
+            if (s == step) return;
+            step = s;
+            focus = 0;
+            scroll = scrollTarget = 0f;
+            sounds.Play(UiSounds.Cue.Transition);
+            Build();
+            screenTime = 0.6f;
+            if (map != null) map.Progress = 1f;
+        }
+
+        void StepBack()
+        {
+            if (Stepped && step != RaceSetupFlow.Steps[0]) GoStep((SetupStep)((int)step - 1));
+            else BackRequested?.Invoke();
+        }
+
         void BuildOptions()
         {
-            var opts = data.options();
-            optionSignature = Signature(opts);
+            if (Stepped && step == SetupStep.Mode) { BuildModes(); return; }
+            if (Stepped && step == SetupStep.Summary) { BuildSummary(); return; }
+            var opts = StepOptions();
+            optionSignature = step + ":" + Signature(opts);
             string group = null;
             foreach (var o in opts)
             {
@@ -191,6 +265,54 @@ namespace Apex.Game
                     cap.style.marginBottom = 6;
                 }
                 AddOption(o);
+            }
+        }
+
+        /// <summary>First step: the modes as large choices with their description.</summary>
+        void BuildModes()
+        {
+            optionSignature = "modes";
+            foreach (var md in RaceSetupFlow.Modes)
+            {
+                bool sel = md == data.mode;
+                var it = new Item { action = () => { if (md != data.mode) data.selectMode?.Invoke(md); else GoStep(SetupStep.Track); } };
+                it.row = ApexUi.Panel(listContent, sel ? UiTokens.PanelStrongAlpha : UiTokens.PanelAlpha);
+                it.row.pickingMode = PickingMode.Position;
+                it.row.userData = it;
+                it.row.style.marginBottom = 10;
+                it.row.style.paddingLeft = 24; it.row.style.paddingRight = 24; it.row.style.paddingTop = 14; it.row.style.paddingBottom = 16;
+                Decorate(it, sel);
+                it.label = ApexUi.Text(it.row, RaceSetupFlow.ModeName(md).ToUpperInvariant(), ApexUi.DisplayStrong, 30, ApexUi.C(sel ? UiTokens.Cyan : UiTokens.Ivory), 2f);
+                var dsc = ApexUi.Text(it.row, RaceSetupFlow.ModeDescription(md), ApexUi.Body, 16, ApexUi.C(UiTokens.Ivory, 0.8f), 0.2f);
+                dsc.style.whiteSpace = WhiteSpace.Normal;
+                dsc.style.marginTop = 4;
+                items.Add(it);
+                if (sel) focus = items.Count - 1;
+            }
+        }
+
+        /// <summary>Last step: the summary card of the race about to start.</summary>
+        void BuildSummary()
+        {
+            optionSignature = "summary";
+            var card = ApexUi.Panel(listContent, UiTokens.PanelStrongAlpha);
+            card.style.paddingLeft = 28; card.style.paddingRight = 28; card.style.paddingTop = 20; card.style.paddingBottom = 22;
+            var edge = ApexUi.Box(card, ApexUi.C(UiTokens.Red));
+            ApexUi.Place(edge, 0, 0, 4, -1); edge.style.bottom = 0;
+            var rows = data.summaryCard?.Invoke() ?? new List<(string, string)>();
+            if (rows.Count > 0)
+                ApexUi.Text(card, rows[0].Item2.ToUpperInvariant(), ApexUi.DisplayStrong, 40, ApexUi.C(UiTokens.Ivory), 3f).style.marginBottom = 12;
+            for (int k = 1; k < rows.Count; k++)
+            {
+                var line = new VisualElement { pickingMode = PickingMode.Ignore };
+                line.style.flexDirection = FlexDirection.Row;
+                line.style.height = 40;
+                line.style.alignItems = Align.Center;
+                line.style.borderBottomWidth = 1;
+                line.style.borderBottomColor = ApexUi.C(UiTokens.Steel, UiTokens.HairlineAlpha);
+                card.Add(line);
+                ApexUi.Text(line, rows[k].Item1.ToUpperInvariant(), ApexUi.BodyStrong, UiTokens.Label + 1, ApexUi.C(UiTokens.Steel), 2f).style.width = 220;
+                ApexUi.Text(line, rows[k].Item2, ApexUi.DisplayStrong, 24, ApexUi.C(UiTokens.Ivory), 1f);
             }
         }
 
@@ -473,6 +595,38 @@ namespace Apex.Game
                 var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; row.Add(sp);
                 ApexUi.Text(row, $"{s.points} PKT", ApexUi.DisplayStrong, 24, ApexUi.C(s.player ? UiTokens.Cyan : UiTokens.Ivory), 1f, TextAnchor.MiddleRight);
             }
+            // Season progress and the teams' standings.
+            if (data.roundsTotal > 0)
+            {
+                var prog = new VisualElement { pickingMode = PickingMode.Ignore };
+                prog.style.marginTop = 18;
+                panel.Add(prog);
+                ApexUi.Caption(prog, Loc.Format("Saisonfortschritt · {0} von {1} Rennen", data.roundsDone, data.roundsTotal));
+                var trackBar = ApexUi.Box(prog, ApexUi.C(UiTokens.Surface));
+                trackBar.style.height = 4; trackBar.style.marginTop = 8;
+                var fill = ApexUi.Box(trackBar, ApexUi.C(UiTokens.Gold));
+                fill.style.height = 4; fill.style.width = new Length(100f * data.roundsDone / data.roundsTotal, LengthUnit.Percent);
+            }
+            if (data.teamStandings.Count > 0)
+            {
+                var cap = ApexUi.Caption(panel, Loc.T("Teamwertung"));
+                cap.style.marginTop = 18;
+                int k = 0;
+                foreach (var (team, pts) in data.teamStandings)
+                {
+                    if (++k > 5) break;
+                    var tm = Roster.Teams[Mathf.Clamp(team, 0, Roster.Teams.Length - 1)];
+                    var row = new VisualElement { pickingMode = PickingMode.Ignore };
+                    row.style.flexDirection = FlexDirection.Row; row.style.alignItems = Align.Center; row.style.height = 32;
+                    panel.Add(row);
+                    ApexUi.Text(row, k.ToString(), ApexUi.DisplayStrong, 20, ApexUi.C(UiTokens.Steel), 0f, TextAnchor.MiddleRight).style.width = 44;
+                    var bar = ApexUi.Box(row, new Color(tm.r, tm.g, tm.b));
+                    bar.style.width = 4; bar.style.height = 20; bar.style.marginLeft = 18; bar.style.marginRight = 16;
+                    ApexUi.Text(row, tm.name, team == data.playerTeam ? ApexUi.BodyStrong : ApexUi.Body, 17, ApexUi.C(team == data.playerTeam ? UiTokens.Cyan : UiTokens.Ivory));
+                    var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; row.Add(sp);
+                    ApexUi.Text(row, $"{pts} PKT", ApexUi.DisplayStrong, 20, ApexUi.C(UiTokens.Ivory), 1f, TextAnchor.MiddleRight);
+                }
+            }
         }
 
         // --- Input --------------------------------------------------------------------------------------------
@@ -482,7 +636,7 @@ namespace Apex.Game
         {
             if (abandonArmed) { abandonArmed = false; RefreshAbandon(); sounds.Play(UiSounds.Cue.Back); return; }
             sounds.Play(UiSounds.Cue.Back);
-            BackRequested?.Invoke();
+            StepBack();
         }
 
         public void Tick(float dt, bool up, bool down, bool left, bool right, bool confirm)
@@ -510,7 +664,9 @@ namespace Apex.Game
             {
                 var arrow = ui.PickData<Arrow>(pos);
                 var card = ui.PickData<TrackCard>(pos);
-                if (arrow != null) { SetFocus(items.IndexOf(arrow.item)); Change(arrow.item, arrow.dir); }
+                var chip = ui.PickData<StepChip>(pos);
+                if (chip != null && Stepped) GoStep(chip.step);
+                else if (arrow != null) { SetFocus(items.IndexOf(arrow.item)); Change(arrow.item, arrow.dir); }
                 else if (card != null && card.id != data.selectedTrack()) { sounds.Play(UiSounds.Cue.Confirm); data.selectTrack(card.id); OptionChanged?.Invoke(); Refresh(); }
                 else if (hovered != null) Activate(hovered);
             }
@@ -564,8 +720,9 @@ namespace Apex.Game
         {
             if (data.mode != SetupMode.Championship || !data.championshipActive)
             {
-                var opts = data.options();
-                if (Signature(opts) != optionSignature)
+                bool special = Stepped && (step == SetupStep.Mode || step == SetupStep.Summary);
+                var opts = StepOptions();
+                if (!special && step + ":" + Signature(opts) != optionSignature && Stepped || !Stepped && Signature(opts) != optionSignature)
                 {
                     string key = focus < items.Count ? items[focus].option?.key : null;
                     float keep = scrollTarget;
@@ -603,6 +760,8 @@ namespace Apex.Game
 
         void ApplyFocus(bool instant)
         {
+            if (explain != null)
+                explain.text = focus < items.Count && items[focus].option != null ? RaceSetupFlow.Explain(items[focus].option.key) : "";
             for (int i = 0; i < items.Count; i++)
             {
                 float t = i == focus ? 1f : 0f;

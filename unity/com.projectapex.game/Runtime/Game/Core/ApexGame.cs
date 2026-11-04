@@ -5,6 +5,7 @@ using Apex.Career;
 using Apex.Core;
 using Apex.Race;
 using Apex.Tracks;
+using Apex.UI;
 using Apex.Vehicle;
 using Apex.Weather;
 using UnityEngine;
@@ -57,7 +58,14 @@ namespace Apex.Game
         SetupView setupView;
         UiSounds uiSounds;
         GameObject menuWorld;
+        CircuitInstance menuCircuit;
         bool backdropLoading, menuOverlayLast;
+        // Race Control 2.0: loading screens, cinematics (intro, race start), title screen.
+        LoadingView loadingView;
+        LoadingModel loadingModel;
+        CinematicDirector cinematic;
+        bool titleShownThisRun;
+        SetupStep setupStartStep = SetupStep.Track;
         int swallowClickFrame = -1;
         float menuViewHeading;
 
@@ -99,12 +107,17 @@ namespace Apex.Game
             showTelemetry = Settings.showTelemetry;
             SetupCameraAndLighting();
             ApplyGraphics();
+            ApplyDisplay();
+            Apex.UI.HudLayout.UserHidden = Settings.hudHidden;
             input = gameObject.AddComponent<InputRouter>();
             input.ApplySettings(Settings);
             sm.Changed += OnStateChanged;
             CreateMenuView();
             CreateHudView();
             CreateScreenViews();
+            cinematic = gameObject.AddComponent<CinematicDirector>();
+            cinematic.cam = cam;
+            cinematic.reducedMotion = Settings.reducedMotion;
             sm.TryTransition(GameState.MainMenu);
         }
 
@@ -117,6 +130,7 @@ namespace Apex.Game
                 menuView.Activated += OnMenuAction;
                 menuView.SettingsRequested += () => { settingsOpen = true; focus = 0; };
                 menuView.ShowBoot("");
+                loadingView = new LoadingView();
                 setupView = new SetupView(uiSounds);
                 setupView.StartRequested += OnSetupStart;
                 setupView.BackRequested += () => sm.TryTransition(GameState.MainMenu);
@@ -148,14 +162,43 @@ namespace Apex.Game
                 track = SetupTrack,
                 mobile = Application.isMobilePlatform,
                 championshipActive = mode == Apex.UI.SetupMode.Championship && Career.ChampionshipActive,
+                startStep = setupStartStep,
+                selectMode = m => { setupMode = m; setupStartStep = SetupStep.Mode; ShowSetupView(); },
+                carOptions = () =>
+                {
+                    var paints = UnlockedPaints();
+                    return new List<SetupOption>
+                    {
+                        new SetupOption { key = "livery", label = Loc.T("Lackierung"), value = () => PaintName(Career.paintIndex), change = dd =>
+                        {
+                            int i = Mathf.Max(0, paints.IndexOf(Career.paintIndex));
+                            Career.paintIndex = paints[((i + (dd < 0 ? -1 : 1)) % paints.Count + paints.Count) % paints.Count];
+                            SaveCareer();
+                            RebuildShowroomCar();
+                        } },
+                        new SetupOption { key = "number", label = Loc.T("Startnummer"), value = () => Career.carNumber.ToString(),
+                            change = dd => { Career.carNumber = Mathf.Clamp(Career.carNumber + (dd < 0 ? -1 : 1), 2, 99); SaveCareer(); } },
+                    };
+                },
+                summaryCard = () =>
+                {
+                    var def = Definition(Config.trackId);
+                    bool ist = def != null && EventBrandingBuilder.IsEvent(def);
+                    return RaceSetupFlow.Summary(mode, Config, def?.name ?? Config.trackId, ist ? "Istanbul" : "", "Apex A01 · #" + Career.carNumber);
+                },
             };
+            setupStartStep = SetupStep.Track;
             if (mode == Apex.UI.SetupMode.Championship)
             {
                 Func<string, string> name = id => Definition(id)?.name ?? id;
                 if (Career.ChampionshipActive)
                 {
                     d.calendar = Apex.UI.ChampionshipModel.Calendar(Career.calendar, Career.nextRound, name);
-                    d.standings = Apex.UI.ChampionshipModel.Standings(Career.points, 12, Config.playerTeam);
+                    d.standings = Apex.UI.ChampionshipModel.Standings(Career.points, 8, Config.playerTeam);
+                    d.teamStandings = Apex.UI.ChampionshipModel.TeamStandings(Career.points, Config.playerTeam);
+                    d.playerTeam = Config.playerTeam;
+                    d.roundsDone = Career.nextRound;
+                    d.roundsTotal = Career.calendar.Length;
                     d.nextRound = $"Runde {Career.nextRound + 1}: {name(Career.calendar[Career.nextRound])}";
                     d.seasonLine = $"Runde {Career.nextRound + 1} von {Career.calendar.Length} · {Career.championshipLaps} Runden · {Career.championshipAi} KI-Gegner";
                 }
@@ -208,7 +251,8 @@ namespace Apex.Game
             swallowClickFrame = Time.frameCount;
             switch (a)
             {
-                case Apex.UI.MenuAction.QuickRace: StartSession(SessionKind.GrandPrix, SessionType.Race); break;
+                // "RENNEN STARTEN": the race preparation from its first step (mode), not straight into a race.
+                case Apex.UI.MenuAction.QuickRace: setupStartStep = SetupStep.Mode; OpenSetup(SetupMode.GrandPrix); break;
                 case Apex.UI.MenuAction.ContinueChampionship: StartSession(SessionKind.Championship, SessionType.Race); break;
                 case Apex.UI.MenuAction.GrandPrix: OpenSetup(SetupMode.GrandPrix); break;
                 case Apex.UI.MenuAction.Championship: OpenSetup(SetupMode.Championship); break;
@@ -270,13 +314,20 @@ namespace Apex.Game
             pr.level = lvl; pr.xp = Career.xp; pr.xpNext = next;
             pr.races = Career.racesStarted; pr.wins = Career.wins; pr.podiums = Career.podiums; pr.poles = Career.poles;
             pr.distanceKm = Career.distanceKm; pr.averageFinish = Career.AverageFinish;
+            pr.fastestLaps = Career.fastestLaps;
+            pr.drivingTime = Career.drivingSeconds > 0 ? CareerData.FormatDrivingTime(Career.drivingSeconds) : "–";
+            foreach (var cr in Career.championshipResults)
+            {
+                var parts = cr.Split('|');
+                if (parts.Length >= 3) pr.championships.Add($"P{parts[0]} · {parts[1]} Pkt. · {parts[2]} Rennen");
+            }
             foreach (var id in TrackIds)
             {
                 double best = SaveService.BestLap(Settings, id);
                 if (best > 0) pr.bestLaps.Add((Definition(id)?.name ?? id, ApexStyle.FormatTime(best)));
             }
             menuView.ReducedMotion = Settings.reducedMotion;
-            uiSounds.volume = Settings.masterVolume;
+            uiSounds.volume = Settings.masterVolume * Settings.uiVolume;
             menuView.Show(data);
         }
 
@@ -296,18 +347,45 @@ namespace Apex.Game
         System.Collections.IEnumerator BuildMenuBackdrop()
         {
             backdropLoading = true;
-            menuView?.ShowBoot("ISTANBUL WIRD GELADEN");
+            menuView?.ShowBoot("");
+            var bdef = Definition("bosphorus_a");
+            if (bdef != null && loadingView != null)
+            {
+                // The game start (first time) or the return to the paddock: a real loading screen over the build.
+                var ctx = titleShownThisRun ? LoadContext.MenuReturn : LoadContext.GameStart;
+                loadingModel = new LoadingModel(ctx, LoadingModel.SessionStages(bdef.landMasses.Count > 0, bdef.pit != null, EventBrandingBuilder.IsEvent(bdef)));
+                loadingModel.Complete("cars");
+                var info = new LoadingView.Info
+                {
+                    context = ctx, title = LoadingModel.Title(ctx, bdef.name), subtitle = LoadingModel.Subtitle(ctx, "ISTANBUL · TÜRKİYE", 0),
+                    istanbul = true, def = bdef, geometry = TrackGeometry.FromDefinition(bdef), seed = UnityEngine.Random.Range(0, 100),
+                };
+                loadingView.Show(info, loadingModel);
+            }
             yield return null;
             yield return null;
+            CircuitInstance circuit = null;
+            if (bdef != null)
+            {
+                menuWorld = new GameObject("MenuWorld");
+                EnvironmentBuilder.Quality = Settings.environmentDetail;
+                SurfaceTextures.UseUltra = Settings.ultraTextures;
+                var steps = CircuitBuilder.BuildSteps(bdef, menuWorld.transform, c => circuit = c, id => loadingModel?.Complete(id));
+                while (true)
+                {
+                    bool more;
+                    try { more = steps.MoveNext(); }
+                    catch (Exception e) { Debug.LogException(e); more = false; circuit = null; }
+                    if (!more) break;
+                    yield return null;
+                }
+            }
             try
             {
-                var def = Definition("bosphorus_a");
-                if (def != null)
+                var def = bdef;
+                if (def != null && circuit != null)
                 {
-                    menuWorld = new GameObject("MenuWorld");
-                    EnvironmentBuilder.Quality = Settings.environmentDetail;
-                    SurfaceTextures.UseUltra = Settings.ultraTextures;
-                    var circuit = CircuitBuilder.Build(def, menuWorld.transform);
+                    menuCircuit = circuit;
                     var wv = menuWorld.AddComponent<WeatherVisuals>();
                     wv.weather = new WeatherModel(WeatherState.Clear, false, 7);
                     // Alternating motifs: Istanbul at night (lit bridge) or at sunset.
@@ -326,10 +404,15 @@ namespace Apex.Game
                 Debug.LogException(e);
                 if (menuWorld != null) Destroy(menuWorld);
                 menuWorld = null;
+                menuCircuit = null;
             }
+            if (menuWorld != null && menuCircuit == null) { Destroy(menuWorld); menuWorld = null; }
+            loadingModel?.Complete("lighting");
+            yield return null;
+            loadingView?.Hide();
             backdropLoading = false;
             if (showroom != null) PlaceShowroom();
-            menuView?.EndBoot();
+            EnterMenuAfterBoot();
         }
 
         bool WantsBackdrop => !Application.isMobilePlatform && Settings.menuBackdrop && Settings.environmentDetail >= 1;
@@ -403,6 +486,23 @@ namespace Apex.Game
         }
 
         /// <summary>Applies the graphics tier from the settings (live: shadows, AA, SSAO, reflections, LOD).</summary>
+        /// <summary>Display settings (desktop: mode, resolution, VSync; everywhere: frame cap). Applied at start and on change.</summary>
+        void ApplyDisplay()
+        {
+            var s = Settings;
+            QualitySettings.vSyncCount = s.vsync && !Application.isMobilePlatform ? 1 : 0;
+            Application.targetFrameRate = s.fpsLimit > 0 ? s.fpsLimit : (Application.isMobilePlatform ? 60 : -1);
+            if (Application.isMobilePlatform) return;
+            var mode = s.displayMode == 0 ? FullScreenMode.ExclusiveFullScreen : s.displayMode == 1 ? FullScreenMode.FullScreenWindow : FullScreenMode.Windowed;
+            var res = Screen.resolutions;
+            if (s.resolutionIndex >= 0 && s.resolutionIndex < res.Length)
+            {
+                var r = res[s.resolutionIndex];
+                if (Screen.width != r.width || Screen.height != r.height || Screen.fullScreenMode != mode) Screen.SetResolution(r.width, r.height, mode);
+            }
+            else if (Screen.fullScreenMode != mode) Screen.fullScreenMode = mode;
+        }
+
         void ApplyGraphics()
         {
             var p = GraphicsPreset.For(GraphicsQuality.Resolve(Settings.graphicsTier));
@@ -479,7 +579,103 @@ namespace Apex.Game
             PlaceShowroom();
             RebuildShowroomCar();
             if (WantsBackdrop && menuWorld == null && !backdropLoading) StartCoroutine(BuildMenuBackdrop());
-            else if (!backdropLoading) menuView?.EndBoot();
+            else if (!backdropLoading) EnterMenuAfterBoot();
+        }
+
+        /// <summary>
+        /// After the boot: the opening intro (first start, or every start if set; skippable), then the title screen
+        /// ("press any key", first time per run), then the main menu.
+        /// </summary>
+        void EnterMenuAfterBoot()
+        {
+            bool intro = Settings.introMode == 1 || (Settings.introMode == 0 && !Settings.introSeen);
+            if (!titleShownThisRun && intro && cinematic != null && showroomCar != null)
+            {
+                Settings.introSeen = true;
+                SaveService.SaveSettings(Settings);
+                menuView?.EndBoot();
+                menuView?.SetVisible(false);
+                cinematic.reducedMotion = Settings.reducedMotion;
+                cinematic.resolve = ResolveMenuShot;
+                cinematic.lowerThird = null;
+                cinematic.Play(CinematicScripts.GameIntro(menuCircuit != null), ShowTitleOrMenu);
+                uiSounds?.Play(UiSounds.Cue.Start);
+                return;
+            }
+            menuView?.EndBoot();
+            ShowTitleOrMenu();
+        }
+
+        void ShowTitleOrMenu()
+        {
+            menuView?.SetVisible(true);
+            if (!titleShownThisRun) menuView?.ShowTitle(TitleScreen.Prompt(Application.isMobilePlatform), "v" + Application.version);
+            titleShownThisRun = true;
+        }
+
+        /// <summary>Subjects of the intro in the menu scene: the showroom car, and the Istanbul circuit when it stands.</summary>
+        (Vector3, Vector3)? ResolveMenuShot(CinematicShot s)
+        {
+            var car = showroomCar != null ? showroomCar.transform : null;
+            switch (s.subject)
+            {
+                case ShotSubject.PlayerCar:
+                case ShotSubject.Logo:
+                    return car != null ? (car.position, car.forward) : ((Vector3, Vector3)?)null;
+                case ShotSubject.PlayerWheel:
+                    return car != null ? (car.TransformPoint(new Vector3(-0.85f, 0.3f, 1.98f)), car.forward) : ((Vector3, Vector3)?)null;
+                case ShotSubject.PlayerRear:
+                    return car != null ? (car.TransformPoint(new Vector3(0f, 0.55f, -2.3f)), car.forward) : ((Vector3, Vector3)?)null;
+                default:
+                    return menuCircuit != null ? ResolveCircuitShot(menuCircuit, s) : null;
+            }
+        }
+
+        /// <summary>Circuit subjects: bridge, flags, first corner, start straight, pit building, overview.</summary>
+        static (Vector3, Vector3)? ResolveCircuitShot(CircuitInstance ci, CinematicShot s)
+        {
+            var g = ci.Geometry;
+            var def = ci.Definition;
+            float start = def.startLineDistance;
+            switch (s.subject)
+            {
+                case ShotSubject.Bridge:
+                {
+                    var lm = def.FindLandmark("bridge_eu");
+                    if (lm == null) return null;
+                    var p = new Vector3(lm.east, 45f, lm.north);
+                    var toTrack = g.PositionAt(start).ToUnity() - p;
+                    toTrack.y = 0f;
+                    return (p, Vector3.Cross(Vector3.up, toTrack.normalized));
+                }
+                case ShotSubject.CityFlags:
+                    if (ci.EventFlags.Count == 0) return null;
+                    return (ci.EventFlags[0].pos + Vector3.up * 4f, g.TangentAt(start).ToUnity());
+                case ShotSubject.Corner:
+                {
+                    if (def.corners.Count == 0) return null;
+                    float d = g.Wrap(def.corners[0].distance);
+                    return (g.PositionAt(d).ToUnity(), g.TangentAt(d).ToUnity());
+                }
+                case ShotSubject.StartStraight:
+                    return (g.PositionAt(start).ToUnity(), g.TangentAt(start).ToUnity());
+                case ShotSubject.PitBuilding:
+                {
+                    var pose = ci.PoseAt(start, (ci.Pit != null ? ci.Pit.side : 1) * (g.WidthAt(start) * 0.5f + 8f), 0f);
+                    return (pose.position, pose.rotation * Vector3.forward);
+                }
+                case ShotSubject.TrackOverview:
+                {
+                    var c = Vector3.zero;
+                    for (int i = 0; i < g.Count; i += 10) c += g.Positions[i].ToUnity();
+                    c /= Mathf.Max(1, (g.Count + 9) / 10);
+                    var toStart = g.PositionAt(start).ToUnity() - c;
+                    toStart.y = 0f;
+                    return (c, toStart.sqrMagnitude > 1f ? toStart.normalized : Vector3.forward);
+                }
+                default:
+                    return null;
+            }
         }
 
         /// <summary>Stage on the water off Ortaköy when the Istanbul backdrop stands, else at the origin.</summary>
@@ -600,14 +796,40 @@ namespace Apex.Game
                 sm.TryTransition(GameState.MainMenu);
                 yield break;
             }
+            // Loading screen with the real build stages (LoadingModel), then the circuit in steps.
+            var lctx = kind == SessionKind.Championship ? LoadContext.Championship : kind == SessionKind.TimeTrial ? LoadContext.TimeTrial
+                : kind == SessionKind.Practice ? LoadContext.Practice : LoadContext.Race;
+            loadingModel = new LoadingModel(lctx, LoadingModel.SessionStages(def.landMasses.Count > 0 && Settings.environmentDetail >= 0, def.pit != null, EventBrandingBuilder.IsEvent(def)));
+            if (loadingView != null)
+            {
+                var geo = TrackGeometry.FromDefinition(def);
+                var facts = TrackFacts.From(def, geo, SaveService.BestLap(Settings, def.id));
+                bool istanbul = EventBrandingBuilder.IsEvent(def);
+                var info = new LoadingView.Info
+                {
+                    context = lctx, title = LoadingModel.Title(lctx, def.name),
+                    subtitle = LoadingModel.Subtitle(lctx, istanbul ? "ISTANBUL · TÜRKİYE" : def.name, Career.nextRound + 1),
+                    istanbul = istanbul, def = def, geometry = geo, seed = cfg.seed,
+                };
+                info.facts.Add((Loc.T("LÄNGE"), $"{facts.lengthKm:0.00} km"));
+                info.facts.Add((Loc.T("KURVEN"), facts.corners.ToString()));
+                if (kind != SessionKind.TimeTrial) info.facts.Add((Loc.T("WETTER"), Apex.Weather.WeatherModel.Name(cfg.weather).ToUpperInvariant()));
+                info.facts.Add((Loc.T("TAGESZEIT"), SetupModel.TimeName(cfg.timeOfDay).ToUpperInvariant()));
+                if (kind == SessionKind.GrandPrix || kind == SessionKind.Championship) info.facts.Add((Loc.T("RUNDEN"), cfg.laps.ToString()));
+                loadingView.Show(info, loadingModel);
+                menuView?.SetVisible(false);
+                yield return null;
+            }
             if (showroom != null) Destroy(showroom);
             showroom = null;
             showroomCar = null;
             DestroyMenuWorld();
+            menuCircuit = null;
             world = new GameObject("World");
             EnvironmentBuilder.Quality = Settings.environmentDetail;
             SurfaceTextures.UseUltra = Settings.ultraTextures;
-            var circuit = CircuitBuilder.Build(def, world.transform);
+            CircuitInstance circuit = null;
+            yield return CircuitBuilder.BuildSteps(def, world.transform, c => circuit = c, id => loadingModel.Complete(id));
             yield return null;
 
             if (grid == null) grid = DefaultGrid(cfg.aiCount, cfg.seed);
@@ -674,6 +896,12 @@ namespace Apex.Game
                 wallLife.Build(circuit);
             }
 
+            loadingModel.Complete("cars");
+            loadingModel.Complete("environment");   // not built at low detail: nothing left to wait for
+            loadingModel.Complete("lighting");
+            yield return null;
+            loadingView?.Hide();
+            uiSounds?.Play(UiSounds.Cue.Loaded);
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);
             ResetSectorColours();
@@ -682,16 +910,82 @@ namespace Apex.Game
             raceCam.SetMode(Settings.cameraMode);
             raceCam.enabled = true;
             raceCam.ClearHold();
-            // Start sequence: a sweep around the car into the driving camera (not with reduced motion).
-            if (type == SessionType.Race && !Settings.reducedMotion) raceCam.PlayIntro();
             input.ReleaseAll();
             ApplyAssists();
             calibrating = Settings.controlPreset == ControlPreset.Tilt;
-            Race.PlayerInputEnabled = !calibrating;
+            Race.PlayerInputEnabled = false;
             sm.TryTransition(GameState.Grid);
-            if (!calibrating) BeginSession();
+            // Race start presentation (skippable): bridge, track, start straight with the title, the grid; then the
+            // sweep into the driving camera and the start lights. Time trial and practice: a short version.
+            bool isRace = type == SessionType.Race;
+            if (Settings.raceIntro && cinematic != null)
+            {
+                hudView?.SetVisible(false);
+                raceCam.enabled = false;
+                cinematic.reducedMotion = Settings.reducedMotion;
+                cinematic.resolve = ResolveRaceShot;
+                cinematic.lowerThird = GridLowerThird;
+                bool bridge = circuit.Definition.FindLandmark("bridge_eu") != null;
+                int round = kind == SessionKind.Championship ? Career.nextRound + 1 : 0;
+                cinematic.Play(CinematicScripts.RaceIntro(isRace, def.name, round, bridge, startPosition - 1, Race.Cars.Count), () => AfterRaceIntro(isRace));
+            }
+            else AfterRaceIntro(isRace);
             string label = type == SessionType.Race ? "Rennen" : type == SessionType.Qualifying ? "Qualifying" : kind == SessionKind.TimeTrial ? "Zeitfahren" : "Freies Training";
             ShowMessage($"{def.name} – {label}", Color.white, 3f, true);
+        }
+
+        /// <summary>After the race start presentation: the sweep into the driving camera, then the session begins.</summary>
+        void AfterRaceIntro(bool race)
+        {
+            if (Race == null) return;
+            raceCam.enabled = true;
+            hudView?.SetVisible(true);
+            // Start sequence: a sweep around the car into the driving camera (not with reduced motion), with an engine blip.
+            if (race && !Settings.reducedMotion) raceCam.PlayIntro();
+            if (race) uiSounds?.Play(UiSounds.Cue.EngineStart);
+            Race.PlayerInputEnabled = !calibrating;
+            if (!calibrating) BeginSession();
+        }
+
+        (Vector3, Vector3)? ResolveRaceShot(CinematicShot s)
+        {
+            if (Race == null) return null;
+            var p = Race.Player.car.transform;
+            switch (s.subject)
+            {
+                case ShotSubject.PlayerCar:
+                case ShotSubject.Logo:
+                    return (p.position, p.forward);
+                case ShotSubject.Grid:
+                {
+                    var car = GridCar(s.gridSlot);
+                    return car != null ? (car.car.transform.position, car.car.transform.forward) : ((Vector3, Vector3)?)null;
+                }
+                default:
+                    return ResolveCircuitShot(Race.Circuit, s);
+            }
+        }
+
+        /// <summary>The car standing on a grid slot (nearest to the slot's pose).</summary>
+        RaceCar GridCar(int slot)
+        {
+            var pose = Race.Circuit.GridPose(slot, 0f);
+            RaceCar best = null;
+            float bd = 9f;
+            foreach (var rc in Race.Cars)
+            {
+                float d = (rc.car.transform.position - pose.position).sqrMagnitude;
+                if (d < bd) { bd = d; best = rc; }
+            }
+            return best;
+        }
+
+        string GridLowerThird(CinematicShot s)
+        {
+            if (s.subject != ShotSubject.Grid || Race == null) return null;
+            var rc = GridCar(s.gridSlot);
+            if (rc == null) return null;
+            return CinematicScripts.GridCard(s.gridSlot, rc.isPlayer ? Loc.T("Du") : rc.name, Roster.Teams[rc.teamIndex].name, CompoundSpec.For(rc.Sim.tires[0].compound).name);
         }
 
         void BeginSession()
@@ -806,11 +1100,13 @@ namespace Apex.Game
             if (valid && SaveService.SubmitLap(Settings, trackId, time))
             {
                 sessionRecord = time;
+                uiSounds?.Play(UiSounds.Cue.PersonalBest);
                 if (hudView != null) eventFeed.Post(Apex.UI.HudEventKind.Record, "NEUER REKORD", ApexStyle.FormatTime(time), Apex.UI.HudTone.Best, Time.unscaledTime);
                 else ShowMessage("Neuer Rekord  " + ApexStyle.FormatTime(time), ApexStyle.Best, 3f, true);
             }
             else if (personalBest)
             {
+                uiSounds?.Play(UiSounds.Cue.PersonalBest);
                 if (hudView != null) eventFeed.Post(Apex.UI.HudEventKind.PersonalBest, "PERSÖNLICHE BESTZEIT", ApexStyle.FormatTime(time), Apex.UI.HudTone.Good, Time.unscaledTime);
                 else ShowMessage("Persönliche Bestzeit  " + ApexStyle.FormatTime(time), ApexStyle.Faster, 2.5f, false);
             }
@@ -856,7 +1152,7 @@ namespace Apex.Game
                 res.rows.Add(new[]
                 {
                     e.position.ToString(), rc.code, e.name, Roster.Teams[rc.teamIndex].name, gap,
-                    ApexStyle.FormatTime(e.BestLap), e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
+                    ApexStyle.FormatTime(e.BestLap), Race.Type == SessionType.Race ? rc.Strategy() : e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
                     Race.Type == SessionType.Race ? d.PointsFor(e).ToString() : "",
                 });
                 var tm = Roster.Teams[rc.teamIndex];
@@ -890,6 +1186,7 @@ namespace Apex.Game
             string sessionName = Race.Type == SessionType.Race ? "Rennen" : Race.Type == SessionType.Qualifying ? "Qualifying" : kind == SessionKind.TimeTrial ? "Zeitfahren" : "Training";
             Career.RecordSession(Race.Circuit.Definition.name, sessionName, pe.position, d.entries.Count, startPosition - pe.position, pe.BestLap, km,
                 Race.Type == SessionType.Race && pe.finished);
+            Career.RecordDrive(Race.SimTime, Race.Type == SessionType.Race && d.FastestLapHolder == pe);
             if (kind == SessionKind.Championship && Race.Type == SessionType.Race)
             {
                 foreach (var e in d.Standings)
@@ -901,6 +1198,8 @@ namespace Apex.Game
                 Career.nextRound++;
                 res.championshipLines = ChampionshipTable(10);
                 res.championshipFinished = !Career.ChampionshipActive;
+                if (res.championshipFinished)
+                    Career.RecordChampionship(Apex.UI.ChampionshipModel.PlayerPosition(Career.points), Career.points.Length > 0 ? Career.points[0] : 0, Career.calendar.Length);
             }
             SaveCareer();
             lastResults = res;
@@ -933,6 +1232,17 @@ namespace Apex.Game
             else toastLow = t;
         }
 
+        /// <summary>Any key, gamepad button, click or tap this frame (skip a cinematic, leave the title screen).</summary>
+        static bool AnyInputPressed()
+        {
+            var kb = UnityEngine.InputSystem.Keyboard.current;
+            if (kb != null && kb.anyKey.wasPressedThisFrame) return true;
+            var gp = UnityEngine.InputSystem.Gamepad.current;
+            if (gp != null && (gp.buttonSouth.wasPressedThisFrame || gp.buttonEast.wasPressedThisFrame || gp.startButton.wasPressedThisFrame)) return true;
+            var p = UnityEngine.InputSystem.Pointer.current;
+            return p != null && p.press.wasReleasedThisFrame;
+        }
+
         void Update()
         {
             fps = Mathf.Lerp(fps, 1f / Mathf.Max(Time.unscaledDeltaTime, 1e-4f), 0.05f);
@@ -948,6 +1258,19 @@ namespace Apex.Game
                 ShowMessage("Screenshot gespeichert", Color.white, 1.5f, false);
             }
             if (input.HelpPressed) helpOpen = !helpOpen;
+            loadingView?.Tick(udt);
+            // Cinematics (intro, race start) and the title screen take any input as "skip" / "start".
+            if (cinematic != null && cinematic.Playing)
+            {
+                if (AnyInputPressed()) cinematic.Skip();
+                return;
+            }
+            if (menuView != null && menuView.TitleActive && sm.Current == GameState.MainMenu)
+            {
+                menuView.TickTitle(udt);
+                if (AnyInputPressed()) menuView.DismissTitle();
+                return;
+            }
             UpdateScreenViews();
 
             switch (sm.Current)

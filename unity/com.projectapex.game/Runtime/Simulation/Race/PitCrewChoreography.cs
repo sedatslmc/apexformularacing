@@ -112,6 +112,31 @@ namespace Apex.Race
             return new Vector3(x, 0f, z);
         }
 
+        /// <summary>
+        /// Where the front jack man steps aside after lowering the car: to the garage side, level with the nose, out of
+        /// the path of the car pulling away (it drives straight ahead and then turns to the fast lane, away from him).
+        /// </summary>
+        public static Vector3 FrontJackAside(Car car, int garageSide) => new Vector3(garageSide * 2.6f, 0f, car.nose + 0.4f);
+
+        /// <summary>The rear jack man waits beside the box (the car rolls in from behind) and backs off there again.</summary>
+        public static Vector3 RearJackReady(Car car, int garageSide) => new Vector3(garageSide * 1.7f, 0f, car.tail - 0.9f);
+
+        /// <summary>Distance (m) the released car must have driven past the box before the crew walks back.</summary>
+        public const float ClearDistance = 12f;
+
+        /// <summary>
+        /// Where a role stands when the service is over and the car leaves: the wheel crews beside the car (gun and
+        /// on men at their ready spots, the off man where he set the old wheel down), the rear jack behind it, the front
+        /// jack aside. Nobody moves across the box until the car has gone (<see cref="ClearDistance"/>).
+        /// </summary>
+        public static Vector3 EndSpot(Car car, Role r, int garageSide, bool changeTyres)
+        {
+            if (r == Role.FrontJack) return FrontJackAside(car, garageSide);
+            if (r == Role.RearJack) return RearJackReady(car, garageSide);
+            if (changeTyres && Job(r) == 1) return WorkSpot(car, r);
+            return ReadySpot(car, r);
+        }
+
         /// <summary>Ready spot: the work spot, 0.4 m further from the car (out of the arriving car's path).</summary>
         public static Vector3 ReadySpot(Car car, Role r)
         {
@@ -170,7 +195,7 @@ namespace Apex.Race
             var ready = ReadySpot(car, r);
             var work = WorkSpot(car, r);
             // The rear jack waits beside the box (the car rolls in from behind) and steps in behind it once it stops.
-            if (r == Role.RearJack) ready = new Vector3(garageSide * 1.7f, 0f, car.tail - 0.9f);
+            if (r == Role.RearJack) ready = RearJackReady(car, garageSide);
             var carCentre = new Vector3(0f, 0f, 0.3f);
             switch (phase)
             {
@@ -184,10 +209,13 @@ namespace Apex.Race
                 }
                 case Phase.Return:
                 {
+                    // From where each one stood when the car left (EndSpot) back to the garage.
+                    var from = EndSpot(car, r, garageSide, changeTyres);
+                    if (r == Role.RearJack) from = ready;
                     float k = Smooth(t / ReturnTime);
-                    var p = Vector3.Lerp(ready, wait, k);
+                    var p = Vector3.Lerp(from, wait, k);
                     // The off man carries the old wheel back into the garage.
-                    return new Pose { position = p, yaw = FacingTo(ready, wait), tool = Job(r) != 1 && Job(r) != 2, carriesWheel = changeTyres && Job(r) == 1, hands = NoHands };
+                    return new Pose { position = p, yaw = FacingTo(from, wait), tool = Job(r) != 1 && Job(r) != 2, carriesWheel = changeTyres && Job(r) == 1, hands = NoHands };
                 }
             }
             // Service.
@@ -199,7 +227,10 @@ namespace Apex.Race
             {
                 // In under the nose/tail, hold while lifted, out again after the jacks drop.
                 float inK = Smooth(u / JacksIn), outK = Smooth((u - JacksDown) / (1f - JacksDown));
-                pose.position = Vector3.Lerp(Vector3.Lerp(ready, work, inK), ready, outK);
+                // Lowered: the front jack man pulls the jack out and steps aside to the garage side (never in front of
+                // the car when it is released); the rear jack man backs off behind the car.
+                var after = r == Role.FrontJack ? FrontJackAside(car, garageSide) : ready;
+                pose.position = Vector3.Lerp(Vector3.Lerp(ready, work, inK), after, outK);
                 pose.yaw = r == Role.FrontJack ? MathF.PI : 0f;
                 // Hands on the handle: high while the saddle goes under the car, pushed down to lift it.
                 float lifted = Lift(t, serviceTotal) / 0.06f;

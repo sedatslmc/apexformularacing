@@ -21,6 +21,7 @@ namespace Apex.UI
         {
             if (Current == Language.Deutsch || string.IsNullOrEmpty(german)) return german;
             if (En.TryGetValue(german, out var en)) return en;
+            if (LocPresentation.En.TryGetValue(german, out en)) return en;
             Missing.Add(german);
             return german;
         }

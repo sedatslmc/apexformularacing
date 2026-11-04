@@ -31,6 +31,8 @@ namespace Apex.Game
             public List<Category> categories = new List<Category>();
             public bool garage;
             public bool mobile;
+            /// <summary>Category shown first (pause: "Fahrzeug-Setup" opens the assists, "Steuerung" the controls).</summary>
+            public int startCategory;
         }
 
         public event Action Closed;
@@ -128,7 +130,7 @@ namespace Apex.Game
                 {
                     var view = v;
                     var it = views.AddButton(bar, GarageOrbit.Name(v), "", false, () => CameraView?.Invoke(view), 52f);
-                    it.row.style.minWidth = 150; it.row.style.marginRight = 10;
+                    it.row.style.minWidth = 120; it.row.style.marginRight = 8;
                 }
             }
             string hints = d.mobile ? "" : Loc.T("↑↓  Auswählen     ←→  Ändern     Enter  Bestätigen     Esc  Zurück") + (d.garage ? "     " + Loc.T("Ziehen  Drehen     Mausrad  Zoom") : "");
@@ -137,7 +139,9 @@ namespace Apex.Game
             var back = ApexUi.Text(layer, Loc.T("‹  Zurück"), ApexUi.BodyStrong, 16, ApexUi.C(UiTokens.Steel), 1f);
             back.pickingMode = PickingMode.Position; back.userData = "back";
             back.style.position = Position.Absolute; back.style.right = m; back.style.top = 64;
-            ShowCategory(0);
+            int first = Mathf.Clamp(d.startCategory, 0, Mathf.Max(0, d.categories.Count - 1));
+            if (first > 0) cats.SetFocus(first, false);
+            ShowCategory(first);
             cats.ApplyFocus(true);
             time = 0f;
             sounds.Play(UiSounds.Cue.Transition);

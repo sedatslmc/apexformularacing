@@ -514,7 +514,29 @@ namespace Apex.Game
                     value = () => s.environmentDetail == 0 ? "Niedrig" : s.environmentDetail == 1 ? "Mittel" : s.environmentDetail == 2 ? "Hoch" : "Extrem (PC)",
                     change = d => s.environmentDetail = Wrap(s.environmentDetail + (d < 0 ? -1 : 1), GraphicsPreset.EnvironmentLevels) },
                 new Row { label = "Lautstärke", value = () => $"{s.masterVolume * 100f:0} %", change = d => s.masterVolume += (d == 0 ? 1 : d) * 0.1f },
+                new Row { label = "HUD: Streckenkarte", value = () => OnOff((s.hudHidden & (1 << 5)) == 0), change = d => s.hudHidden ^= 1 << 5 },
+                new Row { label = "HUD: Reifeninformationen", value = () => OnOff((s.hudHidden & (1 << 4)) == 0), change = d => s.hudHidden ^= 1 << 4 },
+                new Row { label = "HUD: Zeitentabelle", value = () => OnOff((s.hudHidden & (1 << 0)) == 0), change = d => s.hudHidden ^= 1 << 0 },
+                new Row { label = "HUD: Sektorzeiten und Delta", value = () => OnOff((s.hudHidden & (1 << 6)) == 0), change = d => s.hudHidden ^= 1 << 6 },
+                new Row { label = "UI-Lautstärke", value = () => $"{s.uiVolume * 100f:0} %", change = d => s.uiVolume = Mathf.Clamp01(s.uiVolume + (d == 0 ? 1 : d) * 0.1f) },
+                new Row { label = "Intro beim Start", value = () => s.introMode == 0 ? "Einmal" : s.introMode == 1 ? "Immer" : "Nie", change = d => s.introMode = Wrap(s.introMode + (d < 0 ? -1 : 1), 3) },
+                new Row { label = "Rennstart-Präsentation", value = () => OnOff(s.raceIntro), change = d => s.raceIntro = !s.raceIntro },
+                new Row { label = "Bildrate-Limit", value = () => s.fpsLimit <= 0 ? "Aus" : $"{s.fpsLimit} fps",
+                    change = d => { int[] caps = { 0, 30, 60, 120, 144 }; int i = System.Array.IndexOf(caps, s.fpsLimit); s.fpsLimit = caps[Wrap((i < 0 ? 0 : i) + (d < 0 ? -1 : 1), caps.Length)]; } },
             };
+            if (!Application.isMobilePlatform)
+            {
+                rows.Add(new Row { label = "Anzeigemodus", value = () => s.displayMode == 0 ? "Vollbild (exklusiv)" : s.displayMode == 1 ? "Vollbild (randlos)" : "Fenster",
+                    change = d => s.displayMode = Wrap(s.displayMode + (d < 0 ? -1 : 1), 3) });
+                rows.Add(new Row { label = "Auflösung", value = () =>
+                    {
+                        var res = Screen.resolutions;
+                        if (s.resolutionIndex < 0 || s.resolutionIndex >= res.Length) return $"Nativ ({Screen.currentResolution.width} × {Screen.currentResolution.height})";
+                        return $"{res[s.resolutionIndex].width} × {res[s.resolutionIndex].height}";
+                    },
+                    change = d => { int n = Screen.resolutions.Length; s.resolutionIndex = Wrap(s.resolutionIndex + 1 + (d < 0 ? -1 : 1), n + 1) - 1; } });
+                rows.Add(new Row { label = "VSync", value = () => OnOff(s.vsync), change = d => s.vsync = !s.vsync });
+            }
             // Key assignment (PC keyboard): select a row, then press the new key; ← assigns the second key; Esc cancels.
             if (!Application.isMobilePlatform)
             {

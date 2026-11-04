@@ -48,6 +48,17 @@ namespace Apex.Game
         public bool pitAssistActive;
         /// <summary>The pit autopilot stands on the brakes this step (on the box mark).</summary>
         public bool pitBrake;
+        /// <summary>Compounds driven, one per stint (start tyre, then every tyre change): the results' strategy column.</summary>
+        public readonly List<Apex.Vehicle.TireCompound> stints = new List<Apex.Vehicle.TireCompound>();
+
+        /// <summary>Strategy as short compound names ("M › S › H").</summary>
+        public string Strategy()
+        {
+            if (stints.Count == 0) return Apex.Vehicle.CompoundSpec.For(Sim.tires[0].compound).shortName;
+            var parts = new List<string>();
+            foreach (var c in stints) parts.Add(Apex.Vehicle.CompoundSpec.For(c).shortName);
+            return string.Join(" › ", parts);
+        }
     }
 
     /// <summary>
@@ -705,13 +716,17 @@ namespace Apex.Game
                 {
                     bool auto = !rc.isPlayer || PitAssist;
                     float toEntry = -since;
-                    if (auto && toEntry > 0f && toEntry < pit.entryTaper + 60f)
+                    if (auto && toEntry > 0f && toEntry < 900f)
                     {
-                        // Line up on the pit side, then follow the entry lane as it branches off beside the track.
-                        rc.pitAssistActive = rc.isPlayer;
+                        // Brake early (at the limit 40 m before the entry, PitLaneLayout.Drive), line up on the pit side
+                        // well before the entry lane, then follow it as it branches off beside the track.
                         var cmd = PitLaneLayout.Drive(plan, since, ToBox(rc), false, pit.laneCentreFromEdge, pit.SpeedLimit, sim.ForwardSpeed);
-                        rc.ai.forcedLateral = pit.side * (edge + cmd.fromEdge);
                         rc.ai.speedCap = cmd.speedCap;
+                        if (toEntry < pit.entryTaper + 250f)
+                        {
+                            rc.pitAssistActive = rc.isPlayer;
+                            rc.ai.forcedLateral = pit.side * (edge + cmd.fromEdge);
+                        }
                     }
                     if (rc.isPlayer && toEntry > 0f && toEntry < pit.entryTaper + 400f)
                         PlayerBoxGuide = $"BOX {rc.boxIndex + 1} · Einfahrt {Mathf.Max(0f, toEntry - pit.entryTaper):0} m";
@@ -823,7 +838,12 @@ namespace Apex.Game
                         ps.serviceRemaining = 0f;
                         if (!ps.releaseHeld)
                         {
-                            if (ps.changeTires) sim.FitTires(ps.nextCompound);
+                            if (ps.changeTires)
+                            {
+                                if (rc.stints.Count == 0) rc.stints.Add(sim.tires[0].compound);
+                                sim.FitTires(ps.nextCompound);
+                                rc.stints.Add(ps.nextCompound);
+                            }
                             sim.damage.Repair(ps.changeTires);
                             rc.entry.pitStops++;
                             rc.mandatoryStopDone = true;

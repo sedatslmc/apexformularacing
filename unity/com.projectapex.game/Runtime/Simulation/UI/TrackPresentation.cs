@@ -166,6 +166,22 @@ namespace Apex.UI
 
         public static int PlayerPosition(int[] points) => points == null || points.Length == 0 ? 0 : Order(points).IndexOf(0) + 1;
 
+        /// <summary>Teams' standings: each team's drivers' points summed (the player counts for the player's team).</summary>
+        public static List<(int team, int points)> TeamStandings(int[] points, int playerTeam)
+        {
+            var sums = new int[Roster.Teams.Length];
+            if (points != null)
+                for (int i = 0; i < points.Length; i++)
+                {
+                    int t = i == 0 ? playerTeam : Roster.Drivers[Math.Min(i - 1, Roster.Drivers.Length - 1)].team;
+                    if (t >= 0 && t < sums.Length) sums[t] += points[i];
+                }
+            var list = new List<(int, int)>();
+            for (int t = 0; t < sums.Length; t++) list.Add((t, sums[t]));
+            list.Sort((a, b) => b.Item2 != a.Item2 ? b.Item2.CompareTo(a.Item2) : (a.Item1 == playerTeam ? -1 : b.Item1 == playerTeam ? 1 : a.Item1.CompareTo(b.Item1)));
+            return list;
+        }
+
         /// <summary>The top <paramref name="rows"/> of the standings; a player outside them takes the last row.</summary>
         public static List<StandingRow> Standings(int[] points, int rows, int playerTeam)
         {

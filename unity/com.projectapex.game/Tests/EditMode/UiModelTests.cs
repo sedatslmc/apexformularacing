@@ -378,7 +378,12 @@ namespace Apex.Tests
         public void PauseOffersOnlySessionFunctionsAndConfirmsLeavingARace()
         {
             var race = PauseModel.Entries(true, true).ConvertAll(e => e.action);
-            Assert.That(race.Contains(PauseAction.ResetCar) || race.Contains(PauseAction.Restart), Is.False, "no reset or restart in a race");
+            Assert.That(race.Contains(PauseAction.ResetCar), Is.False, "no reset in a race");
+            Assert.That(PauseModel.Entries(true, true).Find(e => e.action == PauseAction.Restart).confirm, Is.True, "restarting a race asks first");
+            foreach (var a in new[] { PauseAction.Restart, PauseAction.CarSetup, PauseAction.Settings, PauseAction.Controls }) Assert.That(race.Contains(a), Is.True, a.ToString());
+            var st = PauseModel.Status(true, 3, 20, 4, 8, "1:32.456", "Sonnig", "Medium", 0.25f);
+            Assert.That(st.ConvertAll(x => x.label), Is.EqualTo(new List<string> { "Position", "Runde", "Rundenzeit", "Wetter", "Reifen" }));
+            Assert.That(st[4].value, Is.EqualTo("Medium · 25 %"));
             Assert.That(race[0], Is.EqualTo(PauseAction.Resume));
             Assert.That(race[race.Count - 1], Is.EqualTo(PauseAction.Leave));
             Assert.That(PauseModel.Entries(true, true).Find(e => e.action == PauseAction.Leave).confirm, Is.True);
@@ -492,7 +497,7 @@ namespace Apex.Tests
                 det.Update(snap, 0, feed); snap.status = Apex.Race.TrackStatus.Green; snap.position = 2; snap.lap = 2; det.Update(snap, 1, feed); det.Update(snap, 3, feed);
                 snap.position = 4; det.Update(snap, 4, feed); det.Update(snap, 6, feed); snap.finished = true; det.Update(snap, 7, feed);
                 snap.finished = false; det.Reset(); det.Update(snap, 8, feed); snap.finished = true; snap.position = 1; det.Update(snap, 9, feed);
-                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b); }
+                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); PauseModel.Status(b, 1, 2, 1, 2, "", "", "", 0f); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b); }
                 foreach (var (r, q, pos, fin) in new[] { (true, false, 1, true), (true, false, 2, true), (true, false, 5, false), (false, true, 1, false), (false, true, 4, false), (false, false, 2, false) })
                     ResultsModel.Headline(r, q, pos, 10, fin);
                 foreach (var cat in SettingsCatalog.All) { SettingsCatalog.Name(cat); SettingsCatalog.Description(cat); }
@@ -500,6 +505,17 @@ namespace Apex.Tests
                 foreach (ColourVision v in System.Enum.GetValues(typeof(ColourVision))) UiPalette.Name(v);
                 var f = TrackFacts.From(TestData.Circuit("test_loop"), TestData.Geometry("test_loop"), 0); var dir = f.Direction; f.clockwise = !f.clockwise; dir = f.Direction;
                 var pts = new int[Roster.Drivers.Length + 1]; ChampionshipModel.Standings(pts, 3, 0);
+                // Race Control 2.0: loading, title, steps, explanations.
+                foreach (var st in LoadingModel.SessionStages(true, true, true)) { var _ = st.label; }
+                foreach (LoadContext lc in System.Enum.GetValues(typeof(LoadContext))) { LoadingModel.Title(lc, "x"); LoadingModel.Subtitle(lc, "x", 1); }
+                for (int k = 0; k < LoadingModel.Tips.Length; k++) LoadingModel.TipAt(k * 6f, 0);
+                TitleScreen.Prompt(true); TitleScreen.Prompt(false);
+                foreach (var st in RaceSetupFlow.Steps) RaceSetupFlow.Name(st);
+                foreach (var md in RaceSetupFlow.Modes) { RaceSetupFlow.ModeName(md); RaceSetupFlow.ModeDescription(md); }
+                foreach (var o in SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id)) RaceSetupFlow.Explain(o.key);
+                RaceSetupFlow.Explain("livery"); RaceSetupFlow.Explain("number");
+                RaceSetupFlow.Summary(SetupMode.GrandPrix, c, "X", "Istanbul", "A01"); RaceSetupFlow.Summary(SetupMode.TimeTrial, c, "X", "", "A01");
+                MainMenuModel.Build(new MenuContext { trackName = "X", laps = 1, careerAvailable = true });
                 Assert.That(Loc.Missing, Is.Empty, string.Join(" | ", Loc.Missing));
                 Assert.That(MainMenuModel.Build(new MenuContext { trackName = "X", laps = 2 })[0].label, Is.EqualTo("Start race"));
             }

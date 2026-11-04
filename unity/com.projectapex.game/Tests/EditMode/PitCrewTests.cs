@@ -9,7 +9,7 @@ namespace Apex.Tests
     public class PitCrewTests
     {
         static readonly PitCrewChoreography.Car Car = PitCrewChoreography.Car.Default;
-        const float BoxCentre = 7.5f;
+        static readonly float BoxCentre = new Apex.Tracks.CircuitDefinition.PitLane().laneCentreFromEdge;   // 8.3 m
 
         [Test]
         public void CarsUseTheFastLaneAndTurnInOnlyForTheirBox()
@@ -50,6 +50,32 @@ namespace Apex.Tests
             Assert.That(plan.Limited(-10f), Is.False);
             Assert.That(plan.Limited(PitLaneLayout.LimiterStart + 1f), Is.True);
             Assert.That(plan.Limited(plan.limitSpan + 1f), Is.False, "free to accelerate in the exit lane");
+        }
+
+        [TestCase(-1)]
+        [TestCase(1)]
+        public void NobodyIsInThePathOfTheReleasedCar(int garage)
+        {
+            // The released car drives straight out and turns gently to the fast lane (PitLaneLayout.FromEdge, served).
+            // Everyone holds his end spot until it is gone: nobody may be inside its body (+0.3 m) on that path.
+            float shiftMax = BoxCentre - PitLaneLayout.FastLaneCentre;
+            foreach (var r in PitCrewChoreography.Roles)
+                foreach (bool tyres in new[] { true, false })
+                {
+                    var end = PitCrewChoreography.PoseOf(r, PitCrewChoreography.Phase.Service, 2.6f, 2.6f, tyres, Car, garage).position;
+                    Assert.That(Vector3.Distance(end, PitCrewChoreography.EndSpot(Car, r, garage, tyres)), Is.LessThan(0.05f), $"{r} (tyres {tyres}): holds its end spot, at {end}");
+                    for (float dz = 0f; dz <= 35f; dz += 0.25f)
+                    {
+                        // Car frame after driving dz: shifted away from the garage by the pull-out.
+                        float shift = -garage * (shiftMax - (PitLaneLayout.FromEdge(-dz, true, BoxCentre) - PitLaneLayout.FastLaneCentre));
+                        bool alongside = end.Z > Car.tail + dz - 0.3f && end.Z < Car.nose + dz + 0.3f;
+                        bool across = MathF.Abs(end.X - shift) < 1.0f + 0.3f;
+                        Assert.That(alongside && across, Is.False, $"{r} (tyres {tyres}) hit after {dz:F1} m at x {end.X:F2}, car centre {shift:F2}");
+                    }
+                }
+            // The front jack man is beside the car, not in front of it, once the car is lowered.
+            var aside = PitCrewChoreography.PoseOf(PitCrewChoreography.Role.FrontJack, PitCrewChoreography.Phase.Service, 2.6f, 2.6f, true, Car, garage).position;
+            Assert.That(aside.X * garage, Is.GreaterThan(2f));
         }
 
         [Test]
