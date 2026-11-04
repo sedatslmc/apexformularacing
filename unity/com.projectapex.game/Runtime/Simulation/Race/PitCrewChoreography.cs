@@ -5,7 +5,8 @@ using Apex.Core;
 namespace Apex.Race
 {
     /// <summary>
-    /// The pit crew's movements during a stop (docs/PIT_LANE.md). Pure timing and positions, so the stop is tested
+    /// The pit crew's movements during a stop (docs/PIT_LANE.md): 14 people – three per wheel (gun, off, on), the front
+    /// jack and the rear jack; the box light releases the car. Pure timing and positions, so the stop is tested
     /// without Unity and plays exactly as long as the race logic's service (PitState.serviceTotal):
     /// <list type="number">
     /// <item>Waiting: the crew stands in front of its garage.</item>
@@ -23,13 +24,16 @@ namespace Apex.Race
         public enum Role
         {
             GunFL, OffFL, OnFL, GunFR, OffFR, OnFR, GunRL, OffRL, OnRL, GunRR, OffRR, OnRR,
-            FrontJack, RearJack, StabiliserLeft, StabiliserRight, Release,
+            FrontJack, RearJack,
         }
 
         public static readonly Role[] Roles = (Role[])Enum.GetValues(typeof(Role));
-        public const int CrewSize = 17;
+        public const int CrewSize = 14;
 
         public enum Phase { Waiting, Ready, Service, Return }
+
+        /// <summary>What a crew member holds.</summary>
+        public enum Hold { None, Wheel, Gun, Jack }
 
         /// <summary>Car geometry the crew works around (VehicleSetup: axles, tracks, nose and tail).</summary>
         public struct Car
@@ -48,8 +52,14 @@ namespace Apex.Race
             public float kneel;
             /// <summary>A wheel in the hands (off man with the old one, on man with the new one).</summary>
             public bool carriesWheel;
-            /// <summary>Holds a wheel gun / a jack / the release sign.</summary>
+            /// <summary>Holds a wheel gun / a jack.</summary>
             public bool tool;
+            /// <summary>What is in the hands (a wheel, the gun, the jack handle; None = arms free).</summary>
+            public Hold hold;
+            /// <summary>Where the hands hold it, in the box frame (the wheel's centre, the gun's grip, the jack handle).</summary>
+            public Vector3 hands;
+            /// <summary>Walking/running speed over the ground (m/s), for the gait.</summary>
+            public float speed;
         }
 
         /// <summary>Time shares of the service (fractions of T).</summary>
@@ -89,10 +99,7 @@ namespace Apex.Race
             switch (r)
             {
                 case Role.FrontJack: return new Vector3(0f, 0f, car.nose + 0.7f);
-                case Role.RearJack: return new Vector3(0f, 0f, car.tail - 0.7f);
-                case Role.StabiliserLeft: return new Vector3(-1.25f, 0f, 0.3f);
-                case Role.StabiliserRight: return new Vector3(1.25f, 0f, 0.3f);
-                default: return new Vector3(0f, 0f, car.nose + 1.6f);     // release: ahead, in the driver's view (shifted to the garage side in PoseOf)
+                default: return new Vector3(0f, 0f, car.tail - 0.7f);   // rear jack
             }
         }
 
@@ -100,8 +107,8 @@ namespace Apex.Race
         public static Vector3 WaitSpot(Role r, int garageSide)
         {
             int i = (int)r;
-            float z = -6f + (i % 9) * 1.5f;
-            float x = garageSide * (GarageX - 0.8f - (i / 9) * 1.1f);
+            float z = -5.25f + (i % 8) * 1.5f;
+            float x = garageSide * (GarageX - 0.8f - (i / 8) * 1.1f);
             return new Vector3(x, 0f, z);
         }
 
@@ -130,39 +137,63 @@ namespace Apex.Race
         /// </summary>
         public static Pose PoseOf(Role r, Phase phase, float t, float serviceTotal, bool changeTyres, Car car, int garageSide)
         {
+            var pose = Core(r, phase, t, serviceTotal, changeTyres, car, garageSide);
+            // Gait speed from the movement around t (the poses are pure functions of time).
+            const float h = 0.04f;
+            float t0 = MathF.Max(0f, t - h), t1 = t + h;
+            var a = Core(r, phase, t0, serviceTotal, changeTyres, car, garageSide).position;
+            var b = Core(r, phase, t1, serviceTotal, changeTyres, car, garageSide).position;
+            pose.speed = new Vector2(b.X - a.X, b.Z - a.Z).Length() / (t1 - t0);
+            pose.hold = r == Role.FrontJack || r == Role.RearJack ? Hold.Jack : Job(r) == 0 ? Hold.Gun : pose.carriesWheel ? Hold.Wheel : Hold.None;
+            if (pose.hold == Hold.None) pose.hands = NoHands;
+            else if (float.IsNaN(pose.hands.X)) pose.hands = pose.position + Rotate(new Vector3(0f, 0.95f, 0.42f), pose.yaw);   // at the chest
+            return pose;
+        }
+
+        /// <summary>Box-frame vector rotated by a yaw (0 = +z, clockwise from above).</summary>
+        public static Vector3 Rotate(Vector3 v, float yaw)
+        {
+            float c = MathF.Cos(yaw), s = MathF.Sin(yaw);
+            return new Vector3(v.X * c + v.Z * s, v.Y, -v.X * s + v.Z * c);
+        }
+
+        /// <summary>Hands free (NaN).</summary>
+        public static readonly Vector3 NoHands = new Vector3(float.NaN, 0f, 0f);
+
+        /// <summary>Where the jack's saddle sits (box frame) and how far it is lifted.</summary>
+        public static Vector3 JackSaddle(Role r, Car car, float lift) =>
+            r == Role.FrontJack ? new Vector3(0f, 0.12f + lift, car.nose - 0.25f) : new Vector3(0f, 0.16f + lift, car.tail + 0.2f);
+
+        static Pose Core(Role r, Phase phase, float t, float serviceTotal, bool changeTyres, Car car, int garageSide)
+        {
             var wait = WaitSpot(r, garageSide);
             var ready = ReadySpot(car, r);
             var work = WorkSpot(car, r);
-            if (r == Role.Release)
-            {
-                work.X = garageSide * 1.6f;
-                ready = work + new Vector3(garageSide * 0.6f, 0f, 0f);
-            }
             // The rear jack waits beside the box (the car rolls in from behind) and steps in behind it once it stops.
             if (r == Role.RearJack) ready = new Vector3(garageSide * 1.7f, 0f, car.tail - 0.9f);
             var carCentre = new Vector3(0f, 0f, 0.3f);
             switch (phase)
             {
                 case Phase.Waiting:
-                    return new Pose { position = wait, yaw = garageSide > 0 ? -MathF.PI * 0.5f : MathF.PI * 0.5f };   // facing the lane
+                    return new Pose { position = wait, yaw = garageSide > 0 ? -MathF.PI * 0.5f : MathF.PI * 0.5f, hands = NoHands, tool = Job(r) != 1 && Job(r) != 2 };   // facing the lane
                 case Phase.Ready:
                 {
                     float k = Smooth(t / RunTime);
                     var p = Vector3.Lerp(wait, ready, k);
-                    return new Pose { position = p, yaw = k < 0.95f ? FacingTo(wait, ready) : FacingTo(ready, carCentre), tool = true, carriesWheel = changeTyres && Job(r) == 2 };
+                    return new Pose { position = p, yaw = k < 0.95f ? FacingTo(wait, ready) : FacingTo(ready, carCentre), tool = Job(r) != 1 && Job(r) != 2, carriesWheel = changeTyres && Job(r) == 2, hands = NoHands };
                 }
                 case Phase.Return:
                 {
                     float k = Smooth(t / ReturnTime);
                     var p = Vector3.Lerp(ready, wait, k);
                     // The off man carries the old wheel back into the garage.
-                    return new Pose { position = p, yaw = FacingTo(ready, wait), tool = true, carriesWheel = changeTyres && Job(r) == 1 };
+                    return new Pose { position = p, yaw = FacingTo(ready, wait), tool = Job(r) != 1 && Job(r) != 2, carriesWheel = changeTyres && Job(r) == 1, hands = NoHands };
                 }
             }
             // Service.
             float T = MathF.Max(serviceTotal, 0.5f);
             float u = ApexMath.Clamp01(t / T);
-            var pose = new Pose { tool = true, yaw = FacingTo(work, carCentre) };
+            var pose = new Pose { tool = Job(r) != 1 && Job(r) != 2, yaw = FacingTo(work, carCentre), hands = NoHands };
             int wheel = Wheel(r);
             if (r == Role.FrontJack || r == Role.RearJack)
             {
@@ -170,22 +201,25 @@ namespace Apex.Race
                 float inK = Smooth(u / JacksIn), outK = Smooth((u - JacksDown) / (1f - JacksDown));
                 pose.position = Vector3.Lerp(Vector3.Lerp(ready, work, inK), ready, outK);
                 pose.yaw = r == Role.FrontJack ? MathF.PI : 0f;
-                return pose;
-            }
-            if (wheel < 0)
-            {
-                pose.position = Vector3.Lerp(ready, work, Smooth(u / JacksIn));
-                if (r == Role.Release) pose.yaw = FacingTo(work, new Vector3(0f, 0f, car.nose));
+                // Hands on the handle: high while the saddle goes under the car, pushed down to lift it.
+                float lifted = Lift(t, serviceTotal) / 0.06f;
+                float sign = r == Role.FrontJack ? -1f : 1f;
+                pose.hands = pose.position + new Vector3(0f, 1.0f - 0.32f * lifted, sign * 0.42f);
                 return pose;
             }
             if (!changeTyres) { pose.position = ready; return pose; }
             var hub = Hub(car, wheel);
-            var hubFloor = new Vector3(hub.X + MathF.Sign(hub.X) * 0.45f, 0f, hub.Z);
+            hub.Y += Lift(t, serviceTotal);
+            float outward = MathF.Sign(hub.X);
+            var hubFloor = new Vector3(hub.X + outward * 0.45f, 0f, hub.Z);
             switch (Job(r))
             {
                 case 0:   // gun: in, kneel, off/on the nut twice, out after tightening
                     pose.position = Vector3.Lerp(Vector3.Lerp(ready, work, Smooth(u / OffStart)), ready, Smooth((u - TightenEnd) / 0.08f));
                     pose.kneel = u < TightenEnd + 0.04f ? Smooth(u / OffStart) : 1f - Smooth((u - TightenEnd - 0.04f) / 0.06f);
+                    // The gun on the wheel nut while kneeling, back at the chest when standing.
+                    var chest = pose.position + Rotate(new Vector3(0f, 1.0f, 0.38f), pose.yaw);
+                    pose.hands = Vector3.Lerp(chest, hub + new Vector3(outward * 0.32f, 0f, 0f), pose.kneel);
                     return pose;
                 case 1:   // off: in to the hub, pull the old wheel, carry it out and set it down
                 {
@@ -193,6 +227,9 @@ namespace Apex.Race
                     float outK = Smooth((u - OffStart) / (OffEnd - OffStart));
                     pose.position = u < OffStart ? Vector3.Lerp(ready, hubFloor, inK) : Vector3.Lerp(hubFloor, work, outK);
                     pose.carriesWheel = u >= OffStart && u < OffEnd + 0.02f;
+                    // The wheel leaves the hub in the hands and comes up to the chest.
+                    var chestW = pose.position + Rotate(new Vector3(0f, 0.95f, 0.42f), pose.yaw);
+                    pose.hands = Vector3.Lerp(hub + new Vector3(outward * 0.05f, 0f, 0f), chestW, Smooth(outK / 0.35f));
                     return pose;
                 }
                 default:  // on: waits with the new wheel, fits it once the old one is off, steps back
@@ -201,6 +238,9 @@ namespace Apex.Race
                     float backK = Smooth((u - OnEnd) / 0.08f);
                     pose.position = Vector3.Lerp(Vector3.Lerp(ready, hubFloor, inK), ready, backK);
                     pose.carriesWheel = u < OnEnd;
+                    // The new wheel goes from the chest onto the hub.
+                    var chestN = pose.position + Rotate(new Vector3(0f, 0.95f, 0.42f), pose.yaw);
+                    pose.hands = Vector3.Lerp(chestN, hub, inK * (1f - backK));
                     return pose;
                 }
             }

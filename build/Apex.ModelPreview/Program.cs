@@ -293,6 +293,67 @@ if (Array.IndexOf(args, "--monument") >= 0)
     Console.WriteLine(string.Format(ic, "site {0:F0},{1:F0}: base {2:F1} m, terrace +{3:F1} m, pole top +{4:F1} m", fx, fz, baseY, terrace, poleTop));
     return;
 }
+if (Array.IndexOf(args, "--pitcrew") >= 0)
+{
+    // Pit crew models (PitCrewGeometry) posed by the skeleton (Apex.Race.PitCrewFigure) at moments of a stop:
+    // pitcrew_stop_<u>.obj with the 14 crew members and their props in the box frame (car frame at the box).
+    var ic = CultureInfo.InvariantCulture;
+    var car = Apex.Race.PitCrewChoreography.Car.Default;
+    var bodyParts = new MeshBuilder[Apex.Race.PitCrewFigure.PartCount][];
+    for (int pi = 0; pi < bodyParts.Length; pi++) bodyParts[pi] = PitCrewGeometry.Part((Apex.Race.PitCrewFigure.Part)pi);
+    var wheelMb = PitCrewGeometry.Wheel(); var gunMb = PitCrewGeometry.Gun(); var jackHeadMb = PitCrewGeometry.JackHead(); var jackHandleMb = PitCrewGeometry.JackHandle();
+    Vector3 U(System.Numerics.Vector3 v) => new Vector3(v.X, v.Y, v.Z);
+    foreach (float u in new[] { 0.06f, 0.3f, 0.5f, 0.7f })
+    {
+        const float T = 2.6f;
+        var outParts = new Dictionary<string, MeshBuilder>();
+        MeshBuilder Get(string k) { if (!outParts.TryGetValue(k, out var m)) outParts[k] = m = new MeshBuilder(); return m; }
+        void Place(MeshBuilder src, string mat, Apex.Race.PitCrewFigure.Frame f, float zScale = 1f)
+        {
+            Vector3 o = U(f.origin), r = U(f.right), up = U(f.up), fw = U(f.forward);
+            Get(mat).Append(src, v => o + r * v.x + up * v.y + fw * (v.z * zScale));
+        }
+        var frames = new Apex.Race.PitCrewFigure.Frame[Apex.Race.PitCrewFigure.PartCount];
+        foreach (var role in Apex.Race.PitCrewChoreography.Roles)
+        {
+            var pose = Apex.Race.PitCrewChoreography.PoseOf(role, Apex.Race.PitCrewChoreography.Phase.Service, u * T, T, true, car, -1);
+            Apex.Race.PitCrewFigure.Solve(pose, Apex.Race.PitCrewFigure.ToFigure(pose.hands, pose.position, pose.yaw), u * T, frames);
+            for (int pi = 0; pi < frames.Length; pi++)
+            {
+                var bf = Apex.Race.PitCrewFigure.ToBox(frames[pi], pose.position, pose.yaw);
+                for (int sl = 0; sl < PitCrewGeometry.BodySlots; sl++) Place(bodyParts[pi][sl], PitCrewGeometry.BodyMaterialNames[sl], bf);
+            }
+            var props = Apex.Race.PitCrewFigure.PropsOf(role, pose, Apex.Race.PitCrewChoreography.Phase.Service, u * T, T, car);
+            for (int sl = 0; sl < PitCrewGeometry.PropSlots; sl++)
+            {
+                string m = sl == 0 ? "Tire" : "Rim";
+                if (props.wheel) Place(wheelMb[sl], m, props.wheelFrame);
+                if (props.gun) Place(gunMb[sl], m, props.gunFrame);
+                if (props.jack) { Place(jackHeadMb[sl], m, props.jackHead); Place(jackHandleMb[sl], m, props.jackHandle, props.handleLength); }
+            }
+        }
+        var sb = new StringBuilder();
+        int vb = 1, total = 0;
+        foreach (var kv in outParts)
+        {
+            if (kv.Value.TriangleCount == 0) continue;
+            sb.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+            foreach (var v in kv.Value.Vertices) sb.AppendLine(string.Format(ic, "v {0:F4} {1:F4} {2:F4}", v.x, v.y, v.z));
+            var ts = kv.Value.Triangles;
+            for (int i = 0; i < ts.Count; i += 3) sb.AppendLine($"f {ts[i] + vb} {ts[i + 1] + vb} {ts[i + 2] + vb}");
+            vb += kv.Value.VertexCount;
+            total += kv.Value.TriangleCount;
+        }
+        Directory.CreateDirectory(outDir);
+        string file = $"pitcrew_stop_{(int)(u * 100):00}.obj";
+        File.WriteAllText(Path.Combine(outDir, file), sb.ToString());
+        Console.WriteLine($"{file}: {total} triangles");
+    }
+    int person = 0;
+    foreach (var bp in bodyParts) foreach (var mbp in bp) person += mbp.TriangleCount;
+    Console.WriteLine($"one crew member: {person} triangles");
+    return;
+}
 if (Array.IndexOf(args, "--kit") >= 0)
 {
     // Circuit kit previews: kit_catalog_lod{0,1,2}.obj (every module side by side) and

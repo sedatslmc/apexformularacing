@@ -236,9 +236,9 @@ namespace Apex.Game
             if (def.pit != null)
             {
                 var pit = def.pit;
-                Board(ci, signs, font, pit.entry - 150f, pit.side, "PİT GİRİŞİ ▸", new Color(0.78f, 0.06f, 0.18f), Color.white, 2.4f);
-                Board(ci, signs, font, pit.entry + 10f, pit.side, $"PİT {pit.speedLimitKmh:0} km/h", Color.white, new Color(0.78f, 0.06f, 0.18f), 2.0f);
-                Board(ci, signs, font, pit.exit - 40f, pit.side, "PİT ÇIKIŞI", navy, ivory, 2.2f);
+                Board(ci, signs, font, pit.entry - pit.entryTaper - 60f, pit.side, "PİT GİRİŞİ ▸", new Color(0.78f, 0.06f, 0.18f), Color.white, 2.4f);
+                Board(ci, signs, font, pit.entry + CircuitDefinition.PitLane.LimiterStart, pit.side, $"PİT {pit.speedLimitKmh:0} km/h", Color.white, new Color(0.78f, 0.06f, 0.18f), 2.0f);
+                Board(ci, signs, font, pit.entry + pit.PlanFor(ci.Geometry.Length).limitSpan, pit.side, "PİT ÇIKIŞI", navy, ivory, 2.2f);
             }
             // Braking distance boards (150 / 100 / 50 m to the turn-in): white boards, black numerals.
             foreach (var bb in ci.Infrastructure.brakeBoards)

@@ -23,6 +23,35 @@ namespace Apex.Tests
             Assert.That(PitLaneLayout.FastLaneCentre + PitLaneLayout.CarHalfWidth, Is.LessThan(PitLaneLayout.Divider));
         }
 
+        [TestCase(400f, 170f)]   // exit line at the end of the pit area, acceleration lane after it
+        [TestCase(280f, 20f)]    // bosphorus_a: exit line 120 m before the end, no room after it
+        public void EntryAndExitLanesLeadSmoothlyFromAndBackToTheTrack(float limitSpan, float exitTaper)
+        {
+            var plan = new PitLaneLayout.Plan(400f, limitSpan, 150f, exitTaper);
+            // Before the entry lane: on the track beside the edge; at the entry: the fast lane.
+            Assert.That(PitLaneLayout.Route(plan, -plan.entryTaper - 30f, 300f, false, BoxCentre), Is.EqualTo(-1.6f).Within(1e-4f));
+            Assert.That(PitLaneLayout.Route(plan, 0f, 200f, false, BoxCentre), Is.EqualTo(PitLaneLayout.FastLaneCentre).Within(1e-4f));
+            // No jumps: the target moves at most 0.25 m per metre driven over the whole stop.
+            float prev = PitLaneLayout.Route(plan, -plan.entryTaper - 30f, 300f, false, BoxCentre);
+            for (float s = -plan.entryTaper - 30f; s < plan.MergeEnd + 20f; s += 1f)
+            {
+                float toBox = 200f - s;
+                float f = PitLaneLayout.Route(plan, s, toBox, toBox < 0f, BoxCentre);
+                Assert.That(MathF.Abs(f - prev), Is.LessThan(0.25f), $"at {s} m");
+                prev = f;
+            }
+            // Acceleration lane: in the lane after the exit line (behind the wall, then the white line), at least
+            // 100 m from the exit line until back on the track, inside the pit area or its taper.
+            Assert.That(plan.MergeEnd - plan.limitSpan, Is.GreaterThanOrEqualTo(100f));
+            Assert.That(PitLaneLayout.Route(plan, plan.limitSpan + 30f, -300f, true, BoxCentre), Is.EqualTo(PitLaneLayout.FastLaneCentre).Within(1e-4f));
+            Assert.That(PitLaneLayout.Route(plan, plan.MergeEnd, -400f, true, BoxCentre), Is.EqualTo(-1.6f).Within(1e-4f));
+            Assert.That(plan.MergeStart, Is.GreaterThanOrEqualTo(plan.WallEnd), "no merging through the pit wall");
+            // The limiter runs from its line after the entry to the exit line only.
+            Assert.That(plan.Limited(-10f), Is.False);
+            Assert.That(plan.Limited(PitLaneLayout.LimiterStart + 1f), Is.True);
+            Assert.That(plan.Limited(plan.limitSpan + 1f), Is.False, "free to accelerate in the exit lane");
+        }
+
         [Test]
         public void NoCrewMemberStandsInTheFastLane()
         {

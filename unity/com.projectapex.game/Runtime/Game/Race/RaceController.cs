@@ -587,9 +587,6 @@ namespace Apex.Game
 
         // --- Pit lane -------------------------------------------------------------------
 
-        /// <summary>Distance before the pit exit from which the lane may be left (where the pit wall ends).</summary>
-        public const float PitMergeLength = 60f;
-
         void UpdatePit(RaceCar rc, float dt)
         {
             var pit = Circuit.Pit;
@@ -598,9 +595,10 @@ namespace Apex.Game
             var sim = rc.Sim;
             var ps = rc.pit;
             float L = g.Length;
+            // Signed distance since the entry (negative in the entry lane before it).
+            float since = -pit.ToEntry(rc.raw, L);
             float sinceEntry = ApexMath.PosMod(rc.raw - pit.entry, L);
-            float toEntry = ApexMath.PosMod(pit.entry - rc.raw, L);
-            float span = ApexMath.PosMod(pit.exit - pit.entry, L);
+            var plan = pit.PlanFor(L);
             float laneLat = Circuit.PitLaneLateral(rc.raw);
             float edge = g.WidthAt(rc.raw) * 0.5f;
             switch (ps.stage)
@@ -608,28 +606,33 @@ namespace Apex.Game
                 case PitState.Stage.Requested:
                 {
                     bool auto = !rc.isPlayer || PitAssist;
-                    if (toEntry < 160f && auto)
+                    float toEntry = -since;
+                    if (auto && toEntry > 0f && toEntry < pit.entryTaper + 60f)
                     {
-                        // Line up on the pit side of the track before the entry.
+                        // Line up on the pit side, then follow the entry lane as it opens beside the track.
                         rc.pitAssistActive = rc.isPlayer;
-                        rc.ai.forcedLateral = pit.side * (edge - 1.6f);
+                        rc.ai.forcedLateral = pit.side * (edge + PitLaneLayout.LaneTarget(1f - toEntry / pit.entryTaper));
+                        rc.ai.speedCap = Mathf.Sqrt(pit.SpeedLimit * pit.SpeedLimit + 2f * 9f * toEntry);   // braked down to the limit by the entry
                     }
-                    bool entered = auto ? sinceEntry < 20f : (sinceEntry < 80f && pit.side * rc.lateral > edge + 1f);
+                    // The player is in once over the white entry line (entry lane or lane itself).
+                    bool entered = auto ? sinceEntry < 20f
+                        : (since > -pit.entryTaper && since < 80f && pit.side * rc.lateral > edge + 1f);
                     if (entered)
                     {
                         ps.stage = PitState.Stage.InLane;
-                        if (rc.isPlayer) Message?.Invoke($"Boxengasse – Begrenzer {pit.speedLimitKmh:0} km/h", ApexStyle.Accent, 1);
-                    }
-                    else if (!auto && sinceEntry >= 80f && sinceEntry < 120f && rc.isPlayer)
-                    {
-                        // Missed the entry: keep the request for the next lap.
+                        if (rc.isPlayer) Message?.Invoke($"Boxengasse – Limit {pit.speedLimitKmh:0} km/h ab der Linie", ApexStyle.Accent, 1);
                     }
                     break;
                 }
                 case PitState.Stage.InLane:
                 case PitState.Stage.Leaving:
                 {
-                    sim.speedLimit = pit.SpeedLimit;
+                    // Speed limit from the line after the entry to the exit line; the lane behind is for accelerating.
+                    bool limited = plan.Limited(since);
+                    bool wasLimited = !float.IsPositiveInfinity(sim.speedLimit);
+                    sim.speedLimit = limited ? pit.SpeedLimit : float.PositiveInfinity;
+                    if (rc.isPlayer && limited && !wasLimited && since < plan.limitSpan * 0.5f) Message?.Invoke($"Begrenzer {pit.speedLimitKmh:0} km/h", ApexStyle.Accent, 0);
+                    if (rc.isPlayer && wasLimited && !limited && since > plan.limitSpan) Message?.Invoke("Begrenzer aus – Ausfahrt", Color.white, 0);
                     bool auto = !rc.isPlayer || rc.pitAssistActive;
                     if (auto)
                     {
@@ -639,11 +642,9 @@ namespace Apex.Game
                         float toOwn = ApexMath.PosMod(boxD - rc.raw, L);
                         if (toOwn > L * 0.5f) toOwn -= L;
                         bool served = ps.stage == PitState.Stage.Leaving;
-                        float fromEdge = PitLaneLayout.FromEdge(toOwn, served, pit.laneCentreFromEdge);
-                        // Merge back where the pit wall ends (60 m before the exit): at 80 km/h the lane change
-                        // takes ~25 m, so releasing only 25 m before the exit could run a car into the wall end.
-                        rc.ai.forcedLateral = sinceEntry > span - PitMergeLength ? float.NaN : pit.side * (edge + fromEdge);
-                        rc.ai.speedCap = pit.SpeedLimit;
+                        float fromEdge = PitLaneLayout.Route(plan, since, toOwn, served, pit.laneCentreFromEdge);
+                        rc.ai.forcedLateral = pit.side * (edge + fromEdge);
+                        rc.ai.speedCap = since < plan.limitSpan - 2f ? pit.SpeedLimit : float.PositiveInfinity;
                     }
                     if (ps.stage == PitState.Stage.InLane)
                     {
@@ -669,14 +670,17 @@ namespace Apex.Game
                             if (rc.isPlayer) Message?.Invoke("Box verpasst – kein Service", ApexStyle.Caution, 2);
                         }
                     }
-                    if (sinceEntry > span || sinceEntry > L * 0.9f)
+                    // Done once merged onto the track at the end of the exit lane (a player who rejoins early, too).
+                    bool merged = since > (auto ? plan.MergeEnd : plan.span + pit.exitTaper)
+                        || (since > plan.WallEnd + 10f && !auto && pit.side * rc.lateral < edge - 0.5f)
+                        || since < -pit.entryTaper - 50f;
+                    if (merged)
                     {
                         ps.stage = PitState.Stage.None;
                         sim.speedLimit = float.PositiveInfinity;
                         rc.ai.forcedLateral = float.NaN;
                         rc.ai.speedCap = float.PositiveInfinity;
                         rc.pitAssistActive = false;
-                        if (rc.isPlayer) Message?.Invoke("Boxenausfahrt", Color.white, 0);
                     }
                     break;
                 }

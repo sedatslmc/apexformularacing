@@ -119,7 +119,7 @@ namespace Apex.Tracks
         public DriveResult Drive(float rawDistance, float lateral, float distance, float maxTime, float initialSpeed = 0f,
             bool throttleOnly = false, float pace = 0.95f, int laps = 0, float groundingImpulse = 5f,
             Func<float, float> lateralAt = null, float speedLimit = float.PositiveInfinity, int seed = 3,
-            Action<VehicleSimulation> configure = null, bool digitalInput = false,
+            Action<VehicleSimulation> configure = null, bool digitalInput = false, Func<float, float> speedLimitAt = null,
             InputLogic.KeyboardSteering.Profile keyboardProfile = InputLogic.KeyboardSteering.Profile.Balanced)
         {
             var rig = NewRig(out var sim);
@@ -155,6 +155,7 @@ namespace Apex.Tracks
                 states.Clear();
                 states.Add(st);
                 if (lateralAt != null) ai.forcedLateral = lateralAt(pr.distance);
+                if (speedLimitAt != null) sim.speedLimit = speedLimitAt(pr.distance);
                 // As RaceController: the driver knows the conditions (grip of the tyres, wet track).
                 float grip = 0f;
                 foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;

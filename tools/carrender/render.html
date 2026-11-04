@@ -73,6 +73,10 @@ const mats = {
   FerryFunnel: M({ color: 0xe3b23c, roughness: 0.5 }),
   Rock: M({ color: 0x6b6359, roughness: 0.95 }),
   Roof: M({ color: 0xa4442e, roughness: 0.8 }),
+  // Pit crew (PitCrewGeometry; the overall in the team colour, here team 0).
+  CrewOverall: M({ color: params.get('team') ? parseInt(params.get('team'), 16) : 0xc8202a, roughness: 0.7, sheen: 0.4 }),
+  CrewDark: M({ color: 0x15161a, roughness: 0.8 }),
+  CrewHelmet: M({ color: 0xeef0f3, metalness: 0.1, roughness: 0.3, clearcoat: 1 }),
 };
 
 // Studio: soft key, rim lights and a glossy floor.

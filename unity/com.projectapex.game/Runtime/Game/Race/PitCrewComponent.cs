@@ -7,9 +7,11 @@ using UnityEngine.Rendering;
 namespace Apex.Game
 {
     /// <summary>
-    /// Pit crews and pit stop animation (docs/PIT_LANE.md). One crew of 17 per box with a car in the session, in the
-    /// team colour; the movements come from Apex.Race.PitCrewChoreography and follow the race logic's stop
-    /// (PitState: called in, stopped for serviceTotal, released). Drawn instanced (people, wheels, tools); the car's
+    /// Pit crews and pit stop animation (docs/PIT_LANE.md). One crew of 14 per box with a car in the session (three per
+    /// wheel, front and rear jack), own procedural models (PitCrewGeometry: overall in the team colour, helmet, gloves,
+    /// boots; wheel, wheel gun, trolley jack). The movements come from Apex.Race.PitCrewChoreography, the limbs from the
+    /// skeleton Apex.Race.PitCrewFigure (gait, kneeling, hands on the job), following the race logic's stop
+    /// (PitState: called in, stopped for serviceTotal, released). Drawn instanced per body part; the car's
     /// own wheels are hidden while they are off the hub, and a lamp above each box turns from red to green at the
     /// release. On mobile only the crews of boxes with a car on its way in, in the box or just released are drawn.
     /// </summary>
@@ -37,14 +39,20 @@ namespace Apex.Game
             public Quaternion frameRot;
             public Renderer lamp;
             public bool lampGreen;
-            public readonly Matrix4x4[] people = new Matrix4x4[PitCrewChoreography.CrewSize];
+            public float clock;
         }
 
         readonly List<Box> boxes = new List<Box>();
-        Mesh person, tyre, tool;
-        Material skin, tyreMat, toolMat, red, green;
-        readonly Matrix4x4[] tyres = new Matrix4x4[64];
-        readonly Matrix4x4[] tools = new Matrix4x4[64];
+        // Body part meshes (submeshes: overall, dark, helmet) and props (submeshes: dark, metal).
+        readonly Mesh[] parts = new Mesh[PitCrewFigure.PartCount];
+        readonly bool[][] partHasSlot = new bool[PitCrewFigure.PartCount][];
+        Mesh wheel, gun, jackHead, jackHandle;
+        Material dark, shell, propDark, propMetal, red, green;
+        // Instance matrices per body part (one per person) and per prop.
+        readonly Matrix4x4[][] partMatrices = new Matrix4x4[PitCrewFigure.PartCount][];
+        readonly int[] partCount = new int[PitCrewFigure.PartCount];
+        readonly Matrix4x4[] wheels = new Matrix4x4[32], guns = new Matrix4x4[8], heads = new Matrix4x4[4], handles = new Matrix4x4[4];
+        readonly PitCrewFigure.Frame[] frames = new PitCrewFigure.Frame[PitCrewFigure.PartCount];
         int garageSide;
         PitCrewChoreography.Car carShape = PitCrewChoreography.Car.Default;
 
@@ -59,21 +67,24 @@ namespace Apex.Game
                 frontAxle = s.FrontAxleZ, rearAxle = s.RearAxleZ, halfTrackFront = s.trackFront * 0.5f, halfTrackRear = s.trackRear * 0.5f,
                 nose = s.FrontAxleZ + 1.3f, tail = s.RearAxleZ - 0.8f,
             };
-            // Meshes: a person (shirt + skin like the spectators), a wheel, a tool block (wheel gun, jack handle, sign).
-            var shirtMb = new MeshBuilder();
-            var skinMb = new MeshBuilder();
-            EnvironmentGeometry.SpectatorMesh(shirtMb, skinMb);
-            person = EnvironmentBuilder.Combine(new Dictionary<string, MeshBuilder> { ["CrewShirt"] = shirtMb, [EnvironmentGeometry.Skin] = skinMb }, "PitCrew", out var mats);
-            skin = mats[1];
-            skin.enableInstancing = true;
-            var wheelMb = new MeshBuilder();
-            wheelMb.Tube(new Vector3(-0.19f, 0f, 0f), new Vector3(0.19f, 0f, 0f), 0.36f, 14, true);
-            tyre = wheelMb.ToMesh("PitWheel");
-            tyreMat = new Material(EnvironmentMaterials.Solid(new Color(0.05f, 0.05f, 0.055f))) { name = "PitWheel", enableInstancing = true };
-            var toolMb = new MeshBuilder();
-            toolMb.Box(Vector3.zero, new Vector3(0.12f, 0.12f, 0.32f));
-            tool = toolMb.ToMesh("PitTool");
-            toolMat = new Material(EnvironmentMaterials.Solid(new Color(0.15f, 0.16f, 0.18f))) { name = "PitTool", enableInstancing = true };
+            // Own crew models (placeholder art): ten body parts, wheel, gun and jack (PitCrewGeometry).
+            int detail = quality > 0 ? 1 : 0;
+            for (int p = 0; p < PitCrewFigure.PartCount; p++)
+            {
+                var slots = PitCrewGeometry.Part((PitCrewFigure.Part)p, detail);
+                parts[p] = ToMesh("Crew" + (PitCrewFigure.Part)p, slots);
+                partHasSlot[p] = new bool[slots.Length];
+                for (int k = 0; k < slots.Length; k++) partHasSlot[p][k] = slots[k].TriangleCount > 0;
+                partMatrices[p] = new Matrix4x4[PitCrewChoreography.CrewSize];
+            }
+            wheel = ToMesh("PitWheel", PitCrewGeometry.Wheel(detail));
+            gun = ToMesh("PitGun", PitCrewGeometry.Gun());
+            jackHead = ToMesh("PitJackHead", PitCrewGeometry.JackHead());
+            jackHandle = ToMesh("PitJackHandle", PitCrewGeometry.JackHandle());
+            dark = Instanced("CrewDark", new Color(0.08f, 0.085f, 0.1f));
+            shell = Instanced("CrewHelmet", new Color(0.92f, 0.93f, 0.95f));
+            propDark = Instanced("PitToolDark", new Color(0.06f, 0.06f, 0.065f));
+            propMetal = Instanced("PitToolMetal", new Color(0.55f, 0.57f, 0.6f));
             red = new Material(EnvironmentMaterials.Solid(new Color(0.9f, 0.08f, 0.06f))) { name = "PitLampRed" };
             green = new Material(EnvironmentMaterials.Solid(new Color(0.1f, 0.95f, 0.3f))) { name = "PitLampGreen" };
             foreach (var m in new[] { red, green })
@@ -89,7 +100,7 @@ namespace Apex.Game
                 var box = new Box
                 {
                     index = b, team = team, position = pose.position, rotation = pose.rotation,
-                    shirt = new Material(EnvironmentMaterials.Solid(new Color(tc.r, tc.g, tc.b))) { name = "CrewShirt" + team, enableInstancing = true },
+                    shirt = Instanced("CrewOverall" + team, new Color(tc.r, tc.g, tc.b)),
                 };
                 box.framePos = box.position; box.frameRot = box.rotation;
                 // Release lamp on a post at the garage end of the box, facing the driver.
@@ -100,7 +111,7 @@ namespace Apex.Game
                 var basePos = box.position + box.rotation * new Vector3(garageSide * (PitCrewChoreography.GarageX + 0.4f), 0f, carShape.nose + 2.2f);
                 post.transform.SetPositionAndRotation(basePos + Vector3.up * 1.1f, Quaternion.identity);
                 post.transform.localScale = new Vector3(0.08f, 1.1f, 0.08f);
-                post.GetComponent<Renderer>().sharedMaterial = toolMat;
+                post.GetComponent<Renderer>().sharedMaterial = propDark;
                 var lamp = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 Object.Destroy(lamp.GetComponent<Collider>());
                 lamp.name = "PitLamp" + b;
@@ -112,6 +123,32 @@ namespace Apex.Game
                 box.lamp.shadowCastingMode = ShadowCastingMode.Off;
                 boxes.Add(box);
             }
+        }
+
+        static Material Instanced(string name, Color c) => new Material(EnvironmentMaterials.Solid(c)) { name = name, enableInstancing = true };
+
+        /// <summary>One mesh with a submesh per material slot (empty slots stay as empty submeshes, so indices are fixed).</summary>
+        static Mesh ToMesh(string name, MeshBuilder[] slots)
+        {
+            var verts = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var mesh = new Mesh { name = name };
+            var tris = new List<int>[slots.Length];
+            for (int k = 0; k < slots.Length; k++)
+            {
+                int b = verts.Count;
+                verts.AddRange(slots[k].Vertices);
+                uvs.AddRange(slots[k].UVs);
+                tris[k] = new List<int>(slots[k].Triangles.Count);
+                foreach (int i in slots[k].Triangles) tris[k].Add(i + b);
+            }
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            mesh.subMeshCount = slots.Length;
+            for (int k = 0; k < slots.Length; k++) mesh.SetTriangles(tris[k], k);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            return mesh;
         }
 
         void Update()
@@ -137,7 +174,7 @@ namespace Apex.Game
                 bool active = box.phase != PitCrewChoreography.Phase.Waiting;
                 if (quality <= 0 && !active) continue;
                 if ((box.position - camPos).sqrMagnitude > DrawDistance * DrawDistance) continue;
-                Draw(box);
+                Draw(box, dt);
             }
         }
 
@@ -196,41 +233,64 @@ namespace Apex.Game
             if (greenNow != box.lampGreen) { box.lampGreen = greenNow; box.lamp.sharedMaterial = greenNow ? green : red; }
         }
 
-        void Draw(Box box)
+        static Vector3 U(System.Numerics.Vector3 v) => new Vector3(v.X, v.Y, v.Z);
+
+        /// <summary>World matrix of a box-frame part frame (with an optional length along forward).</summary>
+        static Matrix4x4 World(Box box, in PitCrewFigure.Frame f, float zScale = 1f)
         {
-            int nTyre = 0, nTool = 0;
+            var pos = box.framePos + box.frameRot * U(f.origin);
+            var rot = box.frameRot * Quaternion.LookRotation(U(f.forward), U(f.up));
+            return Matrix4x4.TRS(pos, rot, new Vector3(1f, 1f, zScale));
+        }
+
+        void Draw(Box box, float dt)
+        {
+            box.clock += dt;
+            for (int p = 0; p < partCount.Length; p++) partCount[p] = 0;
+            int nWheel = 0, nGun = 0, nJack = 0;
             for (int i = 0; i < PitCrewChoreography.CrewSize; i++)
             {
                 var role = PitCrewChoreography.Roles[i];
-                var p = PitCrewChoreography.PoseOf(role, box.phase, box.t, box.service, box.changeTyres, carShape, garageSide);
-                var local = new Vector3(p.position.X, 0f, p.position.Z);
-                var world = box.framePos + box.frameRot * local;
-                var rot = box.frameRot * Quaternion.Euler(0f, p.yaw * Mathf.Rad2Deg, 0f);
-                // Kneeling: lower and shorter (the figure folds at the knees).
-                float height = Mathf.Lerp(1.78f, 1.15f, p.kneel);
-                box.people[i] = Matrix4x4.TRS(world, rot, new Vector3(1.78f, height, 1.78f));
-                var hands = world + rot * new Vector3(0f, height * 0.55f, 0.32f);
-                if (p.carriesWheel && nTyre < tyres.Length)
-                    tyres[nTyre++] = Matrix4x4.TRS(hands + Vector3.up * 0.05f, rot * Quaternion.Euler(0f, 90f, 0f), Vector3.one);
-                if (p.tool && nTool < tools.Length)
+                var pose = PitCrewChoreography.PoseOf(role, box.phase, box.t, box.service, box.changeTyres, carShape, garageSide);
+                // Gait from the crew clock (keeps running through the phases), offset per person so they don't march in step.
+                PitCrewFigure.Solve(pose, PitCrewFigure.ToFigure(pose.hands, pose.position, pose.yaw), box.clock + i * 0.137f, frames);
+                for (int p = 0; p < PitCrewFigure.PartCount; p++)
+                    partMatrices[p][partCount[p]++] = World(box, PitCrewFigure.ToBox(frames[p], pose.position, pose.yaw));
+                var props = PitCrewFigure.PropsOf(role, pose, box.phase, box.t, box.service, carShape);
+                if (props.wheel && nWheel < wheels.Length) wheels[nWheel++] = World(box, props.wheelFrame);
+                if (props.gun && nGun < guns.Length) guns[nGun++] = World(box, props.gunFrame);
+                if (props.jack && nJack < heads.Length)
                 {
-                    bool jack = role == PitCrewChoreography.Role.FrontJack || role == PitCrewChoreography.Role.RearJack;
-                    var scale = jack ? new Vector3(0.5f, 0.5f, 5f) : Vector3.one;
-                    tools[nTool++] = Matrix4x4.TRS(jack ? world + rot * new Vector3(0f, 0.45f, 0.6f) : hands, rot, scale);
+                    heads[nJack] = World(box, props.jackHead);
+                    handles[nJack++] = World(box, props.jackHandle, props.handleLength);
                 }
             }
             // Old wheels set down beside the car until the crew carries them back (service, after "off").
             if (box.phase == PitCrewChoreography.Phase.Service && box.changeTyres && box.t / Mathf.Max(box.service, 0.5f) >= PitCrewChoreography.OffEnd)
-                for (int w = 0; w < 4 && nTyre < tyres.Length; w++)
+                for (int w = 0; w < 4 && nWheel < wheels.Length; w++)
                 {
                     var hub = PitCrewChoreography.Hub(carShape, w);
-                    var spot = new Vector3(hub.X + Mathf.Sign(hub.X) * 1.6f, 0.36f, hub.Z - 0.9f);
-                    tyres[nTyre++] = Matrix4x4.TRS(box.framePos + box.frameRot * spot, box.frameRot * Quaternion.Euler(0f, 0f, 90f), Vector3.one);
+                    var spot = new Vector3(hub.X + Mathf.Sign(hub.X) * 1.6f, 0.2f, hub.Z - 0.9f);
+                    wheels[nWheel++] = Matrix4x4.TRS(box.framePos + box.frameRot * spot, box.frameRot * Quaternion.Euler(90f, 0f, 0f), Vector3.one);
                 }
-            Graphics.DrawMeshInstanced(person, 0, box.shirt, box.people, PitCrewChoreography.CrewSize, null, ShadowCastingMode.On, true);
-            Graphics.DrawMeshInstanced(person, 1, skin, box.people, PitCrewChoreography.CrewSize, null, ShadowCastingMode.Off, true);
-            if (nTyre > 0) Graphics.DrawMeshInstanced(tyre, 0, tyreMat, tyres, nTyre, null, ShadowCastingMode.On, true);
-            if (nTool > 0) Graphics.DrawMeshInstanced(tool, 0, toolMat, tools, nTool, null, ShadowCastingMode.Off, true);
+            for (int p = 0; p < PitCrewFigure.PartCount; p++)
+            {
+                var has = partHasSlot[p];
+                if (has[PitCrewGeometry.Overall]) Graphics.DrawMeshInstanced(parts[p], PitCrewGeometry.Overall, box.shirt, partMatrices[p], partCount[p], null, ShadowCastingMode.On, true);
+                if (has[PitCrewGeometry.Dark]) Graphics.DrawMeshInstanced(parts[p], PitCrewGeometry.Dark, dark, partMatrices[p], partCount[p], null, ShadowCastingMode.On, true);
+                if (has[PitCrewGeometry.Shell]) Graphics.DrawMeshInstanced(parts[p], PitCrewGeometry.Shell, shell, partMatrices[p], partCount[p], null, ShadowCastingMode.On, true);
+            }
+            DrawProp(wheel, wheels, nWheel);
+            DrawProp(gun, guns, nGun);
+            DrawProp(jackHead, heads, nJack);
+            DrawProp(jackHandle, handles, nJack);
+        }
+
+        void DrawProp(Mesh mesh, Matrix4x4[] m, int n)
+        {
+            if (n <= 0) return;
+            Graphics.DrawMeshInstanced(mesh, PitCrewGeometry.PropDark, propDark, m, n, null, ShadowCastingMode.On, true);
+            Graphics.DrawMeshInstanced(mesh, PitCrewGeometry.PropMetal, propMetal, m, n, null, ShadowCastingMode.Off, true);
         }
     }
 }
