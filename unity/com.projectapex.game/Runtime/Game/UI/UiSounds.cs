@@ -9,10 +9,10 @@ namespace Apex.Game
     /// </summary>
     public sealed class UiSounds
     {
-        public enum Cue { Focus, Confirm, Back, Transition, Start }
+        public enum Cue { Focus, Confirm, Back, Transition, Start, Loaded, PersonalBest, EngineStart }
 
         readonly AudioSource source;
-        readonly AudioClip[] clips = new AudioClip[5];
+        readonly AudioClip[] clips = new AudioClip[8];
         public float volume = 0.8f;
         const int Rate = 44100;
 
@@ -27,6 +27,22 @@ namespace Apex.Game
             clips[(int)Cue.Back] = Make("ui_back", 0.12f, (t, d) => Tone(t, 990f, 520f, d) * Env(t, d, 0.004f) * 0.24f);
             clips[(int)Cue.Transition] = Make("ui_whoosh", 0.32f, (t, d) => Noise(t) * Mathf.Sin(Mathf.PI * t / d) * 0.10f + Tone(t, 140f, 90f, d) * Env(t, d, 0.02f) * 0.12f);
             clips[(int)Cue.Start] = Make("ui_start", 0.42f, (t, d) => (Tone(t, 220f, 440f, d) * 0.6f + Tone(t, 660f, 1320f, d) * 0.4f) * Env(t, d, 0.006f) * 0.3f);
+            // Loading done: a soft rising fifth. Personal best: three bright ascending notes. Race start: an engine
+            // blip (sawtooth-ish harmonics rising from idle to 9000 rpm and back) – short, never repeated in a loop.
+            clips[(int)Cue.Loaded] = Make("ui_loaded", 0.5f, (t, d) => (Tone(t, 523f, 523f, d) * (t < 0.18f ? 1f : 0f) + Tone(t, 784f, 784f, d) * (t >= 0.18f ? 1f : 0f)) * Env(t, d, 0.01f) * 0.2f);
+            clips[(int)Cue.PersonalBest] = Make("ui_best", 0.6f, (t, d) =>
+            {
+                float f = t < 0.12f ? 1046f : t < 0.24f ? 1318f : 1568f;
+                return Tone(t, f, f, d) * Env(t, d, 0.004f) * 0.24f;
+            });
+            clips[(int)Cue.EngineStart] = Make("ui_engine", 1.4f, (t, d) =>
+            {
+                float rpm = t < 0.45f ? Mathf.Lerp(1800f, 9000f, t / 0.45f) : Mathf.Lerp(9000f, 3800f, Mathf.Clamp01((t - 0.45f) / 0.9f));
+                float f = rpm / 60f * 3f;   // V6 firing frequency
+                float ph = 2f * Mathf.PI * f * t;
+                float saw = Mathf.Sin(ph) + 0.5f * Mathf.Sin(2f * ph) + 0.33f * Mathf.Sin(3f * ph) + 0.15f * Noise(t);
+                return saw * Mathf.Clamp01(t / 0.03f) * Mathf.Clamp01((d - t) / 0.3f) * 0.18f;
+            });
         }
 
         public void Play(Cue c)

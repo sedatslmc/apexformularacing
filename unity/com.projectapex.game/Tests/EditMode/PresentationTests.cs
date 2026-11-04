@@ -109,5 +109,48 @@ namespace Apex.Tests
             var withCareer = MainMenuModel.Build(new MenuContext { trackName = "X", laps = 5, careerAvailable = true });
             Assert.That(withCareer[1].action, Is.EqualTo(MenuAction.Career), "prepared: right below the race entry");
         }
+    
+        [Test]
+        public void HudElementsCanBeSwitchedOffOnTopOfThePreset()
+        {
+            try
+            {
+                HudLayout.UserHidden = 1 << (int)HudElement.Map;
+                Assert.That(HudLayout.Shows(HudPreset.Standard, HudElement.Map), Is.False);
+                Assert.That(HudLayout.Shows(HudPreset.Standard, HudElement.Tyres), Is.True);
+            }
+            finally { HudLayout.UserHidden = 0; }
+        }
+
+        [Test]
+        public void TeamStandingsSumTheDriversPointsAndProfileTimesAreReadable()
+        {
+            var pts = new int[Roster.Drivers.Length + 1];
+            pts[0] = 25; pts[1] = 18;
+            var teams = ChampionshipModel.TeamStandings(pts, 3);
+            int total = 0; foreach (var (_, p) in teams) total += p;
+            Assert.That(total, Is.EqualTo(43));
+            Assert.That(teams.Count, Is.EqualTo(Roster.Teams.Length));
+            Assert.That(Apex.Career.CareerData.FormatDrivingTime(3725), Is.EqualTo("1:02 h"));
+            Assert.That(Apex.Career.CareerData.FormatDrivingTime(300), Is.EqualTo("5 min"));
+            var c = new Apex.Career.CareerData();
+            c.RecordDrive(100, true); c.RecordDrive(50, false);
+            c.RecordChampionship(2, 61, 2);
+            Assert.That(c.fastestLaps, Is.EqualTo(1));
+            Assert.That(c.drivingSeconds, Is.EqualTo(150));
+            Assert.That(c.championshipResults, Is.EqualTo(new[] { "2|61|2" }));
+        }
+
+        [Test]
+        public void TheGarageCockpitViewLeavesTheOrbit()
+        {
+            var o = new GarageOrbit();
+            o.Select(GarageView.Cockpit);
+            Assert.That(o.Cockpit, Is.True);
+            o.Drag(10f, 0f);
+            Assert.That(o.Cockpit, Is.False, "dragging returns to the free orbit");
+            o.Select(GarageView.Side);
+            Assert.That(o.Cockpit, Is.False);
+        }
     }
 }

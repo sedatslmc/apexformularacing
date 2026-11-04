@@ -37,6 +37,9 @@ namespace Apex.Game
             public double distanceKm;
             public float averageFinish;   // 0 = no finished race yet
             public List<(string track, string time)> bestLaps = new List<(string, string)>();
+            public int fastestLaps;
+            public string drivingTime = "–";
+            public List<string> championships = new List<string>();
         }
 
         public event Action<MenuAction> Activated;
@@ -415,6 +418,16 @@ namespace Apex.Game
             Stat(grid, Loc.T("XP"), $"{p.xp} / {p.xpNext}");
             Stat(grid, Loc.T("Ø Platz"), p.averageFinish > 0f ? p.averageFinish.ToString("0.0") : "–");
             Stat(grid, Loc.T("Distanz"), p.distanceKm > 0 ? $"{p.distanceKm:0} km" : "–");
+            Stat(grid, Loc.T("Schnellste Runden"), p.fastestLaps.ToString(), p.fastestLaps > 0);
+            Stat(grid, Loc.T("Fahrzeit"), p.drivingTime);
+            // Finished seasons (none yet: the card says so instead of inventing results).
+            var champ = ApexUi.Panel(profileLayer);
+            ApexUi.Place(champ, m, 660, 1180, -1);
+            champ.style.paddingLeft = 22; champ.style.paddingTop = 16; champ.style.paddingBottom = 16;
+            ApexUi.Caption(champ, Loc.T("Meisterschaften"));
+            if (p.championships.Count == 0) ApexUi.Text(champ, Loc.T("Noch keine Saison beendet."), ApexUi.Body, 16, ApexUi.C(UiTokens.Steel)).style.marginTop = 10;
+            for (int k = p.championships.Count - 1; k >= 0 && k >= p.championships.Count - 4; k--)
+                ApexUi.Text(champ, Loc.Format("Saison {0}: {1}", k + 1, p.championships[k]), ApexUi.Display, 22, ApexUi.C(UiTokens.Ivory)).style.marginTop = 8;
 
             var laps = ApexUi.Panel(profileLayer);
             ApexUi.Place(laps, 1920 - m - 520, 230, 520, -1);

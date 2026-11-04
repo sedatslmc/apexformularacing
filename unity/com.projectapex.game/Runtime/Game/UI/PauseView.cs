@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using Apex.UI;
 using UnityEngine;
@@ -41,7 +42,10 @@ namespace Apex.Game
 
         /// <param name="session">e.g. "Bosphorus Grand Prix · Rennen"</param>
         /// <param name="status">e.g. "Runde 3/5 · P4 von 12"</param>
-        public void Show(string session, string status, bool race, bool hudEditor)
+        public void Show(string session, string status, bool race, bool hudEditor) => Show(session, status, race, hudEditor, null);
+
+        /// <summary>With the race status as a row of small cards (position, lap, lap time, weather, tyres).</summary>
+        public void Show(string session, string status, bool race, bool hudEditor, List<(string label, string value)> statusCards)
         {
             Visible = true;
             ui.SetVisible(true);
@@ -63,7 +67,25 @@ namespace Apex.Game
             ApexUi.Caption(panel, session);
             ApexUi.Text(panel, Loc.T("PAUSE"), ApexUi.DisplayStrong, UiTokens.Display, ApexUi.C(UiTokens.Ivory), 6f).style.marginTop = 4;
             var red = ApexUi.Box(panel, ApexUi.C(UiTokens.Red)); red.style.width = 64; red.style.height = 3; red.style.marginTop = 4;
-            ApexUi.Text(panel, status, ApexUi.Body, UiTokens.Body, ApexUi.C(UiTokens.Steel)).style.marginTop = 14;
+            if (statusCards == null || statusCards.Count == 0)
+                ApexUi.Text(panel, status, ApexUi.Body, UiTokens.Body, ApexUi.C(UiTokens.Steel)).style.marginTop = 14;
+            else
+            {
+                var row = new VisualElement { pickingMode = PickingMode.Ignore };
+                row.style.flexDirection = FlexDirection.Row;
+                row.style.flexWrap = Wrap.Wrap;
+                row.style.marginTop = 14;
+                panel.Add(row);
+                foreach (var (label, value) in statusCards)
+                {
+                    var card = ApexUi.Panel(row, UiTokens.PanelAlpha);
+                    card.style.width = 178; card.style.height = 62;
+                    card.style.marginRight = 8; card.style.marginBottom = 8;
+                    card.style.paddingLeft = 12; card.style.paddingTop = 8;
+                    ApexUi.Caption(card, label);
+                    ApexUi.Text(card, value, ApexUi.DisplayStrong, 22, ApexUi.C(UiTokens.Ivory), 0.5f).style.marginTop = 2;
+                }
+            }
             var items = new VisualElement { pickingMode = PickingMode.Ignore };
             items.style.marginTop = 40;
             panel.Add(items);

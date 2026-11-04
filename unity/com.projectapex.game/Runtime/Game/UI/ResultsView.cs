@@ -84,6 +84,25 @@ namespace Apex.Game
             var sub = ApexUi.Text(titleRow, d.sub, ApexUi.Display, 30, ApexUi.C(UiTokens.Steel), 1.5f);
             sub.style.marginLeft = 24; sub.style.marginBottom = 16;
             var red = ApexUi.Box(head, ApexUi.C(UiTokens.Red)); red.style.width = 64; red.style.height = 3;
+            // Race finish: a waving chequered band sweeps across the top of the screen.
+            flag.Clear();
+            if (d.race)
+            {
+                const int flagCols = 48, rowsN = 3;
+                const float cell = 40f;
+                for (int c = 0; c < flagCols; c++)
+                {
+                    var col = new VisualElement { pickingMode = PickingMode.Ignore };
+                    col.style.position = Position.Absolute; col.style.left = c * cell; col.style.top = 0; col.style.width = cell;
+                    layer.Add(col);
+                    for (int r = 0; r < rowsN; r++)
+                    {
+                        var sq = ApexUi.Box(col, (c + r) % 2 == 0 ? ApexUi.C(UiTokens.Ivory) : ApexUi.C(UiTokens.CarbonBlack));
+                        sq.style.width = cell; sq.style.height = cell;
+                    }
+                    flag.Add(col);
+                }
+            }
             if (d.weekend.Count > 0)
             {
                 // Grand Prix weekend: qualifying ✓ → grid → race.
@@ -110,8 +129,8 @@ namespace Apex.Game
             table = ApexUi.Panel(layer, UiTokens.PanelStrongAlpha);
             table.style.position = Position.Absolute; table.style.left = m; table.style.top = 290; table.style.width = tableW;
             table.style.paddingLeft = 20; table.style.paddingRight = 20; table.style.paddingTop = 12; table.style.paddingBottom = 12;
-            float[] cols = { 50, 64, 260, 230, 170, 140, 70, 80, 60 };
-            string[] heads = { "Pos", "", "Fahrer", "Team", "Zeit / Abstand", "Beste Runde", "Stopps", "Strafe", "Pkt." };
+            float[] cols = { 50, 64, 240, 190, 170, 140, 130, 80, 60 };
+            string[] heads = { "Pos", "", "Fahrer", "Team", "Zeit / Abstand", "Beste Runde", d.race ? "Reifen" : "Stopps", "Strafe", "Pkt." };
             float scale = (tableW - 40f) / 1124f;
             Row(table, heads, cols, scale, true, false, Color.clear, 30);
             int n = d.rows.Count;
@@ -197,6 +216,8 @@ namespace Apex.Game
             }
         }
 
+        readonly List<VisualElement> flag = new List<VisualElement>();
+
         public void Tick(float dt, bool left, bool right, bool confirm, bool anyKey)
         {
             if (!Visible) return;
@@ -215,6 +236,16 @@ namespace Apex.Game
             }
             head.style.top = 48;
             float t0 = podium ? ResultsModel.PodiumSeconds : 0f;
+            // Chequered flag: waves in from the left, then lifts away after 2.2 s.
+            for (int c = 0; c < flag.Count; c++)
+            {
+                float lt = time - t0 - c * 0.012f;
+                float inK = UiMotion.OutCubic(Mathf.Clamp01(lt / 0.35f));
+                float outK = UiMotion.InOutCubic(Mathf.Clamp01((lt - 2.2f) / 0.5f));
+                float wave = ReducedMotion ? 0f : Mathf.Sin(time * 6f - c * 0.45f) * 8f;
+                flag[c].style.opacity = inK * (1f - outK);
+                ApexUi.Translate(flag[c], 0f, -130f * (1f - inK) - 140f * outK + wave);
+            }
             float enter = UiMotion.OutCubic(Mathf.Clamp01((time - t0) / UiTokens.ScreenTime));
             shade.style.opacity = enter;
             table.style.opacity = enter; footer.style.opacity = enter;

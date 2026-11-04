@@ -108,6 +108,7 @@ namespace Apex.Game
             SetupCameraAndLighting();
             ApplyGraphics();
             ApplyDisplay();
+            Apex.UI.HudLayout.UserHidden = Settings.hudHidden;
             input = gameObject.AddComponent<InputRouter>();
             input.ApplySettings(Settings);
             sm.Changed += OnStateChanged;
@@ -193,7 +194,11 @@ namespace Apex.Game
                 if (Career.ChampionshipActive)
                 {
                     d.calendar = Apex.UI.ChampionshipModel.Calendar(Career.calendar, Career.nextRound, name);
-                    d.standings = Apex.UI.ChampionshipModel.Standings(Career.points, 12, Config.playerTeam);
+                    d.standings = Apex.UI.ChampionshipModel.Standings(Career.points, 8, Config.playerTeam);
+                    d.teamStandings = Apex.UI.ChampionshipModel.TeamStandings(Career.points, Config.playerTeam);
+                    d.playerTeam = Config.playerTeam;
+                    d.roundsDone = Career.nextRound;
+                    d.roundsTotal = Career.calendar.Length;
                     d.nextRound = $"Runde {Career.nextRound + 1}: {name(Career.calendar[Career.nextRound])}";
                     d.seasonLine = $"Runde {Career.nextRound + 1} von {Career.calendar.Length} · {Career.championshipLaps} Runden · {Career.championshipAi} KI-Gegner";
                 }
@@ -309,6 +314,13 @@ namespace Apex.Game
             pr.level = lvl; pr.xp = Career.xp; pr.xpNext = next;
             pr.races = Career.racesStarted; pr.wins = Career.wins; pr.podiums = Career.podiums; pr.poles = Career.poles;
             pr.distanceKm = Career.distanceKm; pr.averageFinish = Career.AverageFinish;
+            pr.fastestLaps = Career.fastestLaps;
+            pr.drivingTime = Career.drivingSeconds > 0 ? CareerData.FormatDrivingTime(Career.drivingSeconds) : "–";
+            foreach (var cr in Career.championshipResults)
+            {
+                var parts = cr.Split('|');
+                if (parts.Length >= 3) pr.championships.Add($"P{parts[0]} · {parts[1]} Pkt. · {parts[2]} Rennen");
+            }
             foreach (var id in TrackIds)
             {
                 double best = SaveService.BestLap(Settings, id);
@@ -889,6 +901,7 @@ namespace Apex.Game
             loadingModel.Complete("lighting");
             yield return null;
             loadingView?.Hide();
+            uiSounds?.Play(UiSounds.Cue.Loaded);
             trackId = def.id;
             sessionRecord = SaveService.BestLap(Settings, trackId);
             ResetSectorColours();
@@ -927,8 +940,9 @@ namespace Apex.Game
             if (Race == null) return;
             raceCam.enabled = true;
             hudView?.SetVisible(true);
-            // Start sequence: a sweep around the car into the driving camera (not with reduced motion).
+            // Start sequence: a sweep around the car into the driving camera (not with reduced motion), with an engine blip.
             if (race && !Settings.reducedMotion) raceCam.PlayIntro();
+            if (race) uiSounds?.Play(UiSounds.Cue.EngineStart);
             Race.PlayerInputEnabled = !calibrating;
             if (!calibrating) BeginSession();
         }
@@ -1086,11 +1100,13 @@ namespace Apex.Game
             if (valid && SaveService.SubmitLap(Settings, trackId, time))
             {
                 sessionRecord = time;
+                uiSounds?.Play(UiSounds.Cue.PersonalBest);
                 if (hudView != null) eventFeed.Post(Apex.UI.HudEventKind.Record, "NEUER REKORD", ApexStyle.FormatTime(time), Apex.UI.HudTone.Best, Time.unscaledTime);
                 else ShowMessage("Neuer Rekord  " + ApexStyle.FormatTime(time), ApexStyle.Best, 3f, true);
             }
             else if (personalBest)
             {
+                uiSounds?.Play(UiSounds.Cue.PersonalBest);
                 if (hudView != null) eventFeed.Post(Apex.UI.HudEventKind.PersonalBest, "PERSÖNLICHE BESTZEIT", ApexStyle.FormatTime(time), Apex.UI.HudTone.Good, Time.unscaledTime);
                 else ShowMessage("Persönliche Bestzeit  " + ApexStyle.FormatTime(time), ApexStyle.Faster, 2.5f, false);
             }
@@ -1136,7 +1152,7 @@ namespace Apex.Game
                 res.rows.Add(new[]
                 {
                     e.position.ToString(), rc.code, e.name, Roster.Teams[rc.teamIndex].name, gap,
-                    ApexStyle.FormatTime(e.BestLap), e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
+                    ApexStyle.FormatTime(e.BestLap), Race.Type == SessionType.Race ? rc.Strategy() : e.pitStops.ToString(), e.penalties > 0 ? $"+{e.penalties:0}s" : "",
                     Race.Type == SessionType.Race ? d.PointsFor(e).ToString() : "",
                 });
                 var tm = Roster.Teams[rc.teamIndex];
@@ -1170,6 +1186,7 @@ namespace Apex.Game
             string sessionName = Race.Type == SessionType.Race ? "Rennen" : Race.Type == SessionType.Qualifying ? "Qualifying" : kind == SessionKind.TimeTrial ? "Zeitfahren" : "Training";
             Career.RecordSession(Race.Circuit.Definition.name, sessionName, pe.position, d.entries.Count, startPosition - pe.position, pe.BestLap, km,
                 Race.Type == SessionType.Race && pe.finished);
+            Career.RecordDrive(Race.SimTime, Race.Type == SessionType.Race && d.FastestLapHolder == pe);
             if (kind == SessionKind.Championship && Race.Type == SessionType.Race)
             {
                 foreach (var e in d.Standings)
@@ -1181,6 +1198,8 @@ namespace Apex.Game
                 Career.nextRound++;
                 res.championshipLines = ChampionshipTable(10);
                 res.championshipFinished = !Career.ChampionshipActive;
+                if (res.championshipFinished)
+                    Career.RecordChampionship(Apex.UI.ChampionshipModel.PlayerPosition(Career.points), Career.points.Length > 0 ? Career.points[0] : 0, Career.calendar.Length);
             }
             SaveCareer();
             lastResults = res;

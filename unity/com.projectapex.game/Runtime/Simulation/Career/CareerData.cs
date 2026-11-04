@@ -22,6 +22,12 @@ namespace Apex.Career
         public int racesFinished, finishPositionSum;
         /// <summary>Distance driven in completed laps of all sessions (km).</summary>
         public double distanceKm;
+        /// <summary>Races in which the player set the fastest lap.</summary>
+        public int fastestLaps;
+        /// <summary>Total time on track (s), all sessions.</summary>
+        public double drivingSeconds;
+        /// <summary>Finished championships: "position|points|rounds" per season, oldest first.</summary>
+        public string[] championshipResults = new string[0];
         /// <summary>Last session for the main menu card ("P4 · Grand Prix"); empty before the first one.</summary>
         public string lastTrack = "", lastSession = "";
         public int lastPosition, lastFieldSize, lastPositionsGained;
@@ -56,6 +62,27 @@ namespace Apex.Career
                 finishPositionSum += position;
             }
         }
+        /// <summary>Time on track and the fastest lap of a session (profile statistics).</summary>
+        public void RecordDrive(double seconds, bool fastestLapInRace)
+        {
+            drivingSeconds += Math.Max(0.0, seconds);
+            if (fastestLapInRace) fastestLaps++;
+        }
+
+        /// <summary>A finished season: final position and points.</summary>
+        public void RecordChampionship(int position, int pointsTotal, int rounds)
+        {
+            var l = new System.Collections.Generic.List<string>(championshipResults ?? new string[0]) { $"{position}|{pointsTotal}|{rounds}" };
+            championshipResults = l.ToArray();
+        }
+
+        /// <summary>Total driving time as "h:mm h" / "m min".</summary>
+        public static string FormatDrivingTime(double seconds)
+        {
+            long m = (long)(Math.Max(0.0, seconds) / 60.0);
+            return m >= 60 ? $"{m / 60}:{m % 60:00} h" : $"{m} min";
+        }
+
         public bool ChampionshipActive => calendar != null && calendar.Length > 0 && nextRound < calendar.Length;
 
         public void StartChampionship(string[] tracks, int laps, int ai, float difficulty)
@@ -85,6 +112,8 @@ namespace Apex.Career
             if (calendar == null) { calendar = new string[0]; changed = true; }
             if (lastTrack == null) { lastTrack = ""; changed = true; }
             if (lastSession == null) { lastSession = ""; changed = true; }
+            if (championshipResults == null) { championshipResults = new string[0]; changed = true; }
+            if (drivingSeconds < 0) { drivingSeconds = 0; changed = true; }
             // The Bosphorus GP moved to the geographic layout (Variant A, id "bosphorus_a").
             for (int i = 0; i < calendar.Length; i++)
                 if (calendar[i] == "bosphorus_gp") { calendar[i] = "bosphorus_a"; changed = true; }

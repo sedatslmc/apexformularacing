@@ -64,6 +64,7 @@ namespace Apex.Game
             UiPalette.HighContrast = Settings.highContrast;
             ApexUi.TextScale = Settings.uiTextScale;
             if (uiSounds != null) uiSounds.volume = Settings.masterVolume * Settings.uiVolume;
+            HudLayout.UserHidden = Settings.hudHidden;
             ApplyDisplay();
             if (menuMusic != null) menuMusic.volume = Settings.musicVolume * Settings.masterVolume;
             // Rebuild open screens in the new language once; the HUD (labels built once) only outside a session.
@@ -111,6 +112,9 @@ namespace Apex.Game
             change = d => { ChangeSetting(r, d); ApplyUiSettings(); },
         };
 
+        /// <summary>Category the settings open with (pause shortcuts), reset after use.</summary>
+        int settingsStartCategory;
+
         void ShowSettingsView()
         {
             var cats = new List<OptionsView.Category>();
@@ -134,7 +138,9 @@ namespace Apex.Game
             settingsView.Show(new OptionsView.Data
             {
                 caption = Loc.T("Einstellungen gelten sofort und werden gespeichert."), title = Loc.T("Einstellungen"), categories = cats, mobile = Application.isMobilePlatform,
+                startCategory = Mathf.Max(0, settingsStartCategory),
             });
+            settingsStartCategory = 0;
         }
 
         void ShowGarageView()
@@ -208,6 +214,14 @@ namespace Apex.Game
             garageOrbit.Update(Time.unscaledDeltaTime, Settings.reducedMotion);
             garageOrbit.Offset(out float x, out float y, out float z);
             var car = showroomCar != null ? showroomCar.transform : showroom.transform;
+            if (garageOrbit.Cockpit)
+            {
+                // Driver's eye (as RaceCamera's cockpit view): steering wheel, halo and the garage ahead.
+                var eye = car.TransformPoint(new Vector3(0f, 0.47f, 0.02f));
+                cam.transform.SetPositionAndRotation(eye, Quaternion.LookRotation(car.forward, car.up) * Quaternion.Euler(4f, 0f, 0f));
+                cam.fieldOfView = 70f;
+                return true;
+            }
             var centre = car.position + Vector3.up * 0.35f;
             var pos = centre + car.right * x + Vector3.up * y + car.forward * z;
             cam.transform.SetPositionAndRotation(pos, Quaternion.LookRotation(centre - pos, Vector3.up));
@@ -227,7 +241,12 @@ namespace Apex.Game
             string status = (race ? Loc.Format("RUNDE {0}/{1}", Mathf.Min(p.entry.LapsCompleted + 1, d.rules.laps), d.rules.laps) : Loc.Format("RUNDE {0}", Mathf.Max(1, p.entry.timer.LapNumber)))
                 + " · " + Loc.Format("P{0} von {1}", p.entry.position, d.entries.Count);
             pauseView.ReducedMotion = Settings.reducedMotion;
-            pauseView.Show(session, status, race, hudView != null);
+            var tyre = p.Sim.tires[0];
+            double lapTime = p.entry.timer.CurrentLapTime(Race.SimTime);
+            var cards = PauseModel.Status(race, p.entry.position, d.entries.Count,
+                race ? Mathf.Min(p.entry.LapsCompleted + 1, d.rules.laps) : Mathf.Max(1, p.entry.timer.LapNumber), d.rules.laps,
+                Apex.UI.MainMenuModel.FormatLap(lapTime), Apex.Weather.WeatherModel.Name(Race.Weather.State), Apex.Vehicle.CompoundSpec.For(tyre.compound).name, p.Sim.AverageTireWear());
+            pauseView.Show(session, status, race, hudView != null, cards);
         }
 
         void OnPauseAction(PauseAction a)
@@ -247,7 +266,9 @@ namespace Apex.Game
                     StartCoroutine(LoadSession(null));
                     break;
                 }
-                case PauseAction.Settings: settingsOpen = true; focus = 0; break;
+                case PauseAction.Settings: settingsStartCategory = 0; settingsOpen = true; focus = 0; break;
+                case PauseAction.CarSetup: settingsStartCategory = Array.IndexOf(SettingsCatalog.All, SettingsCategory.Driving); settingsOpen = true; focus = 0; break;
+                case PauseAction.Controls: settingsStartCategory = Array.IndexOf(SettingsCatalog.All, SettingsCategory.Controls); settingsOpen = true; focus = 0; break;
                 case PauseAction.HudEditor: hudView?.OpenEditor(); break;
                 case PauseAction.Help: helpOpen = true; break;
                 case PauseAction.Leave: sm.TryTransition(GameState.MainMenu); break;

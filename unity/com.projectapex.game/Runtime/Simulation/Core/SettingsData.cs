@@ -107,6 +107,8 @@ namespace Apex.Core
         public bool raceIntro = true;
         /// <summary>UI sound volume (menus, confirmations), separate from the master and music volume.</summary>
         public float uiVolume = 0.8f;
+        /// <summary>HUD elements switched off (bit = Apex.UI.HudElement: 4 tyres, 5 map, 6 timing).</summary>
+        public int hudHidden;
         /// <summary>Display (desktop): 0 exclusive full screen, 1 borderless full screen, 2 window.</summary>
         public int displayMode = 1;
         /// <summary>Index into the screen's resolutions (-1 = native / current).</summary>

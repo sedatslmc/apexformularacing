@@ -48,6 +48,17 @@ namespace Apex.Game
         public bool pitAssistActive;
         /// <summary>The pit autopilot stands on the brakes this step (on the box mark).</summary>
         public bool pitBrake;
+        /// <summary>Compounds driven, one per stint (start tyre, then every tyre change): the results' strategy column.</summary>
+        public readonly List<Apex.Vehicle.TireCompound> stints = new List<Apex.Vehicle.TireCompound>();
+
+        /// <summary>Strategy as short compound names ("M › S › H").</summary>
+        public string Strategy()
+        {
+            if (stints.Count == 0) return Apex.Vehicle.CompoundSpec.For(Sim.tires[0].compound).shortName;
+            var parts = new List<string>();
+            foreach (var c in stints) parts.Add(Apex.Vehicle.CompoundSpec.For(c).shortName);
+            return string.Join(" › ", parts);
+        }
     }
 
     /// <summary>
@@ -827,7 +838,12 @@ namespace Apex.Game
                         ps.serviceRemaining = 0f;
                         if (!ps.releaseHeld)
                         {
-                            if (ps.changeTires) sim.FitTires(ps.nextCompound);
+                            if (ps.changeTires)
+                            {
+                                if (rc.stints.Count == 0) rc.stints.Add(sim.tires[0].compound);
+                                sim.FitTires(ps.nextCompound);
+                                rc.stints.Add(ps.nextCompound);
+                            }
                             sim.damage.Repair(ps.changeTires);
                             rc.entry.pitStops++;
                             rc.mandatoryStopDone = true;

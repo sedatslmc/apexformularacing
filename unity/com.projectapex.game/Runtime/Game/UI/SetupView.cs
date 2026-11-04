@@ -48,6 +48,10 @@ namespace Apex.Game
             public string seasonLine = "", nextRound = "";
             public List<CalendarRound> calendar = new List<CalendarRound>();
             public List<StandingRow> standings = new List<StandingRow>();
+            public List<(int team, int points)> teamStandings = new List<(int, int)>();
+            public int playerTeam;
+            /// <summary>Rounds done / total (season progress bar).</summary>
+            public int roundsDone, roundsTotal;
         }
 
         /// <summary>Start the session (setup) or the next championship round.</summary>
@@ -590,6 +594,38 @@ namespace Apex.Game
                 ApexUi.Text(row, "  " + team.name, ApexUi.Body, 14, ApexUi.C(UiTokens.Steel));
                 var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; row.Add(sp);
                 ApexUi.Text(row, $"{s.points} PKT", ApexUi.DisplayStrong, 24, ApexUi.C(s.player ? UiTokens.Cyan : UiTokens.Ivory), 1f, TextAnchor.MiddleRight);
+            }
+            // Season progress and the teams' standings.
+            if (data.roundsTotal > 0)
+            {
+                var prog = new VisualElement { pickingMode = PickingMode.Ignore };
+                prog.style.marginTop = 18;
+                panel.Add(prog);
+                ApexUi.Caption(prog, Loc.Format("Saisonfortschritt · {0} von {1} Rennen", data.roundsDone, data.roundsTotal));
+                var trackBar = ApexUi.Box(prog, ApexUi.C(UiTokens.Surface));
+                trackBar.style.height = 4; trackBar.style.marginTop = 8;
+                var fill = ApexUi.Box(trackBar, ApexUi.C(UiTokens.Gold));
+                fill.style.height = 4; fill.style.width = new Length(100f * data.roundsDone / data.roundsTotal, LengthUnit.Percent);
+            }
+            if (data.teamStandings.Count > 0)
+            {
+                var cap = ApexUi.Caption(panel, Loc.T("Teamwertung"));
+                cap.style.marginTop = 18;
+                int k = 0;
+                foreach (var (team, pts) in data.teamStandings)
+                {
+                    if (++k > 5) break;
+                    var tm = Roster.Teams[Mathf.Clamp(team, 0, Roster.Teams.Length - 1)];
+                    var row = new VisualElement { pickingMode = PickingMode.Ignore };
+                    row.style.flexDirection = FlexDirection.Row; row.style.alignItems = Align.Center; row.style.height = 32;
+                    panel.Add(row);
+                    ApexUi.Text(row, k.ToString(), ApexUi.DisplayStrong, 20, ApexUi.C(UiTokens.Steel), 0f, TextAnchor.MiddleRight).style.width = 44;
+                    var bar = ApexUi.Box(row, new Color(tm.r, tm.g, tm.b));
+                    bar.style.width = 4; bar.style.height = 20; bar.style.marginLeft = 18; bar.style.marginRight = 16;
+                    ApexUi.Text(row, tm.name, team == data.playerTeam ? ApexUi.BodyStrong : ApexUi.Body, 17, ApexUi.C(team == data.playerTeam ? UiTokens.Cyan : UiTokens.Ivory));
+                    var sp = new VisualElement { pickingMode = PickingMode.Ignore }; sp.style.flexGrow = 1; row.Add(sp);
+                    ApexUi.Text(row, $"{pts} PKT", ApexUi.DisplayStrong, 20, ApexUi.C(UiTokens.Ivory), 1f, TextAnchor.MiddleRight);
+                }
             }
         }
 

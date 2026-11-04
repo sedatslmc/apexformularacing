@@ -378,7 +378,12 @@ namespace Apex.Tests
         public void PauseOffersOnlySessionFunctionsAndConfirmsLeavingARace()
         {
             var race = PauseModel.Entries(true, true).ConvertAll(e => e.action);
-            Assert.That(race.Contains(PauseAction.ResetCar) || race.Contains(PauseAction.Restart), Is.False, "no reset or restart in a race");
+            Assert.That(race.Contains(PauseAction.ResetCar), Is.False, "no reset in a race");
+            Assert.That(PauseModel.Entries(true, true).Find(e => e.action == PauseAction.Restart).confirm, Is.True, "restarting a race asks first");
+            foreach (var a in new[] { PauseAction.Restart, PauseAction.CarSetup, PauseAction.Settings, PauseAction.Controls }) Assert.That(race.Contains(a), Is.True, a.ToString());
+            var st = PauseModel.Status(true, 3, 20, 4, 8, "1:32.456", "Sonnig", "Medium", 0.25f);
+            Assert.That(st.ConvertAll(x => x.label), Is.EqualTo(new List<string> { "Position", "Runde", "Rundenzeit", "Wetter", "Reifen" }));
+            Assert.That(st[4].value, Is.EqualTo("Medium · 25 %"));
             Assert.That(race[0], Is.EqualTo(PauseAction.Resume));
             Assert.That(race[race.Count - 1], Is.EqualTo(PauseAction.Leave));
             Assert.That(PauseModel.Entries(true, true).Find(e => e.action == PauseAction.Leave).confirm, Is.True);
@@ -492,7 +497,7 @@ namespace Apex.Tests
                 det.Update(snap, 0, feed); snap.status = Apex.Race.TrackStatus.Green; snap.position = 2; snap.lap = 2; det.Update(snap, 1, feed); det.Update(snap, 3, feed);
                 snap.position = 4; det.Update(snap, 4, feed); det.Update(snap, 6, feed); snap.finished = true; det.Update(snap, 7, feed);
                 snap.finished = false; det.Reset(); det.Update(snap, 8, feed); snap.finished = true; snap.position = 1; det.Update(snap, 9, feed);
-                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b); }
+                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); PauseModel.Status(b, 1, 2, 1, 2, "", "", "", 0f); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b); }
                 foreach (var (r, q, pos, fin) in new[] { (true, false, 1, true), (true, false, 2, true), (true, false, 5, false), (false, true, 1, false), (false, true, 4, false), (false, false, 2, false) })
                     ResultsModel.Headline(r, q, pos, 10, fin);
                 foreach (var cat in SettingsCatalog.All) { SettingsCatalog.Name(cat); SettingsCatalog.Description(cat); }

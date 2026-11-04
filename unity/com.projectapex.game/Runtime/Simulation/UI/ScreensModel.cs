@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace Apex.UI
 {
-    public enum PauseAction { Resume, ResetCar, Restart, Settings, HudEditor, Help, Leave }
+    public enum PauseAction { Resume, ResetCar, Restart, Settings, HudEditor, Help, Leave, CarSetup, Controls }
 
     public sealed class PauseEntry
     {
@@ -16,19 +16,36 @@ namespace Apex.UI
     /// <summary>Pause menu entries (docs/UI_UX_OVERHAUL.md section 4): only functions the session offers.</summary>
     public static class PauseModel
     {
+        /// <summary>
+        /// Race Control 2.0 order: FORTSETZEN, NEUSTARTEN, FAHRZEUG-SETUP, EINSTELLUNGEN, STEUERUNG, (HUD), RENNEN
+        /// VERLASSEN. Restarting and leaving a race ask for a confirmation; outside a race the car can also be reset.
+        /// </summary>
         public static List<PauseEntry> Entries(bool race, bool hudEditor)
         {
-            var l = new List<PauseEntry> { new PauseEntry { action = PauseAction.Resume, label = Loc.T("Weiter") } };
-            if (!race)
+            var l = new List<PauseEntry>
             {
-                l.Add(new PauseEntry { action = PauseAction.ResetCar, label = Loc.T("Auto auf die Strecke setzen") });
-                l.Add(new PauseEntry { action = PauseAction.Restart, label = Loc.T("Session neu starten") });
-            }
+                new PauseEntry { action = PauseAction.Resume, label = Loc.T("Fortsetzen") },
+                new PauseEntry { action = PauseAction.Restart, label = Loc.T(race ? "Rennen neu starten" : "Session neu starten"), confirm = race },
+            };
+            if (!race) l.Add(new PauseEntry { action = PauseAction.ResetCar, label = Loc.T("Auto auf die Strecke setzen") });
+            l.Add(new PauseEntry { action = PauseAction.CarSetup, label = Loc.T("Fahrzeug-Setup") });
             l.Add(new PauseEntry { action = PauseAction.Settings, label = Loc.T("Einstellungen") });
+            l.Add(new PauseEntry { action = PauseAction.Controls, label = Loc.T("Steuerung") });
             if (hudEditor) l.Add(new PauseEntry { action = PauseAction.HudEditor, label = Loc.T("HUD anpassen") });
-            l.Add(new PauseEntry { action = PauseAction.Help, label = Loc.T("Steuerung & Hilfe") });
-            l.Add(new PauseEntry { action = PauseAction.Leave, label = Loc.T(race ? "Rennen aufgeben" : "Zum Hauptmenü"), confirm = race });
+            l.Add(new PauseEntry { action = PauseAction.Leave, label = Loc.T(race ? "Rennen verlassen" : "Zum Hauptmenü"), confirm = race });
             return l;
+        }
+
+        /// <summary>The small race status in the pause panel (label, value).</summary>
+        public static List<(string label, string value)> Status(bool race, int position, int field, int lap, int laps, string lapTime, string weather, string tyre, float wear)
+        {
+            var r = new List<(string, string)>();
+            if (race) r.Add((Loc.T("Position"), $"P{position}/{field}"));
+            r.Add((Loc.T("Runde"), race ? $"{lap}/{laps}" : lap.ToString()));
+            r.Add((Loc.T("Rundenzeit"), lapTime));
+            r.Add((Loc.T("Wetter"), weather));
+            r.Add((Loc.T("Reifen"), $"{tyre} · {(int)Math.Round(wear * 100f)} %"));
+            return r;
         }
     }
 
@@ -131,7 +148,8 @@ namespace Apex.UI
         }
     }
 
-    public enum GarageView { Front, Side, Rear, Top }
+    /// <summary>Garage camera views; Cockpit puts the camera at the driver's eye (no orbit), Free keeps the dragged orbit.</summary>
+    public enum GarageView { Front, Side, Rear, Top, Cockpit, Free }
 
     /// <summary>
     /// Garage camera: preset views plus free orbit (drag to rotate, wheel to zoom). Angles in degrees around the car
@@ -150,6 +168,8 @@ namespace Apex.UI
                 case GarageView.Front: return Loc.T("Front");
                 case GarageView.Side: return Loc.T("Seite");
                 case GarageView.Rear: return Loc.T("Heck");
+                case GarageView.Cockpit: return Loc.T("Cockpit");
+                case GarageView.Free: return Loc.T("Frei");
                 default: return Loc.T("Oben");
             }
         }
@@ -161,15 +181,25 @@ namespace Apex.UI
                 case GarageView.Front: yaw = 35f; pitch = 12f; distance = 6f; break;
                 case GarageView.Side: yaw = 90f; pitch = 6f; distance = 6.5f; break;
                 case GarageView.Rear: yaw = 205f; pitch = 14f; distance = 6f; break;
-                default: yaw = 90f; pitch = 72f; distance = 7.5f; break;
+                case GarageView.Top: yaw = 90f; pitch = 72f; distance = 7.5f; break;
+                default: yaw = 140f; pitch = 22f; distance = 7f; break;   // cockpit (orbit unused) and free: a wide three-quarter view
             }
         }
 
-        public void Select(GarageView v) => Preset(v, out targetYaw, out targetPitch, out targetDistance);
+        /// <summary>The camera sits at the driver's eye (garage view "Cockpit") instead of orbiting.</summary>
+        public bool Cockpit { get; private set; }
+
+        public void Select(GarageView v)
+        {
+            Cockpit = v == GarageView.Cockpit;
+            if (v == GarageView.Free) return;   // keep the current orbit, free to drag and zoom
+            Preset(v, out targetYaw, out targetPitch, out targetDistance);
+        }
 
         /// <summary>Pointer drag in pixels: 0.25° per pixel; the pitch stays above the floor.</summary>
         public void Drag(float dx, float dy)
         {
+            Cockpit = false;
             targetYaw += dx * 0.25f;
             targetPitch = Math.Max(MinPitch, Math.Min(MaxPitch, targetPitch + dy * 0.25f));
         }

@@ -407,19 +407,30 @@ ein Icon-Set beauftragen, Musik lizenzieren.
 - **Karriere:** Menüaktion und Ladekontext sind vorhanden, beides wird erst mit einer Implementierung sichtbar.
 - **Ladebildschirm „Spielstand“:** Kontext und Texte sind vorhanden, es gibt aber noch kein eigenes Laden von Spielständen.
 
-### 13.3 Fehlt noch (nächster Teil)
-- Pause mit Rennstatus (Rundenzeit, Wetter, Reifen) und den Einträgen „Fahrzeug-Setup“ und „Steuerung“.
-- Ergebnisse mit Zielflaggen-Animation und Reifenstrategie je Fahrer; Fahrerprofil mit schnellsten Runden, Fahrzeit und Meisterschaftsergebnissen (dafür fehlen noch Daten im Speicherstand).
-- Garage: Cockpit- und freie Kamera, eigene Garagenkulisse mit Kamerafahrt dorthin.
-- Teamwertung und Saisonverlauf in der Meisterschaft; Zeitfahrmenü mit besten Sektoren und letzten Runden.
-- HUD-Schalter je Element (Karte, Reifen, Zeiten); eigene Mobil-Anordnung prüfen.
-- Klänge für Laden, persönliche Bestzeit und Motorstart.
-- Unscharfer Hintergrund in der Pause, aus Rücksicht auf die Leistung bisher nur abgedunkelt.
+### 13.3 Teil 2 (umgesetzt)
+| Teil | Inhalt |
+|---|---|
+| Pause | Einträge wie im Brief: FORTSETZEN, NEUSTARTEN (im Rennen mit Bestätigung), FAHRZEUG-SETUP (öffnet die Fahrhilfen), EINSTELLUNGEN, STEUERUNG (öffnet die Steuerung), HUD anpassen, RENNEN VERLASSEN (mit Bestätigung). Statuskarten: Position, Runde, aktuelle Rundenzeit, Wetter, Reifen mit Verschleiß |
+| Ergebnisse | Zielflagge: ein schwarz-weißes Band weht beim Rennergebnis über den oberen Rand und hebt nach 2,2 s ab (bei „Reduzierte Bewegung“ ohne Wellen). Die Spalte „Reifen“ zeigt die Strategie je Fahrer (z. B. „M › S“), aufgezeichnet bei jedem Reifenwechsel |
+| Fahrerprofil | zusätzlich schnellste Runden, Fahrzeit, beendete Meisterschaften (Platz, Punkte, Rennen). Die Werte werden erst ab jetzt gezählt, frühere Sessions fehlen darin. Ohne beendete Saison steht dort „Noch keine Saison beendet.“, es wird nichts erfunden |
+| Meisterschaft | Teamwertung (Top 5, eigenes Team in Cyan) und Saisonfortschritt (goldener Balken, Rennen x von y) unter der Fahrerwertung |
+| Garage | Kameraansichten „Cockpit“ (Augenpunkt des Fahrers, wie die Cockpitkamera im Rennen) und „Frei“ (behält die gezogene Ansicht). Ziehen verlässt das Cockpit |
+| HUD | Schalter je Element zusätzlich zum Preset: Streckenkarte, Reifeninformationen, Zeitentabelle, Sektorzeiten/Delta |
+| Klänge | Laden fertig, persönliche Bestzeit (auch Streckenrekord), Motor-Blip beim Rennstart. Synthetisiert, folgen der UI-Lautstärke |
 
-### 13.4 In Unity zu prüfen
+### 13.4 Weiterhin offen
+- **Zeitfahrmenü mit besten Sektoren und letzten Runden:** Der Speicherstand kennt bisher nur die Bestzeit je Strecke. Sektoren und Rundenliste müssen erst gespeichert werden.
+- **Eigene Garagenkulisse mit Kamerafahrt dorthin:** Die Garage nutzt die Bühne im Hauptmenü.
+- **Unscharfer Hintergrund in der Pause:** bewusst nur Abdunklung, wegen der Leistung.
+- **Podium mit Fahrerfiguren, Konfetti und Nationalflaggen:** Die Podiumsaufnahme mit Pokal gibt es; die Figuren fehlen.
+- **Mobil-Anordnung des HUD:** in Unity auf einem Telefon prüfen.
+- **Grafik:** Getrennte Schatten-, Textur- und Kantenglättungsstufe fehlen. Sie hängen bisher zusammen an der Grafikstufe.
+- **Brems- und Gaskurven, Deadzones je Gerät, Controller-Belegung:** nicht vorhanden. Die Tastatur-Belegung gibt es.
+
+### 13.5 In Unity zu prüfen
 1. Intro und Rennstart: Bildausschnitte (Brücke 45 m über dem Wasser, Strecke von oben), keine Kamera in Gebäuden, Überspringen.
 2. Ladebildschirm: Läuft der Balken flüssig? Stocken einzelne Stufen? Die Stadt ist eine einzige große Stufe.
 3. Startbildschirm über der Menükulisse; „beliebige Taste“ mit Gamepad und Touch.
 4. Schrittleiste und Erklärzeile der Rennvorbereitung ohne Überlappung bei 16:9, 21:9 und auf dem Telefon.
 5. Auflösung und Vollbild unter Windows und macOS.
-
+6. Pause-Statuskarten, Zielflagge, Reifenspalte, Teamwertung, Garagen-Cockpit, HUD-Schalter und die neuen Klänge.

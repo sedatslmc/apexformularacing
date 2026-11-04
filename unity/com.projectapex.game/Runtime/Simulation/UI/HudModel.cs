@@ -102,8 +102,12 @@ namespace Apex.UI
         public static HudPreset Next(HudPreset p) => (HudPreset)(((int)p + 1) % 4);
 
         /// <summary>Minimal: dash, race status, events. Standard: all elements. Extended: plus telemetry. Off: none.</summary>
+        /// <summary>Elements switched off by the player (settings "HUD: …", bit = HudElement), on top of the preset.</summary>
+        public static int UserHidden;
+
         public static bool Shows(HudPreset p, HudElement e)
         {
+            if ((UserHidden & (1 << (int)e)) != 0) return false;
             switch (p)
             {
                 case HudPreset.Off: return false;
