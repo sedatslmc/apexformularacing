@@ -99,6 +99,21 @@ namespace Apex.Tracks
             }
 
             public float BoxDistance(int box) => boxStart + box * boxSpacing;
+            /// <summary>
+            /// Number of boxes. One per team (the teammates double-stack, as in the regulations) where the lane leaves room
+            /// for the boxes' spacing a car needs to swing in square (bosphorus_a: 10 boxes, 17 m); 20 (one per car) elsewhere.
+            /// </summary>
+            public int boxCount = 20;
+            /// <summary>Raw distance of the last box.</summary>
+            public float LastBox => BoxDistance(boxCount - 1);
+            /// <summary>Team a box belongs to.</summary>
+            public int TeamOfBox(int box, int teams) => Math.Min(teams - 1, boxCount >= teams * 2 ? box / 2 : box);
+            /// <summary>Box of a team's car (<paramref name="slot"/> 0/1 = first/second driver).</summary>
+            public int BoxFor(int team, int slot, int teams)
+            {
+                int b = boxCount >= teams * 2 ? team * 2 + (slot & 1) : team;
+                return Math.Max(0, Math.Min(boxCount - 1, b));
+            }
         }
 
         /// <summary>
@@ -232,6 +247,7 @@ namespace Apex.Tracks
                     entryTaper = Num(pd, "entry_taper", 150f),
                     exitTaper = Num(pd, "exit_taper", 170f),
                     limitEnd = Num(pd, "limit_end", float.NaN),
+                    boxCount = (int)Num(pd, "box_count", 20f),
                 };
             }
             if (root.TryGetValue("corners", out var cm) && cm is List<object> cml)

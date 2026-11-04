@@ -100,29 +100,174 @@ namespace Apex.Game
         /// <summary>Height of the pit building roof terrace (top of the slab).</summary>
         public const float PitRoof = PitGroundH + PitUpperH + 0.4f;
 
-        public static void PitBuilding(Parts B, float length, IList<float> bayCentres, float bayWidth)
+        // Pit building detail materials (registered by EventBrandingBuilder).
+        public const string GarageFloor = "GarageFloor", GarageLight = "GarageLight", ToolCart = "GarageToolCart", Blanket = "GarageBlanket",
+            FlightCase = "GarageCase", RoofScreen = PitWallGeometry.Screen, NumberLight = "GarageNumberLight", FlagVertical = "TurkishFlagVertical";
+
+        /// <summary>
+        /// Pit building (local frame: +x away from the track, front face at x = 0, +z along the lane): per bay a garage
+        /// with a wide opening split by a slim mullion, the roller-door drums and a fascia in the team colour (keys per
+        /// bay, or navy), a lit box number plate, and a furnished interior – epoxy floor, ceiling light strips, team-colour
+        /// back wall with live data screens, tyre trolleys with tyres in blankets, tool carts, flight cases and a spare
+        /// front wing on the wall. Upper floor: glazed team suites with mullions and a balcony over the lane with a glass
+        /// railing. Red-white band and turquoise balcony edge, tiled end walls, roof terrace with a glazed VIP pavilion
+        /// (on the half away from the podium) and two LED screens facing the track that show the live timing.
+        /// </summary>
+        public static void PitBuilding(Parts B, float length, IList<float> bayCentres, float bayWidth, IList<string> bayTeam = null, float podiumZ = 0f)
         {
             float half = length * 0.5f;
             const float depth = PitDepth, groundH = PitGroundH, upperH = PitUpperH;
-            // Core volume behind the facade.
-            B(Ivory).Box(new Vector3(depth * 0.5f + 0.4f, groundH * 0.5f, 0f), new Vector3(depth - 0.8f, groundH, length));
+            const float back = depth - 1.0f;        // garage back wall
+            // Core volume behind the garages and the glazed upper floor.
+            B(Ivory).Box(new Vector3(depth - 0.5f, groundH * 0.5f, 0f), new Vector3(1.0f, groundH, length));
             B(Glass).Box(new Vector3(depth * 0.5f + 0.9f, groundH + upperH * 0.5f, 0f), new Vector3(depth - 1.8f, upperH, length - 1f));
-            // Garage openings: dark recess per bay with ivory piers in between.
-            foreach (float z in bayCentres)
-                B(Dark).Box(new Vector3(0.36f, 1.75f, z), new Vector3(0.1f, 3.5f, bayWidth - 1.1f));
+            for (float z = -half + 0.75f; z < half; z += 1.5f)
+                B(Steel).Box(new Vector3(1.78f, groundH + upperH * 0.5f, z), new Vector3(0.08f, upperH, 0.08f));
+            // Ground floor slab (ceiling of the garages) and the header with the red-white band.
+            B(Ivory).Box(new Vector3(depth * 0.5f, groundH - 0.15f, 0f), new Vector3(depth, 0.3f, length));
             B(Navy).Box(new Vector3(0.25f, groundH - 0.45f, 0f), new Vector3(0.3f, 0.9f, length));
-            B(Ivory).Box(new Vector3(0.08f, groundH - 0.45f, 0f), new Vector3(0.04f, 0.16f, length - 0.4f));
-            // Slab and canopy over the pit lane side.
+            B(Red).Box(new Vector3(0.08f, groundH - 0.2f, 0f), new Vector3(0.04f, 0.12f, length - 0.4f));
+            B(Ivory).Box(new Vector3(0.08f, groundH - 0.34f, 0f), new Vector3(0.04f, 0.12f, length - 0.4f));
+            // Balcony over the lane: slab with a turquoise edge, glass railing and handrail.
+            B(Navy).Box(new Vector3(-0.8f, groundH + 0.08f, 0f), new Vector3(1.8f, 0.2f, length));
+            B(Turquoise).Box(new Vector3(-1.69f, groundH + 0.08f, 0f), new Vector3(0.04f, 0.24f, length));
+            B(Glass).Box(new Vector3(-1.62f, groundH + 0.7f, 0f), new Vector3(0.03f, 1.0f, length - 0.4f));
+            B(Steel).Box(new Vector3(-1.62f, groundH + 1.22f, 0f), new Vector3(0.07f, 0.05f, length - 0.4f));
+            // Garages.
+            float pier = 0.9f;
+            for (int k = 0; k < bayCentres.Count; k++)
+            {
+                float z = bayCentres[k];
+                string team = bayTeam != null && k < bayTeam.Count && bayTeam[k] != null ? bayTeam[k] : Navy;
+                float w = bayWidth - pier;
+                // Piers between the garages (and at the building ends).
+                B(Ivory).Box(new Vector3(back * 0.5f, (groundH - 0.3f) * 0.5f, z - bayWidth * 0.5f), new Vector3(back, groundH - 0.3f, pier));
+                if (k == bayCentres.Count - 1) B(Ivory).Box(new Vector3(back * 0.5f, (groundH - 0.3f) * 0.5f, z + bayWidth * 0.5f), new Vector3(back, groundH - 0.3f, pier));
+                // Slim centre mullion: two doors per garage; roller-door drums and fascia in the team colour.
+                B(Steel).Box(new Vector3(0.3f, (groundH - 0.9f) * 0.5f, z), new Vector3(0.25f, groundH - 0.9f, 0.3f));
+                foreach (float dz in new[] { -w * 0.25f, w * 0.25f })
+                    B(team).Tube(new Vector3(0.45f, groundH - 1.15f, z + dz - w * 0.24f), new Vector3(0.45f, groundH - 1.15f, z + dz + w * 0.24f), 0.22f, 10, true);
+                B(team).Box(new Vector3(0.2f, groundH - 1.15f, z), new Vector3(0.12f, 0.5f, w));
+                // Lit box number plate on the fascia (the number itself is a TextMesh by EventBrandingBuilder).
+                B(NumberLight).Box(new Vector3(0.12f, groundH - 1.15f, z - w * 0.5f + 1.1f), new Vector3(0.04f, 0.42f, 1.4f));
+                // Interior: floor, ceiling lights, back wall in the team colour with three data screens, side panels.
+                B(GarageFloor).Box(new Vector3(back * 0.5f, 0.01f, z), new Vector3(back - 0.2f, 0.02f, w));
+                for (int l = -1; l <= 1; l++)
+                    B(GarageLight).Box(new Vector3(back * 0.5f, groundH - 0.32f, z + l * w * 0.3f), new Vector3(back - 1.5f, 0.03f, 0.25f));
+                B(team).Box(new Vector3(back - 0.05f, 1.6f, z), new Vector3(0.1f, 3.2f, w));
+                B(Ivory).Box(new Vector3(back - 0.11f, 2.6f, z), new Vector3(0.02f, 0.12f, w));
+                for (int sIdx = -1; sIdx <= 1; sIdx++)
+                {
+                    var c = new Vector3(back - 0.13f, 2.0f, z + sIdx * 1.4f);
+                    B(Dark).Box(c + new Vector3(0.01f, 0f, 0f), new Vector3(0.04f, 0.72f, 1.2f));
+                    var panel = (Apex.UI.PitWallDisplay.Panel)((sIdx + 1 + k) % 4);
+                    var (px, py) = Apex.UI.PitWallDisplay.Origin(panel);
+                    float u0 = px / 256f, u1 = (px + 128) / 256f, v1 = 1f - py / 128f, v0 = 1f - (py + 64) / 128f;
+                    // Facing −x (out to the lane): the viewer's right is −z.
+                    B(RoofScreen).QuadFacing(c + new Vector3(-0.02f, -0.32f, 0.56f), c + new Vector3(-0.02f, -0.32f, -0.56f), c + new Vector3(-0.02f, 0.32f, -0.56f), c + new Vector3(-0.02f, 0.32f, 0.56f),
+                        new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), Vector3.left);
+                }
+                foreach (float sz in new[] { -1f, 1f })
+                    B(team).Box(new Vector3(back * 0.5f + 0.5f, 0.6f, z + sz * (w * 0.5f - 0.03f)), new Vector3(back - 1f, 1.2f, 0.04f));
+                // Tyre trolleys (two stacks of wheels in blankets), tool carts, flight cases, spare front wing.
+                foreach (float tz in new[] { z - w * 0.36f, z + w * 0.36f })
+                {
+                    var trolley = new Vector3(back - 1.2f, 0f, tz);
+                    B(Steel).Box(trolley + new Vector3(0f, 0.15f, 0f), new Vector3(0.9f, 0.05f, 1.6f));
+                    foreach (float oz in new[] { -0.38f, 0.38f })
+                        for (int t = 0; t < 2; t++)
+                            B(Blanket).Tube(trolley + new Vector3(0f, 0.2f + t * 0.4f, oz), trolley + new Vector3(0f, 0.56f + t * 0.4f, oz), 0.34f, 12, true);
+                    B(Steel).Box(trolley + new Vector3(0.45f, 0.6f, 0f), new Vector3(0.04f, 1.2f, 0.04f));
+                }
+                for (int t = 0; t < 2; t++)
+                {
+                    var cart = new Vector3(back - 0.6f, 0.5f, z - 2.2f + t * 1.1f);
+                    B(ToolCart).Box(cart, new Vector3(0.6f, 1.0f, 1.0f));
+                    for (int dr = 0; dr < 4; dr++) B(Dark).Box(cart + new Vector3(-0.31f, -0.35f + dr * 0.22f, 0f), new Vector3(0.01f, 0.02f, 0.85f));
+                }
+                for (int t = 0; t < 3; t++)
+                    B(FlightCase).Box(new Vector3(back - 0.55f, 0.3f + (t == 2 ? 0.6f : 0f), z + 1.6f + (t % 2) * 0.9f), new Vector3(0.7f, 0.6f, 0.8f));
+                // Tyre racks along both side walls: sets of four in blankets, two shelves.
+                foreach (float sz in new[] { -1f, 1f })
+                {
+                    float rz = z + sz * (w * 0.5f - 0.45f);
+                    for (int shelf = 0; shelf < 2; shelf++)
+                    {
+                        float ry = 0.25f + shelf * 1.0f;
+                        B(Steel).Box(new Vector3(back * 0.5f, ry - 0.05f, rz), new Vector3(5.2f, 0.04f, 0.7f));
+                        for (int t = 0; t < 7; t++)
+                            B(t % 4 == 3 ? Dark : Blanket).Tube(new Vector3(back * 0.5f - 2.3f + t * 0.75f, ry, rz), new Vector3(back * 0.5f - 2.3f + t * 0.75f, ry + 0.58f, rz), 0.31f, 10, true);
+                    }
+                    foreach (float rx in new[] { back * 0.5f - 2.6f, back * 0.5f + 2.6f })
+                        B(Steel).Box(new Vector3(rx, 1.0f, rz), new Vector3(0.05f, 2.0f, 0.7f));
+                }
+                // Data station in the middle: desk with two screens and a chair, a stack of flight cases by the door.
+                var station = new Vector3(back - 2.8f, 0f, z + 0.3f);
+                B(FlightCase).Box(station + new Vector3(0f, 0.45f, 0f), new Vector3(0.7f, 0.9f, 1.6f));
+                for (int sIdx = 0; sIdx < 2; sIdx++)
+                {
+                    var c = station + new Vector3(-0.05f, 1.2f, -0.4f + sIdx * 0.8f);
+                    B(Dark).Box(c + new Vector3(0.03f, 0f, 0f), new Vector3(0.04f, 0.42f, 0.7f));
+                    var (px, py) = Apex.UI.PitWallDisplay.Origin((Apex.UI.PitWallDisplay.Panel)((sIdx + k + 1) % 4));
+                    float u0 = px / 256f, u1 = (px + 128) / 256f, v1 = 1f - py / 128f, v0 = 1f - (py + 64) / 128f;
+                    B(RoofScreen).QuadFacing(c + new Vector3(0f, -0.19f, 0.33f), c + new Vector3(0f, -0.19f, -0.33f), c + new Vector3(0f, 0.19f, -0.33f), c + new Vector3(0f, 0.19f, 0.33f),
+                        new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1), Vector3.left);
+                }
+                B(Dark).Tube(station + new Vector3(-0.8f, 0.05f, 0f), station + new Vector3(-0.8f, 0.55f, 0f), 0.05f, 6, false);
+                B(Dark).Tube(station + new Vector3(-0.8f, 0.55f, 0f), station + new Vector3(-0.8f, 0.62f, 0f), 0.24f, 10, true);
+                for (int t = 0; t < 3; t++)
+                    B(FlightCase).Box(new Vector3(1.6f, 0.3f + t * 0.55f, z - w * 0.5f + 1.2f), new Vector3(0.9f, 0.52f, 0.7f));
+                B(Dark).Box(new Vector3(back - 0.16f, 3.35f, z), new Vector3(0.2f, 0.08f, 1.9f));   // spare front wing on brackets
+                B(Steel).Box(new Vector3(back - 0.12f, 3.25f, z - 0.7f), new Vector3(0.14f, 0.2f, 0.04f));
+                B(Steel).Box(new Vector3(back - 0.12f, 3.25f, z + 0.7f), new Vector3(0.14f, 0.2f, 0.04f));
+            }
+            // Building ends beyond the garages: closed ivory walls.
+            if (bayCentres.Count > 0)
+            {
+                float first = bayCentres[0] - bayWidth * 0.5f - pier * 0.5f, last = bayCentres[bayCentres.Count - 1] + bayWidth * 0.5f + pier * 0.5f;
+                float lo = Mathf.Min(first, last), hi = Mathf.Max(first, last);
+                if (lo > -half) B(Ivory).Box(new Vector3(back * 0.5f, groundH * 0.5f, (-half + lo) * 0.5f), new Vector3(back, groundH, lo + half));
+                if (hi < half) B(Ivory).Box(new Vector3(back * 0.5f, groundH * 0.5f, (hi + half) * 0.5f), new Vector3(back, groundH, half - hi));
+            }
+            // Roof slab and terrace railing.
             B(Navy).Box(new Vector3(depth * 0.5f - 0.6f, groundH + upperH + 0.2f, 0f), new Vector3(depth + 1.6f, 0.4f, length + 0.6f));
-            B(Turquoise).Box(new Vector3(-0.7f, groundH + 0.1f, 0f), new Vector3(1.6f, 0.2f, length));
-            // Roof terrace railing.
             float top = groundH + upperH + 0.4f;
             B(Steel).Box(new Vector3(0.2f, top + 1.0f, 0f), new Vector3(0.06f, 0.06f, length));
             for (float z = -half; z <= half + 0.01f; z += 3f)
                 B(Steel).Box(new Vector3(0.2f, top + 0.5f, z), new Vector3(0.05f, 1.0f, 0.05f));
+            // VIP hospitality pavilion on the half away from the podium: glazed, with a canopy over the terrace.
+            float vipZ = podiumZ <= 0f ? half * 0.45f : -half * 0.45f, vipL = length * 0.35f;
+            B(Glass).Box(new Vector3(depth * 0.5f + 1.2f, top + 1.6f, vipZ), new Vector3(depth - 3f, 3.2f, vipL));
+            B(Ivory).Box(new Vector3(depth * 0.5f + 0.4f, top + 3.3f, vipZ), new Vector3(depth - 0.4f, 0.2f, vipL + 2f));
+            B(Turquoise).Box(new Vector3(0.6f, top + 3.3f, vipZ), new Vector3(0.06f, 0.26f, vipL + 2f));
+            for (float z = vipZ - vipL * 0.5f - 1f; z <= vipZ + vipL * 0.5f + 1.01f; z += 4f)
+                B(Steel).Box(new Vector3(0.7f, top + 1.6f, z), new Vector3(0.08f, 3.2f, 0.08f));
+            // LED screens on the roof edge facing the track, with the live timing (the pit wall's display texture).
+            foreach (float sz in new[] { -half * 0.62f, half * 0.62f })
+            {
+                if (Mathf.Abs(sz - podiumZ) < 9f) continue;
+                var c = new Vector3(0.3f, top + 3.6f, sz);
+                B(Navy).Box(c + new Vector3(0.12f, 0f, 0f), new Vector3(0.2f, 3.8f, 6.6f));
+                B(Steel).Box(c + new Vector3(0.2f, -2.4f, 0f), new Vector3(0.2f, 1.6f, 0.2f));
+                // Timing panel (top-left of the texture), seen from the track (−x): the viewer's right is −z.
+                B(RoofScreen).QuadFacing(c + new Vector3(-0.01f, -1.7f, 3.1f), c + new Vector3(-0.01f, -1.7f, -3.1f), c + new Vector3(-0.01f, 1.7f, -3.1f), c + new Vector3(-0.01f, 1.7f, 3.1f),
+                    new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 1f), new Vector2(0f, 1f), Vector3.left);
+            }
             // Tiled end walls.
             foreach (float s in new[] { -1f, 1f })
                 B(Tile).Box(new Vector3(depth * 0.5f, (groundH + upperH) * 0.5f, s * (half + 0.06f)), new Vector3(depth, groundH + upperH, 0.12f));
+            // Two great vertical Turkish flags on the upper facade near the ends (hoist at the top), between the balcony
+            // and the roof: one each side, not more.
+            foreach (float s in new[] { -1f, 1f })
+            {
+                float fz = s * (half - 6f);
+                const float fw = 2.4f, fh = 3.0f;
+                var c = new Vector3(1.7f - 0.06f, groundH + 0.4f + fh * 0.5f, fz);
+                B(Steel).Box(c + new Vector3(0f, fh * 0.5f + 0.06f, 0f), new Vector3(0.05f, 0.05f, fw + 0.3f));
+                // Facing −x: viewer's right is −z. u along the flag's length (hoist → fly) runs top → bottom.
+                B(FlagVertical).QuadFacing(c + new Vector3(0f, -fh * 0.5f, fw * 0.5f), c + new Vector3(0f, -fh * 0.5f, -fw * 0.5f), c + new Vector3(0f, fh * 0.5f, -fw * 0.5f), c + new Vector3(0f, fh * 0.5f, fw * 0.5f),
+                    new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(0f, 1f), new Vector2(0f, 0f), Vector3.left);
+            }
         }
 
         /// <summary>Timing tower pylon (local frame: +z faces the track/approach), 3 m wide, 15 m high.</summary>

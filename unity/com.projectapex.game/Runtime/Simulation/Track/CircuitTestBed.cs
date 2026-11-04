@@ -120,6 +120,7 @@ namespace Apex.Tracks
             bool throttleOnly = false, float pace = 0.95f, int laps = 0, float groundingImpulse = 5f,
             Func<float, float> lateralAt = null, float speedLimit = float.PositiveInfinity, int seed = 3,
             Action<VehicleSimulation> configure = null, bool digitalInput = false, Func<float, float> speedLimitAt = null,
+            Func<float, SurfaceRig, (float lateral, float cap, bool brake)> autoPilot = null, bool stopIsFinish = false,
             InputLogic.KeyboardSteering.Profile keyboardProfile = InputLogic.KeyboardSteering.Profile.Balanced)
         {
             var rig = NewRig(out var sim);
@@ -156,6 +157,14 @@ namespace Apex.Tracks
                 states.Add(st);
                 if (lateralAt != null) ai.forcedLateral = lateralAt(pr.distance);
                 if (speedLimitAt != null) sim.speedLimit = speedLimitAt(pr.distance);
+                bool pilotBrake = false;
+                if (autoPilot != null)
+                {
+                    var cmd = autoPilot(pr.distance, rig);
+                    ai.forcedLateral = cmd.lateral;
+                    ai.speedCap = cmd.cap;
+                    pilotBrake = cmd.brake;
+                }
                 // As RaceController: the driver knows the conditions (grip of the tyres, wet track).
                 float grip = 0f;
                 foreach (var t in sim.tires) grip += t.GripMultiplier(sim.trackWetness) / 4f;
@@ -179,6 +188,7 @@ namespace Apex.Tracks
                     sim.throttle = throttleOnly ? 1f : c.throttle;
                     sim.brake = throttleOnly ? 0f : c.brake;
                     sim.steer = c.steer;
+                    if (pilotBrake) { sim.throttle = 0f; sim.brake = 1f; }
                 }
                 rig.Step(Dt);
                 trace?.Invoke(pr.distance, rig);
@@ -228,6 +238,7 @@ namespace Apex.Tracks
                 if (beta > 0.45f && !spinning) { res.events.Add(Ev(EventKind.Spin, beta * ApexMath.Rad2Deg)); spinning = true; }
                 if (beta < 0.1f) spinning = false;
                 if (v < 1f && rig.time > 3f) stuck += Dt; else stuck = 0f;
+                if (stopIsFinish && v < 0.05f && rig.time > 3f && pilotBrake) break;   // came to rest on the brakes (pit box)
                 if (stuck > 3f)
                 {
                     res.events.Add(Ev(EventKind.Stuck, v));

@@ -665,6 +665,13 @@ namespace Apex.Game
                 crew.race = Race;
                 crew.quality = Settings.environmentDetail;
                 crew.Build(circuit);
+                // Race engineers and live monitors on the pit wall stands.
+                var wallGo = new GameObject("PitWallLife");
+                wallGo.transform.SetParent(world.transform, false);
+                var wallLife = wallGo.AddComponent<PitWallComponent>();
+                wallLife.race = Race;
+                wallLife.quality = Settings.environmentDetail;
+                wallLife.Build(circuit);
             }
 
             trackId = def.id;
@@ -744,6 +751,7 @@ namespace Apex.Game
             sim.autoGearbox = Settings.autoGearbox;
             input.manualGears = !sim.autoGearbox;
             Race.PitAssist = Settings.pitAssist;
+            Race.ParkAssist = Settings.pitParkAssist;
         }
 
         void OnStateChanged(GameState from, GameState to)

@@ -142,6 +142,23 @@ namespace Apex.Tests
         }
 
         [Test]
+        public void TheRaceEngineerSitsAtTheDeskWithHandsOnTheKeyboard()
+        {
+            const float desk = 0.98f;
+            var parts = new PitCrewFigure.Frame[PitCrewFigure.PartCount];
+            for (float t = 0f; t < 30f; t += 0.37f)
+            {
+                PitCrewFigure.SolveSeated(t, 3, desk, parts);
+                AssertConnected(parts, $"t={t:F1}");
+                // On the stool: hips at seat height, feet on the footrest, head above the shoulders.
+                Assert.That(P(parts, PitCrewFigure.Part.Torso).origin.Y, Is.EqualTo(PitCrewFigure.SeatHeight + 0.06f).Within(0.01f));
+                for (int s = 0; s < 2; s++) Assert.That(FootY(parts, s), Is.InRange(0.1f, 0.4f));
+                // The left hand is always on the keyboard.
+                Assert.That(Vector3.Distance(HandAt(parts, 0), new Vector3(-0.17f, desk + 0.03f, 0.42f)), Is.LessThan(0.05f), $"t={t:F1}");
+            }
+        }
+
+        [Test]
         public void TheCrewIsFourteenPeople()
         {
             Assert.That(PitCrewChoreography.CrewSize, Is.EqualTo(14));

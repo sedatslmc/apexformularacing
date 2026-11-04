@@ -59,7 +59,7 @@ namespace Apex.Environment
             if (pit != null)
             {
                 int side = pit.side;
-                float start = pit.BoxDistance(0) - 15f, end = pit.BoxDistance(19) + 15f;
+                float start = pit.BoxDistance(0) - 15f, end = pit.LastBox + 15f;
                 float mid = (start + end) * 0.5f;
                 pitLength = end - start;
                 float s = side > 0 ? 1f : -1f;
@@ -69,7 +69,7 @@ namespace Apex.Environment
                 float yaw = Yaw(f) + (side > 0 ? 0f : 180f);
                 pitBuilding = new Placement { position = p, yaw = yaw };
                 pitBuilding.placed = Clear(pitBuilding, PitDepth * 0.5f, 0f, PitDepth * 0.5f, pitLength * 0.5f, mid);
-                for (int b = 0; b < 20; b++) bayZ.Add(s * (pit.BoxDistance(b) - mid));
+                for (int b = 0; b < pit.boxCount; b++) bayZ.Add(s * (pit.BoxDistance(b) - mid));
                 podiumZ = Math.Max(-pitLength * 0.5f + 8f, Math.Min(pitLength * 0.5f - 8f, s * (def.startLineDistance - mid)));
                 if (pitBuilding.placed)
                     foreach (float e in new[] { -1f, 1f })

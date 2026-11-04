@@ -58,9 +58,54 @@ namespace Apex.Game
             Physics.SyncTransforms();
         }
 
+        // Pit box settling (RaceController, docs/PIT_LANE.md): the crew rolls the stationary car onto its marks.
+        bool guiding;
+        float guideT, guideDuration;
+        Vector3 guideFrom, guideTo;
+        Quaternion guideFromRot, guideToRot;
+
+        /// <summary>The crew is moving the car onto its box marks.</summary>
+        public bool Guiding => guiding;
+
+        /// <summary>
+        /// Rolls the stationary car onto a pose over <paramref name="duration"/> seconds (smooth start and stop, height,
+        /// pitch and roll kept): the crew settling the car on its marks. Not a teleport; skipped for a zero duration.
+        /// </summary>
+        public void GuideTo(Vector3 position, Quaternion yawRotation, float duration)
+        {
+            if (duration <= 0.01f) return;
+            guideFrom = Body.position;
+            guideFromRot = Body.rotation;
+            guideTo = new Vector3(position.x, Body.position.y, position.z);
+            // Only the heading changes: keep the car's own pitch and roll on its springs.
+            float yawNow = guideFromRot.eulerAngles.y, yawWant = yawRotation.eulerAngles.y;
+            guideToRot = Quaternion.AngleAxis(Mathf.DeltaAngle(yawNow, yawWant), Vector3.up) * guideFromRot;
+            guideT = 0f;
+            guideDuration = duration;
+            guiding = true;
+            RigidbodyCompat.SetVelocity(Body, Vector3.zero);
+            Body.angularVelocity = Vector3.zero;
+            Body.isKinematic = true;
+        }
+
         void FixedUpdate()
         {
             float dt = Time.fixedDeltaTime;
+            if (guiding)
+            {
+                guideT += dt;
+                float k = Apex.Race.PitBoxStop.SettleShare(guideT, guideDuration);
+                Body.MovePosition(Vector3.Lerp(guideFrom, guideTo, k));
+                Body.MoveRotation(Quaternion.Slerp(guideFromRot, guideToRot, k));
+                if (guideT >= guideDuration)
+                {
+                    guiding = false;
+                    Body.isKinematic = false;
+                    RigidbodyCompat.SetVelocity(Body, Vector3.zero);
+                    Body.angularVelocity = Vector3.zero;
+                }
+                return;
+            }
             var t = transform;
             Vector3 up = t.up;
             Vector3 fwd = t.forward;

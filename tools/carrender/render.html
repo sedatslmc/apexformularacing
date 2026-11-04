@@ -77,6 +77,19 @@ const mats = {
   CrewOverall: M({ color: params.get('team') ? parseInt(params.get('team'), 16) : 0xc8202a, roughness: 0.7, sheen: 0.4 }),
   CrewDark: M({ color: 0x15161a, roughness: 0.8 }),
   CrewHelmet: M({ color: 0xeef0f3, metalness: 0.1, roughness: 0.3, clearcoat: 1 }),
+  // Pit wall and pit building (PitWallGeometry, EventGeometry.PitBuilding).
+  PitTeam0: M({ color: 0xc8202a, roughness: 0.5 }), PitTeam1: M({ color: 0x1f5fd0, roughness: 0.5 }),
+  PitWallDeck: M({ color: 0x3d4045, roughness: 0.6, metalness: 0.4 }), PitWallDesk: M({ color: 0x121317, roughness: 0.5 }),
+  PitWallBezel: M({ color: 0x08080a, roughness: 0.4 }), PitWallScreen: M({ color: 0x0a1626, emissive: 0x1aa6c8, emissiveIntensity: 0.9 }),
+  PitWallLight: M({ color: 0xffffff, emissive: 0xfff4e0, emissiveIntensity: 1.2 }), PitWallLedGreen: M({ color: 0x00ff55, emissive: 0x00ff55 }),
+  PitWallLedAmber: M({ color: 0xffa000, emissive: 0xffa000 }), Line: M({ color: 0xf2f2f2, roughness: 0.5 }),
+  Skin: M({ color: 0xc69172, roughness: 0.7 }), CrewDark: M({ color: 0x15161a, roughness: 0.8 }),
+  EventNavy: M({ color: 0x1d2835, roughness: 0.5 }), EventIvory: M({ color: 0xf0e9d9, roughness: 0.7 }), EventRed: M({ color: 0xc8102e, roughness: 0.5 }),
+  EventTurquoise: M({ color: 0x087f8c, roughness: 0.5 }), TowerGlass: M({ color: 0x24323e, metalness: 0.6, roughness: 0.1 }), Steel: M({ color: 0x33373d, metalness: 0.7, roughness: 0.4 }),
+  IznikTile: M({ color: 0x2e7fa0, roughness: 0.3 }), GarageDark: M({ color: 0x0d0e10, roughness: 0.5 }), GarageFloor: M({ color: 0x9ea2a8, roughness: 0.3 }),
+  GarageLight: M({ color: 0xffffff, emissive: 0xfff6e8, emissiveIntensity: 1.5 }), GarageToolCart: M({ color: 0xb30f14, roughness: 0.4, metalness: 0.3 }),
+  GarageBlanket: M({ color: 0x520810, roughness: 0.9 }), GarageCase: M({ color: 0x1e2023, roughness: 0.5, metalness: 0.4 }),
+  GarageNumberLight: M({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.8 }), TurkishFlagVertical: M({ color: 0xe30a17, roughness: 0.7 }),
 };
 
 // Studio: soft key, rim lights and a glossy floor.

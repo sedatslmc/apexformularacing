@@ -18,6 +18,8 @@ namespace Apex.Game
             ["Asphalt"] = new Color(0.22f, 0.22f, 0.24f),
             ["Line"] = new Color(0.92f, 0.92f, 0.92f),
             ["PitLane"] = new Color(0.3f, 0.3f, 0.32f),
+            // Sealed working lane in front of the garages (lighter, blue-grey epoxy), clearly apart from the fast lane.
+            ["PitWorkLane"] = new Color(0.42f, 0.45f, 0.5f),
             ["KerbRed"] = new Color(0.78f, 0.1f, 0.08f),
             ["KerbWhite"] = new Color(0.94f, 0.94f, 0.94f),
             ["Grass"] = new Color(0.3f, 0.47f, 0.19f),

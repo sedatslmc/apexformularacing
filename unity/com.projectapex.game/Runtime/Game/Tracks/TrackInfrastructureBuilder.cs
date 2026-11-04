@@ -236,9 +236,14 @@ namespace Apex.Game
             if (def.pit != null)
             {
                 var pit = def.pit;
-                Board(ci, signs, font, pit.entry - pit.entryTaper - 60f, pit.side, "PİT GİRİŞİ ▸", new Color(0.78f, 0.06f, 0.18f), Color.white, 2.4f);
-                Board(ci, signs, font, pit.entry + CircuitDefinition.PitLane.LimiterStart, pit.side, $"PİT {pit.speedLimitKmh:0} km/h", Color.white, new Color(0.78f, 0.06f, 0.18f), 2.0f);
-                Board(ci, signs, font, pit.entry + pit.PlanFor(ci.Geometry.Length).limitSpan, pit.side, "PİT ÇIKIŞI", navy, ivory, 2.2f);
+                // Bilingual (English / Turkish) pit signs: entry with count-down boards to where the entry lane branches
+                // off, the speed limit at its line, the exit line.
+                var red = new Color(0.78f, 0.06f, 0.18f);
+                Board(ci, signs, font, pit.entry - pit.entryTaper - 60f, pit.side, "PIT ENTRY\nPİT GİRİŞİ", red, Color.white, 2.4f);
+                foreach (int m in new[] { 150, 100, 50 })
+                    Board(ci, signs, font, pit.entry - pit.entryTaper - m, pit.side, $"PIT {m}", Color.white, red, 1.3f);
+                Board(ci, signs, font, pit.entry + CircuitDefinition.PitLane.LimiterStart, pit.side, $"PIT LIMIT {pit.speedLimitKmh:0}\nHIZ SINIRI", Color.white, red, 2.0f);
+                Board(ci, signs, font, pit.entry + pit.PlanFor(ci.Geometry.Length).limitSpan, pit.side, "PIT EXIT\nPİT ÇIKIŞI", navy, ivory, 2.2f);
             }
             // Braking distance boards (150 / 100 / 50 m to the turn-in): white boards, black numerals.
             foreach (var bb in ci.Infrastructure.brakeBoards)

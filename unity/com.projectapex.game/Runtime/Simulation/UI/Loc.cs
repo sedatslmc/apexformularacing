@@ -108,7 +108,7 @@ namespace Apex.UI
             // Settings rows (labels and values of the existing settings).
             ["Fahrprofil"] = "Driving profile", ["Traktionskontrolle"] = "Traction control", ["ABS"] = "ABS", ["Lenkhilfe"] = "Steering assist",
             ["Tempoabhängige Lenkung"] = "Speed-sensitive steering", ["Automatikgetriebe"] = "Automatic gearbox", ["Bremsbalance vorne"] = "Front brake bias",
-            ["Fahrverhalten (Vergleich, ab nächster Session)"] = "Handling (comparison, next session)", ["Boxen-Assistent"] = "Pit assist",
+            ["Fahrverhalten (Vergleich, ab nächster Session)"] = "Handling (comparison, next session)", ["Boxen-Assistent"] = "Pit assist", ["Einparkhilfe Box"] = "Pit box parking aid",
             ["Bisherig (Okt. 2026)"] = "Previous (Oct 2026)", ["Neu (Nov. 2026)"] = "New (Nov 2026)",
             ["Ideallinie"] = "Racing line", ["Nur Kurven"] = "Corners only", ["Ganze Strecke"] = "Whole lap", ["Dynamische Bremsanzeige"] = "Dynamic braking colours",
             ["Tastatur-Lenkprofil"] = "Keyboard steering profile", ["Direkt"] = "Direct", ["Smooth"] = "Smooth",

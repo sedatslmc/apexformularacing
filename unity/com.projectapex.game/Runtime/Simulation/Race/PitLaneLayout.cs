@@ -5,10 +5,10 @@ namespace Apex.Race
 {
     /// <summary>
     /// Lanes of the pit lane (docs/PIT_LANE.md), measured from the track edge outwards (towards the garages):
-    /// apron 0–2 m, fast lane 2–5.5 m, working lane from 5.5 m with the boxes (car centre at
+    /// track-side strip 0–0.45 m, pit wall (concrete with catch fence) 0.45–0.85 m, pit wall deck with the team stands
+    /// 0.85–2.45 m, fast lane 2.55–5.5 m, working lane from 5.5 m with the boxes (car centre at
     /// CircuitDefinition.PitLane.laneCentreFromEdge, 7.5 m) and the crews up to the garage fronts. Cars drive in the
-    /// fast lane and only turn into the working lane for their own box – before, they drove the whole lane on the box
-    /// line, straight through every other team's box.
+    /// fast lane and only turn into the working lane for their own box.
     /// </summary>
     public static class PitLaneLayout
     {
@@ -17,15 +17,20 @@ namespace Apex.Race
         public const float TurnIn = 28f, PullOut = 24f;
         /// <summary>Half width of a car (m) for clearance checks.</summary>
         public const float CarHalfWidth = 0.95f;
+        /// <summary>Pit wall cross-section from the track edge (m): concrete wall, deck for the team stands, fast lane edge.</summary>
+        public const float WallInner = 0.45f, WallOuter = 0.85f, DeckOuter = 2.45f, FastLaneInner = 2.55f;
+        /// <summary>Collision face of the pit wall (its track-side face).</summary>
+        public const float WallFromEdge = WallInner;
+        /// <summary>Crash cushion in front of the wall's nose in the entry lane (m).</summary>
+        public const float AttenuatorLength = 5f;
 
-        /// <summary>
-        /// Lateral offset from the track edge (m, outwards) for a car in the lane. <paramref name="toBox"/>: metres to its
-        /// box centre (negative once past it); <paramref name="served"/>: the stop is done (pull out to the fast lane).
-        /// </summary>
         /// <summary>Speed limit line after the entry (m): the limiter runs from here to the exit line.</summary>
         public const float LimiterStart = 15f;
-        /// <summary>The pit wall starts this far after the entry and ends this far after the exit line (m).</summary>
-        public const float WallStart = 10f, WallAfterLimit = 10f;
+        /// <summary>
+        /// The pit wall's nose lies this far after the entry (negative: in the entry lane, where the lane has moved far
+        /// enough off the track that the wall separates it from the race traffic), and it ends this far after the exit line (m).
+        /// </summary>
+        public const float WallStart = -30f, WallAfterLimit = 10f;
         /// <summary>Share of the exit taper after the end of the pit area by which an automatic car is back on the track.</summary>
         public const float MergeShare = 0.65f;
         /// <summary>Longest lane change back onto the track (m): ~1.5 s at 190 km/h.</summary>
@@ -50,6 +55,10 @@ namespace Apex.Race
             public float WallEnd => MathF.Min(span, limitSpan + WallAfterLimit);
             public float MergeEnd => span + exitTaper * MergeShare;
             public float MergeStart => MathF.Max(WallEnd, MergeEnd - MergeLength);
+            /// <summary>Latest start of the merge when race traffic holds a car back (the lane is still wide enough to finish it).</summary>
+            public float LatestMergeStart => MergeStart + 30f;
+            /// <summary>Length of the lane change back onto the track.</summary>
+            public float MergeSpan => MathF.Max(MergeEnd - MergeStart, 30f);
             /// <summary>Is the speed limiter on <paramref name="since"/> metres after the entry?</summary>
             public bool Limited(float since) => since >= LimiterStart && since <= limitSpan;
         }
@@ -67,15 +76,55 @@ namespace Apex.Race
         /// into the own box and out (<see cref="FromEdge"/>), then the acceleration lane after the exit line, merging
         /// onto the track between <see cref="Plan.MergeStart"/> and <see cref="Plan.MergeEnd"/>.
         /// </summary>
-        public static float Route(in Plan plan, float since, float toBox, bool served, float boxCentre)
+        public static float Route(in Plan plan, float since, float toBox, bool served, float boxCentre, float mergeFrom = float.NaN)
         {
+            // mergeFrom: where the merge began (NaN = at MergeStart); a car held back by traffic passes its own position
+            // (stays in the lane) until it may go.
+            float m = float.IsNaN(mergeFrom) ? plan.MergeStart : mergeFrom;
             if (since > plan.MergeStart)
-                return LaneTarget(1f - (since - plan.MergeStart) / MathF.Max(plan.MergeEnd - plan.MergeStart, 1f));
-            float f = FromEdge(toBox, served, boxCentre);
+                return LaneTarget(1f - (since - m) / plan.MergeSpan);
+            // Into the box straight on the box line for the last metres (PitBoxStop.StraightIn): parked square to the crew.
+            float f = FromEdge(served ? toBox : toBox - PitBoxStop.StraightIn, served, boxCentre);
             if (since < 0f) f = MathF.Min(f, LaneTarget(1f + since / MathF.Max(plan.entryTaper, 1f)));
             return f;
         }
 
+        /// <summary>What an automatic car on a pit stop is told to do (RaceController and the drive tests).</summary>
+        public struct Command
+        {
+            /// <summary>Lateral target from the track edge (m, outwards).</summary>
+            public float fromEdge;
+            /// <summary>Speed cap (m/s).</summary>
+            public float speedCap;
+            /// <summary>Stand on the brakes now (on the box mark).</summary>
+            public bool brake;
+        }
+
+        /// <summary>
+        /// The whole pit stop for an automatic car: brake down to the limit by the limit line, follow the lanes, slow
+        /// down onto the box and stop with the car's origin on the box centre (PitBoxStop.ApproachSpeed / BrakeNow), then
+        /// out and through the exit lane. <paramref name="toBox"/>: metres to the own box centre; <paramref name="served"/>:
+        /// the stop is done.
+        /// </summary>
+        public static Command Drive(in Plan plan, float since, float toBox, bool served, float boxCentre, float limit, float speed, float mergeFrom = float.NaN)
+        {
+            var c = new Command { fromEdge = Route(plan, since, toBox, served, boxCentre, mergeFrom), speedCap = float.PositiveInfinity };
+            if (since < LimiterStart)
+                c.speedCap = MathF.Sqrt(limit * limit + 2f * 8f * MathF.Max(0f, LimiterStart - 2f - since));   // at the limit by the line
+            else if (since < plan.limitSpan - 2f)
+                c.speedCap = limit;
+            if (!served && toBox < 60f && toBox > -PitBoxStop.PushBackLimit)
+            {
+                c.speedCap = MathF.Min(c.speedCap, PitBoxStop.ApproachSpeed(toBox, limit));
+                c.brake = PitBoxStop.BrakeNow(toBox, speed);
+            }
+            return c;
+        }
+
+        /// <summary>
+        /// Lateral offset from the track edge (m, outwards) for a car in the lane. <paramref name="toBox"/>: metres to its
+        /// box centre (negative once past it); <paramref name="served"/>: the stop is done (pull out to the fast lane).
+        /// </summary>
         public static float FromEdge(float toBox, bool served, float boxCentre)
         {
             if (!served)

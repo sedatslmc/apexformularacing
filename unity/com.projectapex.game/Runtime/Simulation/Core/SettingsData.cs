@@ -61,6 +61,8 @@ namespace Apex.Core
         public float brakeBiasFront = 0.57f;
         /// <summary>Pit assist: the car drives itself through the pit lane and stops in its box.</summary>
         public bool pitAssist = true;
+        /// <summary>Parking aid for a pit stop driven by hand: the crew settles the car onto the box marks (last centimetres).</summary>
+        public bool pitParkAssist = true;
         public bool reducedMotion;
         /// <summary>0 cockpit, 1 T-cam (default, preferred in playtests), 2 chase, 3 far chase.</summary>
         public int cameraMode = 1;

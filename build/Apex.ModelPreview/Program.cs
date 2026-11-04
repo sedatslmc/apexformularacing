@@ -293,6 +293,64 @@ if (Array.IndexOf(args, "--monument") >= 0)
     Console.WriteLine(string.Format(ic, "site {0:F0},{1:F0}: base {2:F1} m, terrace +{3:F1} m, pole top +{4:F1} m", fx, fz, baseY, terrace, poleTop));
     return;
 }
+if (Array.IndexOf(args, "--pitwall") >= 0)
+{
+    // Pit wall stand (PitWallGeometry) with four seated race engineers (PitCrewFigure.SolveSeated), and two garages of the
+    // pit building (EventGeometry.PitBuilding) behind it: pitwall_stand.obj, pit_garages.obj (stand frame / building frame).
+    var ic = CultureInfo.InvariantCulture;
+    void WriteObj(string file, Dictionary<string, MeshBuilder> parts)
+    {
+        var sb = new StringBuilder();
+        int vb = 1, total = 0;
+        foreach (var kv in parts)
+        {
+            if (kv.Value.TriangleCount == 0) continue;
+            sb.AppendLine($"o {kv.Key}\nusemtl {kv.Key}");
+            foreach (var v in kv.Value.Vertices) sb.AppendLine(string.Format(ic, "v {0:F4} {1:F4} {2:F4}", v.x, v.y, v.z));
+            var ts = kv.Value.Triangles;
+            for (int i = 0; i < ts.Count; i += 3) sb.AppendLine($"f {ts[i] + vb} {ts[i + 1] + vb} {ts[i + 2] + vb}");
+            vb += kv.Value.VertexCount;
+            total += kv.Value.TriangleCount;
+        }
+        Directory.CreateDirectory(outDir);
+        File.WriteAllText(Path.Combine(outDir, file), sb.ToString());
+        Console.WriteLine($"{file}: {total} triangles");
+    }
+    MeshBuilder Get(Dictionary<string, MeshBuilder> parts, string k) { if (!parts.TryGetValue(k, out var m)) parts[k] = m = new MeshBuilder(); return m; }
+    var stand = new Dictionary<string, MeshBuilder>();
+    PitWallGeometry.Stand(k => Get(stand, k), "PitTeam0", 0);
+    var frames = new Apex.Race.PitCrewFigure.Frame[Apex.Race.PitCrewFigure.PartCount];
+    var body = new MeshBuilder[Apex.Race.PitCrewFigure.PartCount][];
+    for (int p = 0; p < body.Length; p++) body[p] = PitCrewGeometry.Part((Apex.Race.PitCrewFigure.Part)p);
+    var headMb = PitWallGeometry.EngineerHead();
+    for (int sIdx = 0; sIdx < 4; sIdx++)
+    {
+        Apex.Race.PitCrewFigure.SolveSeated(3.1f + sIdx * 2.3f, sIdx * 7, PitWallGeometry.DeskTop - 0.02f, frames);
+        // Seat frame: at (SeatX + 0.05, Floor, z), facing −x (figure +z → stand −x).
+        var seat = new Vector3(PitWallGeometry.SeatX + 0.05f, PitWallGeometry.Floor, PitWallGeometry.SeatZ[sIdx]);
+        Vector3 Fig(System.Numerics.Vector3 v) => seat + new Vector3(-v.Z, v.Y, v.X);
+        for (int p = 0; p < frames.Length; p++)
+        {
+            var f = frames[p];
+            Vector3 o = Fig(f.origin), r = Fig(f.right) - seat, up = Fig(f.up) - seat, fw = Fig(f.forward) - seat;
+            var part = (Apex.Race.PitCrewFigure.Part)p;
+            if (part == Apex.Race.PitCrewFigure.Part.Head)
+            {
+                Get(stand, "Skin").Append(headMb[0], v => o + r * v.x + up * v.y + fw * v.z);
+                Get(stand, "CrewDark").Append(headMb[1], v => o + r * v.x + up * v.y + fw * v.z);
+                continue;
+            }
+            bool shirt = part == Apex.Race.PitCrewFigure.Part.Torso || part.ToString().Contains("Arm");
+            Get(stand, shirt ? "CrewOverall" : "CrewDark").Append(body[p][0], v => o + r * v.x + up * v.y + fw * v.z);
+            Get(stand, "CrewDark").Append(body[p][1], v => o + r * v.x + up * v.y + fw * v.z);
+        }
+    }
+    WriteObj("pitwall_stand.obj", stand);
+    var bld = new Dictionary<string, MeshBuilder>();
+    EventGeometry.PitBuilding(k => Get(bld, k), 40f, new List<float> { -8.5f, 8.5f }, 17f, new List<string> { "PitTeam0", "PitTeam1" }, 30f);
+    WriteObj("pit_garages.obj", bld);
+    return;
+}
 if (Array.IndexOf(args, "--pitcrew") >= 0)
 {
     // Pit crew models (PitCrewGeometry) posed by the skeleton (Apex.Race.PitCrewFigure) at moments of a stop:

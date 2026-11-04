@@ -92,8 +92,8 @@ namespace Apex.Tests
 
         [Test]
         [TestCase(0)]
-        [TestCase(10)]
-        [TestCase(19)]
+        [TestCase(5)]
+        [TestCase(9)]
         public void F_PitLaneIsDrivableEntryToExit(int box)
         {
             var pit = Bed.def.pit;
@@ -134,6 +134,54 @@ namespace Apex.Tests
             // The exit lane: still in it 30 m after the exit line, and well over the limit before merging.
             Assert.That(laneAt30, Is.GreaterThan(1f), "in the acceleration lane behind the white line");
             Assert.That(mergeSpeed, Is.GreaterThan(pit.SpeedLimit * 1.4f), $"accelerated to {mergeSpeed * 3.6f:F0} km/h before merging");
+        }
+
+        [TestCase(0)]
+        [TestCase(4)]
+        [TestCase(9)]
+        public void H_AutomaticStopHaltsSquareOnTheBoxMarks(int box)
+        {
+            // From the track before the entry lane down the pit lane into the own box, with the shared pit autopilot
+            // (PitLaneLayout.Drive): the car must come to rest with its origin on the box centre, on the box line and
+            // square to it (PitBoxStop window), so the crew reaches the wheels.
+            var pit = Bed.def.pit;
+            var g = Bed.g;
+            float L = g.Length;
+            var plan = pit.PlanFor(L);
+            float boxD = g.Wrap(pit.BoxDistance(box));
+            float lastRaw = 0f; float lastLat = 0f, lastYaw = 0f, lastSpeed = 0f;
+            (float, float, bool) Pilot(float raw, Apex.Vehicle.SurfaceRig rig)
+            {
+                float since = -pit.ToEntry(raw, L);
+                float toBox = Apex.Core.ApexMath.PosMod(boxD - raw, L);
+                if (toBox > L * 0.5f) toBox -= L;
+                var cmd = Apex.Race.PitLaneLayout.Drive(plan, since, toBox, false, pit.laneCentreFromEdge, pit.SpeedLimit, rig.ForwardSpeed);
+                return (pit.side * (g.WidthAt(raw) * 0.5f + cmd.fromEdge), cmd.speedCap, cmd.brake);
+            }
+            Bed.trace = (raw, rig) =>
+            {
+                var pr = g.Project(rig.position);
+                lastRaw = pr.distance;
+                lastLat = pr.lateral;
+                var t = g.TangentAt(pr.distance);
+                lastYaw = MathF.Atan2(rig.Forward.X * t.Z - rig.Forward.Z * t.X, rig.Forward.X * t.X + rig.Forward.Z * t.Z) * 180f / MathF.PI;
+                lastSpeed = rig.ForwardSpeed;
+            };
+            float start = pit.entryTaper + 60f;
+            CircuitTestBed.DriveResult r;
+            try
+            {
+                r = Bed.Drive(g.Wrap(pit.entry - start), 0f, 2000f, 150f, initialSpeed: 30f, autoPilot: Pilot,
+                    speedLimitAt: raw => plan.Limited(-pit.ToEntry(raw, L)) ? pit.SpeedLimit : float.PositiveInfinity, stopIsFinish: true);
+            }
+            finally { Bed.trace = null; }
+            float toBoxEnd = Apex.Core.ApexMath.PosMod(boxD - lastRaw + L * 0.5f, L) - L * 0.5f;
+            float latErr = lastLat - Bed.def.pit.side * (g.WidthAt(boxD) * 0.5f + pit.laneCentreFromEdge);
+            TestContext.WriteLine($"box {box}: stopped {toBoxEnd:F3} m before the centre, {latErr:F3} m off the line, {lastYaw:F2}° skew, {lastSpeed:F2} m/s, {r}");
+            Assert.That(r.Count(CircuitTestBed.EventKind.OffRoadSurface) + r.Count(CircuitTestBed.EventKind.LeftTrack) + r.Count(CircuitTestBed.EventKind.Spin), Is.EqualTo(0), r.ToString());
+            Assert.That(Apex.Race.PitBoxStop.Judge(toBoxEnd, latErr, lastYaw), Is.EqualTo(Apex.Race.PitBoxStop.Fit.Good),
+                $"{toBoxEnd:F2} m / {latErr:F2} m / {lastYaw:F1}°");
+            Assert.That(MathF.Abs(lastSpeed), Is.LessThan(0.1f));
         }
 
         [Test]
