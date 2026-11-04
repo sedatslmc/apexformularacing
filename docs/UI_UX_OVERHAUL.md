@@ -386,3 +386,40 @@ die Standardpalette ist für Deuteranopie schlechter), Englisch deckt alle Model
 ## 12. Nächste Schritte
 Prüfung in Unity (Abschnitte 8.3, 9.3, 10.3, 11.4); danach die IMGUI-Rückfallbildschirme entfernen, ein gezeichnetes Logo und
 ein Icon-Set beauftragen, Musik lizenzieren.
+
+## 13. Race Control 2.0 (Brief vom 2026-11-05) – Teil 1
+
+**Status:** implementiert, Modelle getestet (`PresentationTests`, `UiModelTests`); Unity-Seite nur kompiliergeprüft, **im Editor nicht gesehen**.
+
+### 13.1 Was gebaut ist
+| Teil | Dateien | Inhalt |
+|---|---|---|
+| Palette | `UiTokens` | Midnight Navy `#0B1220`, Deep Graphite `#151D2A`, Carbon Black `#090D14`, Racing White, Apex Cyan `#00D9E8`, Turkish Red, Racing Gold `#D8AD57`, Electric Blue `#3478F6`; Kontrasttests bleiben grün |
+| Spielintro | `CinematicScripts.GameIntro`, `CinematicDirector` | echte Spielkameras über der Szene, kein Video: Auto in dunkler Garage, Reifen, Kurve, Bremslichter, türkische Flaggen, Flug über die Bosporusbrücke, Start-Ziel-Gerade, dann „APEX · RACE BEYOND LIMITS“; Breitbildbalken, Lichtstreifen an den Schnitten. Dauer etwa 17 s, jede Eingabe überspringt. Ohne Istanbul-Kulisse (Mobil) gibt es nur die Auto-Aufnahmen. Einstellung „Intro beim Start“: Einmal, Immer oder Nie |
+| Startbildschirm | `MainMenuView.ShowTitle` | Logo groß, Tagline in Gold, pulsierendes „DRÜCKE EINE TASTE ZUM STARTEN“ / „ZUM STARTEN TIPPEN“, Versionsnummer, treibende Lichtpartikel, Lichtschwung über dem Logo; über der 3D-Szene, einmal je Spielstart |
+| Ladebildschirme | `LoadingModel`, `LoadingView`, `CircuitBuilder.BuildSteps` | Der Streckenaufbau läuft in Stufen (Geometrie, Fahrbahn, Boxenanlage, Gelände, Boxengebäude, Infrastruktur, Istanbul, Fahrzeuge, Licht). Der Balken zeigt nur fertige Stufen, gewichtet: **echter Fortschritt, keine Uhr**; er springt bei großen Stufen. Inhalt: Titel, Ort, Band in Rot-Weiß-Rot, Karte, die sich mit dem Fortschritt zeichnet, Kennzahlen (Länge, Kurven, Wetter, Tageszeit, Runden), Tipp alle 6 s, Name der laufenden Stufe. Varianten: Spielstart, Rennen, Zeitfahren, Training, Meisterschaft (mit Runde), Rückkehr ins Paddock |
+| Rennstart | `CinematicScripts.RaceIntro` | Bosporusbrücke, Strecke von oben, Start-Ziel mit Boxengebäude und Titel („BOSPHORUS GRAND PRIX · ROUND 01“ in der Meisterschaft), die ersten Startplätze mit Bauchbinde (Platz, Fahrer, Team, Reifen), das eigene Auto, dann der Schwenk in die Fahrkamera und die Startlichter. Zeitfahren und Training haben eine kurze Version. Überspringbar, abschaltbar („Rennstart-Präsentation“) |
+| Hauptmenü | `MainMenuModel`, `MainMenuView` | Einstellungen als Menüpunkt; eine Beschreibung des gewählten Eintrags; kompaktere Einträge, damit sich nichts mit den Karten überdeckt. Die Karriere ist als Aktion vorbereitet (`MenuAction.Career`, `careerAvailable`) und bleibt ausgeblendet |
+| Rennvorbereitung | `RaceSetupFlow`, `SetupView` | „RENNEN STARTEN“ öffnet die Vorbereitung statt sofort zu starten. Fünf Schritte mit Schrittleiste: Modus, Strecke, Bedingungen, Fahrzeug & Team (Team, Reifen, Lackierung, Startnummer), Übersicht mit Zusammenfassungskarte und großem „RENNEN STARTEN“. Jede Option hat eine Erklärung. Es gibt keine zweite Regellogik: Die Optionen kommen aus `SetupModel` |
+| Einstellungen | `SettingsCatalog`, `ApexGame.Menus` | Kategorien Grafik, Audio, Steuerung, Fahrhilfen, Gameplay, HUD, Barrierefreiheit. Neu: Auflösung, Anzeigemodus, VSync, Bildrate-Limit (`ApplyDisplay`, echte Unity-APIs), UI-Lautstärke, Intro, Rennstart-Präsentation |
+
+### 13.2 Nur vorbereitet
+- **Karriere:** Menüaktion und Ladekontext sind vorhanden, beides wird erst mit einer Implementierung sichtbar.
+- **Ladebildschirm „Spielstand“:** Kontext und Texte sind vorhanden, es gibt aber noch kein eigenes Laden von Spielständen.
+
+### 13.3 Fehlt noch (nächster Teil)
+- Pause mit Rennstatus (Rundenzeit, Wetter, Reifen) und den Einträgen „Fahrzeug-Setup“ und „Steuerung“.
+- Ergebnisse mit Zielflaggen-Animation und Reifenstrategie je Fahrer; Fahrerprofil mit schnellsten Runden, Fahrzeit und Meisterschaftsergebnissen (dafür fehlen noch Daten im Speicherstand).
+- Garage: Cockpit- und freie Kamera, eigene Garagenkulisse mit Kamerafahrt dorthin.
+- Teamwertung und Saisonverlauf in der Meisterschaft; Zeitfahrmenü mit besten Sektoren und letzten Runden.
+- HUD-Schalter je Element (Karte, Reifen, Zeiten); eigene Mobil-Anordnung prüfen.
+- Klänge für Laden, persönliche Bestzeit und Motorstart.
+- Unscharfer Hintergrund in der Pause, aus Rücksicht auf die Leistung bisher nur abgedunkelt.
+
+### 13.4 In Unity zu prüfen
+1. Intro und Rennstart: Bildausschnitte (Brücke 45 m über dem Wasser, Strecke von oben), keine Kamera in Gebäuden, Überspringen.
+2. Ladebildschirm: Läuft der Balken flüssig? Stocken einzelne Stufen? Die Stadt ist eine einzige große Stufe.
+3. Startbildschirm über der Menükulisse; „beliebige Taste“ mit Gamepad und Touch.
+4. Schrittleiste und Erklärzeile der Rennvorbereitung ohne Überlappung bei 16:9, 21:9 und auf dem Telefon.
+5. Auflösung und Vollbild unter Windows und macOS.
+

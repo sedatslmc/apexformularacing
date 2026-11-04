@@ -12,6 +12,23 @@
   - Gebaut gegen die Unity-Referenzen. **Im Editor nicht gesehen und nicht gefahren.**
 - **Platzhalter-Art:** Alle Modelle sind selbst gebaut und prozedural (Gebäude, Garagen, Pitwall, Personen, Monitore), nicht fotorealistisch. Die Bilder unten sind three.js-Renders bzw. Pläne aus den Daten, keine Spielaufnahmen.
 
+## Korrekturen nach dem Test im Editor (2026-11-05)
+Rückmeldung aus Unity, alle Punkte behoben (Logik getestet, Unity-Seite nur kompiliergeprüft):
+
+| Problem | Ursache | Lösung |
+|---|---|---|
+| Boxen-Assistent fährt an der Einfahrt gegen die Mauer | Die Lenkung des Assistenten hinkte dem Weg hinterher: Die KI zielt 6 m + 0,3 s voraus, bekam aber das Seitenziel ihres aktuellen Orts. Dazu bremste sie erst kurz vor der Limitlinie. Der alte Fahrtest begann mit 80 km/h hinter der letzten Kurve und hat beides nicht gezeigt. | `PitLaneLayout.Drive` gibt das Seitenziel für den Punkt, auf den die KI lenkt (`AIDriver.Lookahead`). Der Assistent hat 40 m vor der Einfahrt das Limit erreicht (7 m/s²) und reiht sich ab 440 m vorher ein. Die Einfahrtsspur beginnt bei Bosphorus früher (190 statt 150 m), direkt am Ausgang der letzten Kurve. |
+| Säule der Startbrücke auf der Fast Lane | Die Pylone standen 3 m neben der Fahrbahn, also in der Boxengasse. | Der Pylon auf der Boxenseite steht auf dem Pitwall-Deck (`EventGeometry.Gantry` mit Abständen je Seite). |
+| Pitwall zu nah an der Fast Lane | Zwischen Ständen und Autos lagen nur 35 cm. | Deck schmaler (0,85–2,25 m), Fast Lane nach außen (Mitte 4,3 statt 3,75 m), Boxen bei 8,3 statt 7,5 m. Zwischen Stand und Auto liegen jetzt über 1 m. Die Hocker stehen näher am Pult. |
+| Crew wird nach dem Stopp überfahren | Die Crew lief sofort quer zur Garage zurück und folgte dem anfahrenden Auto. Der vordere Wagenheber stand vor dem Auto. | Nach der Freigabe bleibt jeder auf seinem Platz (`EndSpot`). Der vordere Wagenheber senkt ab und tritt mit dem Heber zur Garagenseite, der hintere senkt ab und bleibt seitlich hinter dem Auto. Zurück zur Garage geht es erst, wenn das Auto 12 m weg ist. Das Auto fährt die ersten 6 m gerade aus der Box und lenkt dann sanfter (30 statt 24 m) zur Fast Lane. |
+
+**Neue Prüfungen:**
+- `F_PitLaneIsDrivableEntryToExit` startet 500 m vor der Einfahrt mit 223 km/h, durch die letzte Kurve (Radius etwa 50 m).
+- Gemessen: 80 km/h an der Einfahrt, mindestens 1,41 m Abstand zu Mauer und Anpralldämpfer, mindestens 1,05 m zur äußeren Barriere (an der engsten Stelle, bei 417 m, ist das Auto schon wieder auf der Strecke), 197 km/h vor dem Einfädeln.
+- Gegenprobe mit dem alten Assistenten: 96 km/h an der Einfahrt, also zu schnell.
+- `NobodyIsInThePathOfTheReleasedCar` (Garage links und rechts): Kein Crewmitglied steht im Weg des anfahrenden Autos, auf den ersten 35 m mit Körperbreite und 0,3 m Abstand.
+- Das automatische Anhalten bleibt genau: 1–6 cm seitlich, unter 1° schräg.
+
 ## Analyse vorher (Stand PR #33)
 - **Einfahrt:** Die Spur öffnete sich über 150 m neben der Strecke. Die Mauer begann aber erst 10 m nach der Einfahrt, davor gab es weder Sperrfläche noch Anpralldämpfer.
 - **Boxen:** 20 Boxen im Abstand von 9 m. Der Einschwenkweg auf die Boxenlinie führte über die Nachbarbox. Ein dort stehendes Auto oder die bereitstehende Crew lag im Weg.
@@ -29,9 +46,9 @@
   |---|---|
   | Streifen an der Strecke | 0–0,45 m |
   | Boxenmauer (Beton, Fangzaun darauf) | 0,45–0,85 m |
-  | Pitwall-Deck mit den Teamständen | 0,85–2,45 m |
-  | schnelle Spur (Fast Lane) | 2,55–5,5 m, Mitte 3,75 m, Asphalt |
-  | Arbeitsspur (Working Lane) | ab 5,5 m, Auto in der Box bei 7,5 m, versiegelter hellerer Belag (`PitWorkLane`) |
+  | Pitwall-Deck mit den Teamständen | 0,85–2,25 m |
+  | schnelle Spur (Fast Lane) | 2,6–6,0 m, Mitte 4,3 m, Asphalt |
+  | Arbeitsspur (Working Lane) | ab 6,0 m, Auto in der Box bei 8,3 m, versiegelter hellerer Belag (`PitWorkLane`) |
   | Crews | bis zur Garagenfront (15 m) |
 
 - **Spurplan** (`PitLaneLayout.Plan`, Meter ab der Einfahrt, Werte für Bosphorus):
@@ -82,6 +99,8 @@
 - **Eigener Boxenplatz:** Solange der Stopp angefordert ist, leuchtet ein cyanfarbener Rahmen auf der eigenen Box, darüber dreht sich ein Pfeil.
 
 ![Boxengasse Bosphorus – Lageplan aus PitLaneLayout, schematisch, keine Spielaufnahme](img/pit_lane_plan.png)
+
+Der Lageplan zeigt den Stand vor den Korrekturen vom 2026-11-05. Seitdem liegt die Fast Lane bei 4,3 m statt 3,75 m, die Boxen bei 8,3 m und die Einfahrtsspur beginnt 190 m vor der Einfahrt.
 
 ## Anhalten an der Box (`PitBoxStop`)
 - **Stoppfenster**, in dem die Crew das Auto annimmt: längs ±0,5 m, quer ±0,35 m, schräg ±5°.

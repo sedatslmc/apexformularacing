@@ -108,6 +108,9 @@ namespace Apex.AI
             return ApexMath.Clamp(p * gripFactor, 0.4f, 1.05f);
         }
 
+        /// <summary>Pure-pursuit look-ahead distance (m) at a speed: lateral targets given for a point this far ahead are followed without lag.</summary>
+        public static float Lookahead(float speed) => 6f + MathF.Abs(speed) * 0.3f;
+
         /// <summary>Target speed (m/s) at a distance for this driver.</summary>
         public float TargetSpeed(float distance)
         {
@@ -293,7 +296,7 @@ namespace Apex.AI
             }
 
             // --- Steering: pure pursuit plus lateral-error feedback ---------------------
-            float lookahead = 6f + v * 0.3f;
+            float lookahead = Lookahead(v);
             var target = g.PositionAt(d + lookahead) + g.RightAt(d + lookahead) * TargetLateral;
             var fwd = Vector3.Normalize(new Vector3(self.forward.X, 0f, self.forward.Z));
             var right = new Vector3(fwd.Z, 0f, -fwd.X);

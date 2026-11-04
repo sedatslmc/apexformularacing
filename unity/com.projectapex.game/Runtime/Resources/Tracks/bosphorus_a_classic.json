@@ -6310,7 +6310,7 @@
   "box_count": 10,
   "speed_limit_kmh": 80,
   "limit_end": 400,
-  "entry_taper": 150,
+  "entry_taper": 190,
   "exit_taper": 20
  },
  "corner_names": [

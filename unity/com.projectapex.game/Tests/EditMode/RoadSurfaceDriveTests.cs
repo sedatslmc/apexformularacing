@@ -96,42 +96,57 @@ namespace Apex.Tests
         [TestCase(9)]
         public void F_PitLaneIsDrivableEntryToExit(int box)
         {
+            // As in the game with the pit assist: arriving at race speed 500 m before the entry, through the last corner, the shared autopilot
+            // (PitLaneLayout.Drive: early braking, look-ahead on the path) through the entry lane past the wall's nose,
+            // down the fast lane (drive-through), out through the acceleration lane and back onto the track. No wall,
+            // barrier or crash cushion may be touched.
             var pit = Bed.def.pit;
             var g = Bed.g;
             float L = g.Length;
-            float boxD = g.Wrap(pit.BoxDistance(box));
             var plan = pit.PlanFor(L);
             float Since(float raw) => -pit.ToEntry(raw, L);
-            // As RaceController drives a pit stop (Apex.Race.PitLaneLayout.Route): along the entry lane behind the
-            // white line, the fast lane, into the own box and out, then the acceleration lane until it merges.
-            float target(float raw)
+            (float, float, bool) Pilot(float raw, Apex.Vehicle.SurfaceRig rig)
             {
                 float since = Since(raw);
-                if (since > plan.MergeEnd) return float.NaN;
-                float toBox = Apex.Core.ApexMath.PosMod(boxD - raw, L);
-                if (toBox > L * 0.5f) toBox -= L;
-                return pit.side * (g.WidthAt(raw) * 0.5f + Apex.Race.PitLaneLayout.Route(plan, since, toBox, toBox < 0f, pit.laneCentreFromEdge));
+                if (since > plan.MergeEnd) return (float.NaN, float.PositiveInfinity, false);
+                var cmd = Apex.Race.PitLaneLayout.Drive(plan, since, -1000f, true, pit.laneCentreFromEdge, pit.SpeedLimit, rig.ForwardSpeed);
+                // Before the lane: race speed until the braking curve bites, on the pit side of the track.
+                return (pit.side * (g.WidthAt(raw) * 0.5f + cmd.fromEdge), cmd.speedCap, false);
             }
             float limit(float raw) => plan.Limited(Since(raw)) ? pit.SpeedLimit : float.PositiveInfinity;
-            // Speed and lateral where the acceleration lane is about to merge.
-            float mergeSpeed = 0f, laneAt30 = float.NaN;
+            float mergeSpeed = 0f, laneAt30 = float.NaN, entrySpeed = 0f, minWallGap = float.MaxValue, minBarrierGap = float.MaxValue, minBarrierAt = 0f;
             Bed.trace = (raw, rig) =>
             {
                 float since = Since(raw);
-                if (since > plan.limitSpan + 30f && float.IsNaN(laneAt30)) laneAt30 = pit.side * g.Project(rig.position).lateral - g.WidthAt(raw) * 0.5f;
+                var pr = g.Project(rig.position);
+                float fromEdge = pit.side * pr.lateral - g.WidthAt(raw) * 0.5f;
+                if (since > -pit.entryTaper && since < plan.WallEnd)
+                {
+                    // Gap from the car's inner side to the wall / cushion face where they stand.
+                    if (since > Apex.Race.PitLaneLayout.WallStart - Apex.Race.PitLaneLayout.AttenuatorLength - 3f)
+                        minWallGap = MathF.Min(minWallGap, fromEdge - Apex.Race.PitLaneLayout.CarHalfWidth - Apex.Race.PitLaneLayout.WallOuter);
+                }
+                if (since > -1f && entrySpeed == 0f) entrySpeed = rig.ForwardSpeed;
+                // The outer barrier on the pit side all the way (entry lane, lane, exit lane, merge).
+                float barrier = (pit.side < 0 ? Bed.surface.wallLeft : Bed.surface.wallRight)[pr.index];
+                float bg = barrier - pit.side * pr.lateral - Apex.Race.PitLaneLayout.CarHalfWidth;
+                if (bg < minBarrierGap) { minBarrierGap = bg; minBarrierAt = since; }
+                if (since > plan.limitSpan + 30f && float.IsNaN(laneAt30)) laneAt30 = fromEdge;
                 if (since > plan.MergeEnd - 10f && mergeSpeed == 0f) mergeSpeed = rig.ForwardSpeed;
             };
-            float start = pit.entryTaper + 60f;
+            float start = 500f;   // on the straight before the last corner (R ≈ 50 m, 200 m before the entry)
             try
             {
-                var r = Bed.Drive(g.Wrap(pit.entry - start), 0f, start + plan.MergeEnd + 100f, 120f,
-                    initialSpeed: 22f, lateralAt: target, speedLimitAt: limit);
+                var r = Bed.Drive(g.Wrap(pit.entry - start), 0f, start + plan.MergeEnd + 100f, 150f,
+                    initialSpeed: 62f, autoPilot: Pilot, speedLimitAt: limit);
                 AssertClean(r, "pit lane");
                 Assert.That(r.distanceDriven, Is.GreaterThan(plan.span + start), r.ToString());
             }
             finally { Bed.trace = null; }
-            TestContext.WriteLine($"box {box}: {laneAt30:F1} m beyond the edge 30 m after the exit line, {mergeSpeed * 3.6f:F0} km/h at the merge");
-            // The exit lane: still in it 30 m after the exit line, and well over the limit before merging.
+            TestContext.WriteLine($"box {box}: {entrySpeed * 3.6f:F0} km/h at the entry, {minWallGap:F2} m min. gap to the wall, {minBarrierGap:F2} m to the outer barrier (at {minBarrierAt:F0} m), {laneAt30:F1} m beyond the edge 30 m after the exit line, {mergeSpeed * 3.6f:F0} km/h at the merge");
+            Assert.That(entrySpeed, Is.LessThanOrEqualTo(pit.SpeedLimit + 0.5f), "at the limit at the entry");
+            Assert.That(minWallGap, Is.GreaterThan(0.8f), "clear of the wall and the crash cushion");
+            Assert.That(minBarrierGap, Is.GreaterThan(1.0f), "clear of the outer barrier at the entry and the exit");
             Assert.That(laneAt30, Is.GreaterThan(1f), "in the acceleration lane behind the white line");
             Assert.That(mergeSpeed, Is.GreaterThan(pit.SpeedLimit * 1.4f), $"accelerated to {mergeSpeed * 3.6f:F0} km/h before merging");
         }

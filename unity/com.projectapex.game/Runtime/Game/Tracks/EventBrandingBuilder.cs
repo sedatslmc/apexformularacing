@@ -42,7 +42,16 @@ namespace Apex.Game
             float w = g.WidthAt(d);
             var pose = ci.PoseAt(d, 0f, 0f);
             var set = new PartSet();
-            var lamps = EventGeometry.Gantry(set.B, w);
+            // The pit-side pylon stands on the pit wall deck when the pit lane runs beside the start line, so nothing
+            // stands in the fast lane (docs/PIT_LANE.md).
+            float left = 3f, right = 3f;
+            var pit = ci.Pit;
+            if (pit != null && pit.Contains(d, g.Length))
+            {
+                float deck = (PitLaneLayout.WallOuter + PitLaneLayout.DeckOuter) * 0.5f;
+                if (pit.side < 0) left = deck; else right = deck;
+            }
+            var lamps = EventGeometry.Gantry(set.B, w, left, right);
             var go = EnvironmentBuilder.AddMeshObject(parent, "Gantry", set.parts, true);
             go.transform.SetPositionAndRotation(pose.position, pose.rotation);
             var lights = go.AddComponent<StartLightsComponent>();

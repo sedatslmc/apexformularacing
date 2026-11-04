@@ -6,19 +6,19 @@ namespace Apex.Race
     /// <summary>
     /// Lanes of the pit lane (docs/PIT_LANE.md), measured from the track edge outwards (towards the garages):
     /// track-side strip 0–0.45 m, pit wall (concrete with catch fence) 0.45–0.85 m, pit wall deck with the team stands
-    /// 0.85–2.45 m, fast lane 2.55–5.5 m, working lane from 5.5 m with the boxes (car centre at
-    /// CircuitDefinition.PitLane.laneCentreFromEdge, 7.5 m) and the crews up to the garage fronts. Cars drive in the
-    /// fast lane and only turn into the working lane for their own box.
+    /// 0.85–2.25 m, fast lane 2.6–6.0 m (car centre 4.3 m: more than a metre of air to the stands), working lane from
+    /// 6.0 m with the boxes (car centre at CircuitDefinition.PitLane.laneCentreFromEdge, 8.3 m) and the crews up to the
+    /// garage fronts. Cars drive in the fast lane and only turn into the working lane for their own box.
     /// </summary>
     public static class PitLaneLayout
     {
-        public const float ApronWidth = 2f, FastLaneCentre = 3.75f, Divider = 5.5f, BoxWidth = 3.6f, BoxLength = 6f;
+        public const float ApronWidth = 2f, FastLaneCentre = 4.3f, Divider = 6.0f, BoxWidth = 3.6f, BoxLength = 6f;
         /// <summary>Distance before the box over which a car turns in from the fast lane, and after it over which it pulls out (m).</summary>
-        public const float TurnIn = 28f, PullOut = 24f;
+        public const float TurnIn = 28f, PullOut = 30f;
         /// <summary>Half width of a car (m) for clearance checks.</summary>
         public const float CarHalfWidth = 0.95f;
         /// <summary>Pit wall cross-section from the track edge (m): concrete wall, deck for the team stands, fast lane edge.</summary>
-        public const float WallInner = 0.45f, WallOuter = 0.85f, DeckOuter = 2.45f, FastLaneInner = 2.55f;
+        public const float WallInner = 0.45f, WallOuter = 0.85f, DeckOuter = 2.25f, FastLaneInner = 2.6f;
         /// <summary>Collision face of the pit wall (its track-side face).</summary>
         public const float WallFromEdge = WallInner;
         /// <summary>Crash cushion in front of the wall's nose in the entry lane (m).</summary>
@@ -63,11 +63,18 @@ namespace Apex.Race
             public bool Limited(float since) => since >= LimiterStart && since <= limitSpan;
         }
 
+        /// <summary>Where a car on its way to or from the pit lane drives on the track (m from the edge, negative = on the track).</summary>
+        public const float TrackLine = -1.6f;
+        /// <summary>The automatic car is at the pit limit this far before the entry: braked well before the wall's nose.</summary>
+        public const float BrakedBy = -40f;
+        /// <summary>Deceleration (m/s²) of the automatic car's braking towards the pit entry (firm, not a full stop).</summary>
+        public const float EntryDecel = 7f;
+
         /// <summary>Lateral target from the edge between the track (share 0: 1.6 m inside the edge) and the fast lane (1).</summary>
         public static float LaneTarget(float share)
         {
             share = ApexMath.Clamp01(share);
-            return ApexMath.Lerp(-1.6f, FastLaneCentre, share * share * (3f - 2f * share));
+            return ApexMath.Lerp(TrackLine, FastLaneCentre, share * share * (3f - 2f * share));
         }
 
         /// <summary>
@@ -108,11 +115,19 @@ namespace Apex.Race
         /// </summary>
         public static Command Drive(in Plan plan, float since, float toBox, bool served, float boxCentre, float limit, float speed, float mergeFrom = float.NaN)
         {
-            var c = new Command { fromEdge = Route(plan, since, toBox, served, boxCentre, mergeFrom), speedCap = float.PositiveInfinity };
-            if (since < LimiterStart)
-                c.speedCap = MathF.Sqrt(limit * limit + 2f * 8f * MathF.Max(0f, LimiterStart - 2f - since));   // at the limit by the line
+            // The lateral target is given for the point the driver steers at (AIDriver.Lookahead): the car follows the
+            // entry lane, the box turn-in and the merge on the path instead of lagging behind it and cutting into the
+            // wall's nose at speed. On the last metres into the box the look-ahead shrinks so the stop stays square.
+            float lead = AI.AIDriver.Lookahead(speed);
+            if (!served) lead *= ApexMath.Clamp01((toBox - PitBoxStop.StraightIn) / 20f);
+            // Pulling away: straight out of the box first (the crew stands beside it), the look-ahead grows after 6 m.
+            else if (toBox > -40f) lead *= ApexMath.Clamp01((-toBox - 6f) / 20f);
+            var c = new Command { fromEdge = Route(plan, since + lead, toBox - lead, served, boxCentre, mergeFrom), speedCap = float.PositiveInfinity };
+            if (since < BrakedBy)
+                c.speedCap = MathF.Sqrt(limit * limit + 2f * EntryDecel * (BrakedBy - since));   // at the limit 40 m before the entry
             else if (since < plan.limitSpan - 2f)
                 c.speedCap = limit;
+            if (since >= BrakedBy && since < LimiterStart) c.speedCap = limit;
             if (!served && toBox < 60f && toBox > -PitBoxStop.PushBackLimit)
             {
                 c.speedCap = MathF.Min(c.speedCap, PitBoxStop.ApproachSpeed(toBox, limit));

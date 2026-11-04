@@ -35,7 +35,7 @@ namespace Apex.Tracks
             public float boxSpacing = 10f;
             public float speedLimitKmh = 80f;
             /// <summary>Lateral distance from the track edge to the lane centre.</summary>
-            public float laneCentreFromEdge = 7.5f;
+            public float laneCentreFromEdge = 8.3f;
             public float laneWidth = 10f;
 
             /// <summary>

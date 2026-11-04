@@ -705,13 +705,17 @@ namespace Apex.Game
                 {
                     bool auto = !rc.isPlayer || PitAssist;
                     float toEntry = -since;
-                    if (auto && toEntry > 0f && toEntry < pit.entryTaper + 60f)
+                    if (auto && toEntry > 0f && toEntry < 900f)
                     {
-                        // Line up on the pit side, then follow the entry lane as it branches off beside the track.
-                        rc.pitAssistActive = rc.isPlayer;
+                        // Brake early (at the limit 40 m before the entry, PitLaneLayout.Drive), line up on the pit side
+                        // well before the entry lane, then follow it as it branches off beside the track.
                         var cmd = PitLaneLayout.Drive(plan, since, ToBox(rc), false, pit.laneCentreFromEdge, pit.SpeedLimit, sim.ForwardSpeed);
-                        rc.ai.forcedLateral = pit.side * (edge + cmd.fromEdge);
                         rc.ai.speedCap = cmd.speedCap;
+                        if (toEntry < pit.entryTaper + 250f)
+                        {
+                            rc.pitAssistActive = rc.isPlayer;
+                            rc.ai.forcedLateral = pit.side * (edge + cmd.fromEdge);
+                        }
                     }
                     if (rc.isPlayer && toEntry > 0f && toEntry < pit.entryTaper + 400f)
                         PlayerBoxGuide = $"BOX {rc.boxIndex + 1} · Einfahrt {Mathf.Max(0f, toEntry - pit.entryTaper):0} m";

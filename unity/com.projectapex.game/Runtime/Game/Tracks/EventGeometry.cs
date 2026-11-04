@@ -47,13 +47,20 @@ namespace Apex.Game
         /// </summary>
         public const float GantryBeamY = 7.0f, GantryBeamH = 1.5f;
 
-        public static List<Vector3> Gantry(Parts B, float w)
+        public static List<Vector3> Gantry(Parts B, float w) => Gantry(B, w, 3f, 3f);
+
+        /// <summary>
+        /// Start gantry with its pylons <paramref name="leftOut"/> / <paramref name="rightOut"/> metres beyond the track
+        /// edges. On the pit side the pylon stands on the pit wall deck (PitLaneLayout), never in the pit lane: the beam
+        /// then spans the track only and the lights stay centred over it.
+        /// </summary>
+        public static List<Vector3> Gantry(Parts B, float w, float leftOut, float rightOut)
         {
-            float half = w * 0.5f + 3f;
+            float xl = -(w * 0.5f + leftOut), xr = w * 0.5f + rightOut;
+            float half = (xr - xl) * 0.5f, mid = (xr + xl) * 0.5f;
             const float beamY = GantryBeamY, beamH = GantryBeamH;
-            foreach (float s in new[] { -1f, 1f })
+            foreach (float x in new[] { xl, xr })
             {
-                float x = s * half;
                 foreach (float dz in new[] { -0.7f, 0.7f })
                     Leg(B(Navy), new Vector3(x, 0f, dz), new Vector3(x, beamY + beamH + 2.2f, dz * 0.7f), 0.38f, 0.26f, 0.22f);
                 foreach (float y in new[] { 2.4f, beamY - 0.4f, beamY + beamH + 1.6f })
@@ -62,16 +69,16 @@ namespace Apex.Game
                 B(Gold).Box(new Vector3(x, beamY + beamH + 2.35f, 0f), new Vector3(0.8f, 0.3f, 1.2f));
             }
             // Box beam with an ivory pinstripe at the top (the lettering sits below it) and a red lower lip.
-            B(Navy).Box(new Vector3(0f, beamY + beamH * 0.5f, 0f), new Vector3(2f * half + 0.6f, beamH, 1.1f));
-            B(Ivory).Box(new Vector3(0f, beamY + beamH - 0.14f, -0.56f), new Vector3(2f * half - 1.2f, 0.08f, 0.02f));
-            B(Ivory).Box(new Vector3(0f, beamY + beamH - 0.14f, 0.56f), new Vector3(2f * half - 1.2f, 0.08f, 0.02f));
-            B(Red).Box(new Vector3(0f, beamY + 0.05f, 0f), new Vector3(2f * half + 0.6f, 0.1f, 1.14f));
+            B(Navy).Box(new Vector3(mid, beamY + beamH * 0.5f, 0f), new Vector3(2f * half + 0.6f, beamH, 1.1f));
+            B(Ivory).Box(new Vector3(mid, beamY + beamH - 0.14f, -0.56f), new Vector3(2f * half - 1.2f, 0.08f, 0.02f));
+            B(Ivory).Box(new Vector3(mid, beamY + beamH - 0.14f, 0.56f), new Vector3(2f * half - 1.2f, 0.08f, 0.02f));
+            B(Red).Box(new Vector3(mid, beamY + 0.05f, 0f), new Vector3(2f * half + 0.6f, 0.1f, 1.14f));
             // Suspension-cable arc above the beam (the event motif).
             var arc = new List<Vector3>();
             for (int i = 0; i <= 16; i++)
             {
                 float t = i / 16f;
-                float x = Mathf.Lerp(-half, half, t);
+                float x = Mathf.Lerp(xl, xr, t);
                 float y = beamY + beamH + 2.1f - 1.6f * (1f - (2f * t - 1f) * (2f * t - 1f));
                 arc.Add(new Vector3(x, y, 0f));
             }

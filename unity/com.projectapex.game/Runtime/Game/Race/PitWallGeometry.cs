@@ -16,9 +16,9 @@ namespace Apex.Game
             Light = "PitWallLight", LedGreen = "PitWallLedGreen", LedAmber = "PitWallLedAmber", White = "Line";
 
         /// <summary>Stand dimensions (m): length along the lane, deck depth, floor height, desk top above the floor.</summary>
-        public const float Length = 6f, Depth = 1.6f, Floor = 0.22f, DeskTop = 0.96f;
+        public const float Length = 6f, Depth = 1.4f, Floor = 0.22f, DeskTop = 0.96f;
         /// <summary>Seats (stand frame, on the floor): x and the z of each engineer.</summary>
-        public const float SeatX = 1.08f;
+        public const float SeatX = 0.9f;
         public static readonly float[] SeatZ = { -2.2f, -0.75f, 0.75f, 2.2f };
 
         /// <summary>Screen (lower row i = 0..3, upper row 4..7) → panel of the display texture.</summary>
@@ -62,7 +62,7 @@ namespace Apex.Game
             B(Deck).Box(new Vector3(0.1f, Floor + DeskTop + 0.98f, 0f), new Vector3(0.06f, 0.06f, Length - 0.3f));
             foreach (float z in SeatZ)
             {
-                B(Bezel).Box(new Vector3(0.62f, Floor + DeskTop + 0.05f, z), new Vector3(0.16f, 0.02f, 0.44f));   // keyboard
+                B(Bezel).Box(new Vector3(0.5f, Floor + DeskTop + 0.05f, z), new Vector3(0.16f, 0.02f, 0.44f));   // keyboard
                 // Stool: base, post, seat, footrest ring.
                 var seat = new Vector3(SeatX, Floor, z);
                 B(Deck).Tube(seat + new Vector3(0f, 0.02f, 0f), seat + new Vector3(0f, 0.04f, 0f), 0.24f, 10, true);
@@ -72,7 +72,7 @@ namespace Apex.Game
             }
             // Cable bundles from the desk down over the floor to the back.
             foreach (float z in new[] { -1.5f, 1.5f })
-                B(Bezel).TubePath(new[] { new Vector3(0.52f, Floor + 0.6f, z), new Vector3(0.6f, Floor + 0.05f, z), new Vector3(1.4f, Floor + 0.03f, z + 0.2f), new Vector3(1.62f, Floor - 0.3f, z + 0.25f) }, 0.03f, 6, true);
+                B(Bezel).TubePath(new[] { new Vector3(0.52f, Floor + 0.6f, z), new Vector3(0.6f, Floor + 0.05f, z), new Vector3(1.2f, Floor + 0.03f, z + 0.2f), new Vector3(1.38f, Floor - 0.3f, z + 0.25f) }, 0.03f, 6, true);
             // Back rail on the pit lane side with a panel in the team colour.
             B(team).Box(new Vector3(Depth - 0.03f, Floor + 0.35f, 0f), new Vector3(0.04f, 0.5f, Length));
             B(Deck).Box(new Vector3(Depth - 0.03f, Floor + 1.0f, 0f), new Vector3(0.06f, 0.05f, Length));
