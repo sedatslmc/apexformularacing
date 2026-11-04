@@ -198,8 +198,12 @@ namespace Apex.Game
             // Shown from 4 % less drag: about 30 m behind at speed.
             f.slipstream = sim.wake.tow > 0.04f ? Apex.UI.Loc.T("WINDSCHATTEN") : "";
             f.assists = ((sim.TcActive ? "TC  " : "") + (sim.AbsActive ? "ABS  " : "") + (Mathf.Abs(sim.CounterSteer) > 0.01f ? "STAB" : "")).Trim();
-            f.pitNote = !float.IsInfinity(sim.speedLimit) ? "PIT LIMIT"
-                : p.pit.stage == PitState.Stage.Requested ? "BOX · " + CompoundSpec.For(p.pit.nextCompound).name.ToUpperInvariant() : "";
+            // Box guide (distance, then how far to go and which way to correct on the last metres) before the plain notes.
+            string guide = Race.PlayerBoxGuide;
+            f.pitNote = !string.IsNullOrEmpty(guide) && p.pit.stage != PitState.Stage.Requested
+                ? (!float.IsInfinity(sim.speedLimit) ? "PIT LIMIT · " : "") + guide
+                : !float.IsInfinity(sim.speedLimit) ? "PIT LIMIT"
+                : p.pit.stage == PitState.Stage.Requested ? "BOX · " + CompoundSpec.For(p.pit.nextCompound).name.ToUpperInvariant() + (string.IsNullOrEmpty(guide) ? "" : " · " + guide) : "";
 
             // Tyres.
             var tires = sim.tires;

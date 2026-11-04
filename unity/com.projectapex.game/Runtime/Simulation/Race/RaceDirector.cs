@@ -28,6 +28,8 @@ namespace Apex.Race
         public float trackLimitPenalty = 5f;
         public bool fastestLapPoint = true;
         public bool mandatoryPitStop;
+        /// <summary>Time penalty for speeding in the pit lane (s); the limit itself is the circuit's (speed_limit_kmh).</summary>
+        public float pitSpeedingPenalty = 5f;
         public static readonly int[] Points = { 25, 18, 15, 12, 10, 8, 6, 4, 2, 1 };
     }
 

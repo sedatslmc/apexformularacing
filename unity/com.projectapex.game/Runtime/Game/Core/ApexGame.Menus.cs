@@ -481,6 +481,7 @@ namespace Apex.Game
                 new Row { label = "Fahrverhalten (Vergleich, ab nächster Session)", value = () => s.legacyHandling ? "Bisherig (Okt. 2026)" : "Neu (Nov. 2026)",
                     change = d => s.legacyHandling = !s.legacyHandling },
                 new Row { label = "Boxen-Assistent", value = () => OnOff(s.pitAssist), change = d => s.pitAssist = !s.pitAssist },
+                new Row { label = "Einparkhilfe Box", value = () => OnOff(s.pitParkAssist), change = d => s.pitParkAssist = !s.pitParkAssist },
                 new Row { label = "Tastatur-Lenkprofil", value = () => s.keyboardProfile == 0 ? "Direkt" : s.keyboardProfile == 1 ? "Ausgewogen" : "Smooth",
                     change = d => s.keyboardProfile = Wrap(s.keyboardProfile + (d < 0 ? -1 : 1), 3) },
                 new Row { label = "Lenkempfindlichkeit", value = () => $"{s.steeringSensitivity * 100f:0} %", change = d => s.steeringSensitivity += (d == 0 ? 1 : d) * 0.1f },

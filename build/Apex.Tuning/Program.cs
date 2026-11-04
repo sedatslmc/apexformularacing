@@ -1037,6 +1037,28 @@ else if (mode == "guide-csv")
         }
     }
 }
+else if (mode == "pitwall-screen")
+{
+    // The pit wall monitors (Apex.UI.PitWallDisplay) with sample race data as a PPM: pitwall-screen <out.ppm> [rain 0..1]
+    var d = new Apex.UI.PitWallDisplay.Data { lap = 7, laps = 20, rain = args.Length > 2 ? float.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 0.45f, time = 12f, throttle = 0.85f, brake = 0.05f };
+    d.wetness = d.rain * 0.7f;
+    string[] codes = { "KAY", "DUR", "HOL", "ARA", "MEN", "SAN", "LIN", "ORT" };
+    for (int i = 0; i < codes.Length; i++)
+    {
+        var t = Apex.Core.Roster.Teams[i % Apex.Core.Roster.Teams.Length];
+        d.rows.Add(new Apex.UI.PitWallDisplay.Row { code = codes[i], gap = i == 0 ? "1:31.8" : $"+{i * 1.7f:0.0}", team = Apex.UI.PitWallDisplay.Rgba(t.r, t.g, t.b),
+            compound = i % 3 == 0 ? Apex.UI.PitWallDisplay.Rgba(1f, 0.3f, 0.3f) : Apex.UI.PitWallDisplay.Rgba(1f, 0.85f, 0.25f), wear = 0.15f + i * 0.09f, stops = i % 2,
+            s1 = i == 0 ? 3 : 2, s2 = 1, s3 = i == 1 ? 3 : 2, player = i == 2, inPit = i == 5 });
+    }
+    for (int i = 0; i < 120; i++) d.speedTrace.Add(30f + 55f * (0.5f + 0.5f * MathF.Sin(i * 0.17f)) + (i % 23 < 4 ? -20f : 0f));
+    var px = new uint[Apex.UI.PitWallDisplay.Width * Apex.UI.PitWallDisplay.Height];
+    Apex.UI.PitWallDisplay.Render(d, px);
+    using var fs = File.Create(args[1]);
+    var header = System.Text.Encoding.ASCII.GetBytes($"P6 {Apex.UI.PitWallDisplay.Width} {Apex.UI.PitWallDisplay.Height} 255\n");
+    fs.Write(header, 0, header.Length);
+    foreach (uint c in px) { fs.WriteByte((byte)c); fs.WriteByte((byte)(c >> 8)); fs.WriteByte((byte)(c >> 16)); }
+    Console.WriteLine($"wrote {args[1]}");
+}
 else if (mode == "pitcrew")
 {
     // Pit stop choreography as CSV for a plan view: frame,role,x,z,kneel,wheel

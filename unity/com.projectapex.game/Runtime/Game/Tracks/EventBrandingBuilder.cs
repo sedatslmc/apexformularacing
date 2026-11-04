@@ -87,7 +87,10 @@ namespace Apex.Game
             if (layout.pitBuilding.placed)
             {
                 var set = new PartSet();
-                EventGeometry.PitBuilding(set.B, length, layout.bayZ, ci.Pit.boxSpacing);
+                var teamKeys = CircuitBuilder.TeamMaterials();
+                var bayTeam = new List<string>();
+                for (int b = 0; b < layout.bayZ.Count; b++) bayTeam.Add(teamKeys[ci.Pit.TeamOfBox(b, teamKeys.Length)]);
+                EventGeometry.PitBuilding(set.B, length, layout.bayZ, ci.Pit.boxSpacing, bayTeam, layout.podiumZ);
                 // Plinth down to the terrain.
                 set.B(EventGeometry.Navy).Box(new Vector3(EventGeometry.PitDepth * 0.5f, -1.5f, 0f), new Vector3(EventGeometry.PitDepth, 3f, length));
                 var building = Place(parent, "PitBuilding", set, layout.pitBuilding);
@@ -95,6 +98,18 @@ namespace Apex.Game
                 col.center = new Vector3(EventGeometry.PitDepth * 0.5f + 0.3f, EventGeometry.PitRoof * 0.5f, 0f);
                 col.size = new Vector3(EventGeometry.PitDepth - 0.6f, EventGeometry.PitRoof, length);
                 ci.EventFootprints.Add(Footprint(building.transform, new Vector3(EventGeometry.PitDepth * 0.5f, 0f, 0f), length * 0.5f + 4f));
+                // Lit box numbers over the garages, and the bilingual paddock sign on the building's ends.
+                if (font != null)
+                {
+                    float w = ci.Pit.boxSpacing - 0.9f;
+                    for (int b = 0; b < layout.bayZ.Count; b++)
+                        Text(building.transform, font, new Vector3(0.09f, EventGeometry.PitGroundH - 1.15f, layout.bayZ[b] - w * 0.5f + 1.1f), toTrack, (b + 1).ToString(), EventGeometry.NavyC, 0.34f, 1.2f);
+                    foreach (float e in new[] { -1f, 1f })
+                    {
+                        var face = e < 0f ? Quaternion.identity : Quaternion.Euler(0f, 180f, 0f);
+                        Text(building.transform, font, new Vector3(EventGeometry.PitDepth * 0.5f, 6.2f, e * (length * 0.5f + 0.15f)), face, "PADDOCK · PADOK", EventGeometry.IvoryC, 0.7f, 9f);
+                    }
+                }
                 // Emblems and the event name on the glazed upper floor, facing the pit lane.
                 float glassY = EventGeometry.PitGroundH + EventGeometry.PitUpperH * 0.5f;
                 for (float z = -length * 0.5f + 20f; z < length * 0.5f - 10f; z += 45f)
@@ -241,6 +256,35 @@ namespace Apex.Game
             ApexMaterials.Register(EventGeometry.Navy, Lit("Navy", EventGeometry.NavyC, 0.35f));
             ApexMaterials.Register(EventGeometry.Ivory, Lit("Ivory", EventGeometry.IvoryC, 0.25f));
             ApexMaterials.Register(EventGeometry.Dark, Lit("GarageDark", new Color(0.05f, 0.055f, 0.06f), 0.3f));
+            // Garage interiors and the facade's details (procedural placeholder art).
+            ApexMaterials.Register(EventGeometry.GarageFloor, Lit("GarageFloor", new Color(0.62f, 0.64f, 0.67f), 0.7f));
+            ApexMaterials.Register(EventGeometry.ToolCart, Lit("ToolCart", new Color(0.7f, 0.06f, 0.08f), 0.55f, 0.3f));
+            ApexMaterials.Register(EventGeometry.Blanket, Lit("TyreBlanket", new Color(0.32f, 0.03f, 0.05f), 0.15f));
+            ApexMaterials.Register(EventGeometry.FlightCase, Lit("FlightCase", new Color(0.12f, 0.13f, 0.14f), 0.4f, 0.4f));
+            foreach (var (key, c, k) in new[] { (EventGeometry.GarageLight, new Color(1f, 0.97f, 0.9f), 2.2f), (EventGeometry.NumberLight, new Color(1f, 1f, 1f), 1.4f) })
+            {
+                var m = Lit(key, c, 0.3f);
+                m.EnableKeyword("_EMISSION");
+                if (m.HasProperty("_EmissionColor")) m.SetColor("_EmissionColor", c * k);
+                ApexMaterials.Register(key, m);
+            }
+            // Turkish flag hung vertically on the facade (own raster, TurkishFlagDesign; hoist at the top via the UVs).
+            {
+                const int fh = 128;
+                var raw = TurkishFlagDesign.Rasterize(fh);
+                int fw = raw.Length / 4 / fh;
+                var tex = new Texture2D(fw, fh, TextureFormat.RGBA32, true) { name = "TurkishFlagVertical", wrapMode = TextureWrapMode.Clamp, anisoLevel = 4 };
+                var cols = new Color32[fw * fh];
+                for (int j = 0; j < fh; j++)
+                    for (int i = 0; i < fw; i++)
+                    {
+                        int q = (j * fw + i) * 4;   // both bottom-up
+                        cols[j * fw + i] = new Color32(raw[q], raw[q + 1], raw[q + 2], 255);
+                    }
+                tex.SetPixels32(cols);
+                tex.Apply(true);
+                ApexMaterials.Register(EventGeometry.FlagVertical, Lit("FlagVertical", Color.white, 0.2f, 0f, tex));
+            }
             ApexMaterials.Register(EventGeometry.Tile, Lit("IznikTile", Color.white, 0.7f, 0f, Texture("IznikTile", EventArt.IznikTile(128), 128, TextureWrapMode.Repeat), new Vector2(6f, 4f)));
             var emblem = Lit("Emblem", Color.white, 0.35f, 0f, Texture("EventEmblem", EventArt.Emblem(256), 256, TextureWrapMode.Clamp));
             if (emblem.HasProperty("_AlphaClip")) emblem.SetFloat("_AlphaClip", 1f);

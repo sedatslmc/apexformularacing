@@ -37,6 +37,8 @@ namespace Apex.Game
         public readonly List<(Vector3 pos, float length, float pole, int detail)> EventFlags = new List<(Vector3, float, float, int)>();
         /// <summary>Placement of the event structures (event circuits only).</summary>
         public EventLayout EventLayout { get; internal set; }
+        /// <summary>Pit wall team stands (position on the lane, rotation with local +x away from the track, team).</summary>
+        public readonly List<(Vector3 pos, Quaternion rot, int team)> PitWallStands = new List<(Vector3, Quaternion, int)>();
         /// <summary>Ground kept free of city buildings for event structures (centre x/z, radius).</summary>
         public readonly List<(float x, float z, float radius)> EventFootprints = new List<(float, float, float)>();
 
@@ -117,8 +119,9 @@ namespace Apex.Game
             if (def.pit != null)
             {
                 AddSurface(root.transform, surface.pitApron, "Asphalt");
-                AddSurface(root.transform, surface.pitLane, "PitLane");
-                AddSurface(root.transform, surface.pitWall, "Wall").GetComponent<MeshRenderer>().shadowCastingMode = ShadowCastingMode.On;
+                AddSurface(root.transform, surface.pitLane, "PitLane", "PitWorkLane");
+                // Collision solid only: the visible wall, catch fence, crash cushion and team stands come from PitWallBuilder.
+                AddSurface(root.transform, surface.pitWall, "Wall").GetComponent<MeshRenderer>().enabled = false;
                 BuildPitLane(root.transform, ci);
             }
             ci.Terrain = new TerrainField(g, def);
@@ -252,25 +255,18 @@ namespace Apex.Game
 
         // --- Parts ------------------------------------------------------------------
 
-        /// <summary>Box markings and garage block (apron, lane and pit wall come from RoadSurface).</summary>
+        /// <summary>Box markings, lane markings, pit wall and garage block (apron, lane and the wall's collider come from RoadSurface).</summary>
         static void BuildPitLane(Transform parent, CircuitInstance ci)
         {
             var g = ci.Geometry;
             var pit = ci.Pit;
             float side = pit.side;
-            // Box markings: a yellow frame per box on the lane.
-            var marks = new MeshData(1);
-            for (int b = 0; b < 20; b++)
-            {
-                float d = g.Wrap(pit.BoxDistance(b));
-                float lat = ci.PitLaneLateral(d);
-                Frame(marks, g, d, lat, 6f, 3.6f, 0.15f);
-            }
-            AddMesh(parent, "PitBoxes", marks.ToMesh("PitBoxes"), new[] { "Marker" }, null);
+            BuildBoxMarkings(parent, ci);
             BuildPitLaneMarkings(parent, ci);
+            PitWallBuilder.Build(parent, ci);
             // Garage block behind the outer pit wall (event circuits get the full pit building instead).
             if (EventBrandingBuilder.IsEvent(ci.Definition)) return;
-            float start = pit.BoxDistance(0) - 15f, end = pit.BoxDistance(19) + 15f;
+            float start = pit.BoxDistance(0) - 15f, end = pit.LastBox + 15f;
             float mid = g.Wrap((start + end) * 0.5f);
             var pose = ci.PoseAt(mid, side * (g.WidthAt(mid) * 0.5f + PitOuter + 6f), 3.5f);
             var garage = new GameObject("Garages");
@@ -283,9 +279,72 @@ namespace Apex.Game
         }
 
         /// <summary>
-        /// Lane markings (docs/PIT_LANE.md, Apex.Race.PitLaneLayout): the white line between fast lane and working lane
-        /// along the pit wall, white lines across the lane where the speed limit starts and ends, and a stripe in the
-        /// team colour at the garage end of each box (box b belongs to team b / 2).
+        /// The exact stop position of each box, built to the car (VehicleSetup axles and tracks, the same numbers the
+        /// crew works to): yellow box outline, white marks where the four tyres stand, a stop bar in front of each front
+        /// tyre, an alignment line in the team colour leading in, the box number painted ahead of the car and the team
+        /// stripe at the garage end.
+        /// </summary>
+        static void BuildBoxMarkings(Transform parent, CircuitInstance ci)
+        {
+            var g = ci.Geometry;
+            var pit = ci.Pit;
+            float side = pit.side;
+            var setup = new VehicleSetup();
+            float fz = setup.FrontAxleZ, rz = setup.RearAxleZ, tf = setup.trackFront * 0.5f, tr = setup.trackRear * 0.5f;
+            var yellow = new MeshData(1);
+            var white = new MeshData(1);
+            var teams = new MeshData(Roster.Teams.Length);
+            var keys = TeamMaterials();
+            for (int b = 0; b < pit.boxCount; b++)
+            {
+                float d = g.Wrap(pit.BoxDistance(b));
+                float lat = ci.PitLaneLateral(d);
+                int team = pit.TeamOfBox(b, keys.Length);
+                Frame(yellow, g, d, lat, 7.2f, Apex.Race.PitLaneLayout.BoxWidth, 0.15f);
+                // Tyre marks (x = right of the car, + is towards the garage when the pit is on the right).
+                foreach (var (z, x) in new[] { (fz, tf), (fz, -tf), (rz, tr), (rz, -tr) })
+                {
+                    float l = lat + x;
+                    Box(white, g, d + z - 0.36f, d + z + 0.36f, l - 0.22f, l + 0.22f, 0.06f);
+                    if (z == fz) PatchOrdered(white, g, d + z + 0.42f, d + z + 0.56f, l - 0.3f, l + 0.3f);   // stop bar
+                }
+                // Alignment line in the team colour leading in to the box centre, dashed.
+                for (float z = -11f; z < -3.4f; z += 1.6f)
+                    PatchOrdered(teams, g, d + z, d + z + 0.9f, lat - 0.06f, lat + 0.06f, team);
+                // Team stripe at the garage end.
+                float inner = lat + side * (Apex.Race.PitLaneLayout.BoxWidth * 0.5f + 0.15f), outer = inner + side * 0.6f;
+                PatchOrdered(teams, g, d - 2.8f, d + 2.8f, Mathf.Min(inner, outer), Mathf.Max(inner, outer), team);
+                // Box number ahead of the car, read by the driver coming in.
+                PaintText(white, g, (b + 1).ToString(), d + 4.4f, lat, 1.3f);
+            }
+            AddMesh(parent, "PitBoxes", yellow.ToMesh("PitBoxes"), new[] { "Marker" }, null);
+            AddMesh(parent, "PitBoxMarks", white.ToMesh("PitBoxMarks"), new[] { "Line" }, null);
+            AddMesh(parent, "PitTeamStripes", teams.ToMesh("PitTeamStripes"), keys, null);
+        }
+
+        /// <summary>Team colour materials PitTeam0..n (registered once).</summary>
+        internal static string[] TeamMaterials()
+        {
+            var keys = new string[Roster.Teams.Length];
+            for (int t = 0; t < keys.Length; t++)
+            {
+                var team = Roster.Teams[t];
+                keys[t] = "PitTeam" + t;
+                ApexMaterials.Register(keys[t], new Material(EnvironmentMaterials.Solid(new Color(team.r, team.g, team.b))) { name = keys[t] });
+            }
+            return keys;
+        }
+
+        /// <summary>
+        /// Lane markings (docs/PIT_LANE.md, Apex.Race.PitLaneLayout):
+        /// <list type="bullet">
+        /// <item>Entry: solid white line along the track edge from where the entry lane branches off to the wall's nose,
+        /// the lane's own boundary line and white chevrons in the gore between them; "PIT" painted in the lane.</item>
+        /// <item>Speed limit lines across the lane, the limit painted after the first and "END" after the second.</item>
+        /// <item>The divider between fast lane and working lane along the pit wall.</item>
+        /// <item>Exit: the lane boundary and chevrons from the end of the wall to the merge point, then a dashed edge
+        /// line along the merge.</item>
+        /// </list>
         /// </summary>
         static void BuildPitLaneMarkings(Transform parent, CircuitInstance ci)
         {
@@ -294,55 +353,112 @@ namespace Apex.Game
             float side = pit.side;
             var plan = pit.PlanFor(g.Length);
             var lines = new MeshData(1);
-            float Edge(float d) => g.WidthAt(g.Wrap(d)) * 0.5f;
-            // Divider: along the pit wall, in 4 m pieces (follows the curve).
-            float wallStart = RoadSurface.PitWallStart;
-            for (float s = wallStart; s < plan.WallEnd; s += 4f)
+            float Edge(float s) => g.WidthAt(g.Wrap(pit.entry + s)) * 0.5f;
+            float D(float s) => g.Wrap(pit.entry + s);
+            // Lateral (signed) of a distance from the edge.
+            float Lat(float s, float fromEdge) => side * (Edge(s) + fromEdge);
+            void Strip(float s0, float s1, float e0, float e1)
             {
-                float d0 = g.Wrap(pit.entry + s), d1 = g.Wrap(pit.entry + Mathf.Min(s + 4f, plan.WallEnd));
-                float l = side * (Edge(d0) + Apex.Race.PitLaneLayout.Divider);
-                Patch(lines, g, d0, d1, l - 0.075f, l + 0.075f);
+                float a = Lat(s0, e0), b = Lat(s0, e1);
+                PatchOrdered(lines, g, D(s0), D(s1), Mathf.Min(a, b), Mathf.Max(a, b));
             }
-            // Speed limit lines across the whole lane (apron to the outer wall): limit on after the entry, off at the exit line.
-            foreach (float at in new[] { pit.entry + CircuitDefinition.PitLane.LimiterStart, pit.entry + plan.limitSpan })
+            // Divider between fast lane and working lane, in 4 m pieces (follows the curve).
+            const float div = Apex.Race.PitLaneLayout.Divider;
+            for (float s = 0f; s < plan.WallEnd; s += 4f) Strip(s, Mathf.Min(s + 4f, plan.WallEnd), div - 0.075f, div + 0.075f);
+            // Speed limit lines across the lane (wall to the outer edge): limit on after the entry, off at the exit line.
+            float wallStart = Apex.Race.PitLaneLayout.WallStart;
+            foreach (float at in new[] { (float)Apex.Race.PitLaneLayout.LimiterStart, plan.limitSpan })
+                Strip(at, at + 0.5f, Apex.Race.PitLaneLayout.WallOuter, PitOuter - 0.3f);
+            PaintText(lines, g, pit.speedLimitKmh.ToString("0"), D(Apex.Race.PitLaneLayout.LimiterStart + 3f), Lat(0f, Apex.Race.PitLaneLayout.FastLaneCentre), 1.5f);
+            PaintText(lines, g, "END", D(plan.limitSpan + 3f), Lat(plan.limitSpan, Apex.Race.PitLaneLayout.FastLaneCentre), 1.2f);
+            // Solid edge line where the lane runs beside the track without the wall.
+            void EdgeLine(float s0, float s1, bool dashed = false)
             {
-                float d = g.Wrap(at);
-                float a = side * Edge(d), b = side * (Edge(d) + PitOuter - 0.3f);
-                Patch(lines, g, d, g.Wrap(d + 0.4f), Mathf.Min(a, b), Mathf.Max(a, b));
+                for (float s = s0; s < s1; s += dashed ? 6f : 4f)
+                    Strip(s, Mathf.Min(s + (dashed ? 3f : 4f), s1), 0.1f, 0.3f);
             }
-            // Solid white lines along the track edge: the entry line from where the entry lane opens to the entry, the
-            // exit line beside the acceleration lane from the end of the pit wall until the lane has narrowed.
-            void EdgeLine(float from, float length)
-            {
-                for (float s = 0f; s < length; s += 4f)
-                {
-                    float d0 = g.Wrap(from + s), d1 = g.Wrap(from + Mathf.Min(s + 4f, length));
-                    float l = side * (Edge(d0) + 0.2f);
-                    Patch(lines, g, d0, d1, l - 0.1f, l + 0.1f);
-                }
-            }
-            EdgeLine(pit.entry - pit.entryTaper, pit.entryTaper + wallStart);
-            EdgeLine(pit.entry + plan.WallEnd, plan.span - plan.WallEnd + pit.exitTaper * 0.85f);
+            // Entry: edge line from where the lane branches off to the crash cushion at the wall's nose.
+            float entryFrom = -pit.entryTaper, nose = wallStart - Apex.Race.PitLaneLayout.AttenuatorLength;
+            EdgeLine(entryFrom, nose);
+            // The car's path in the entry lane and its inner boundary (1.6 m inside it); chevrons in the gore.
+            float Path(float s) => Apex.Race.PitLaneLayout.LaneTarget(1f + s / pit.entryTaper);
+            Gore(lines, g, pit, entryFrom, nose, Path, +1);
+            PaintText(lines, g, "PIT", D(entryFrom + pit.entryTaper * 0.55f), Lat(entryFrom + pit.entryTaper * 0.55f, Path(-pit.entryTaper * 0.45f)), 1.5f);
+            // Exit: from the end of the wall the lane runs beside the track behind its boundary line to the merge point,
+            // then the edge line is dashed along the merge.
+            float ExitPath(float s) => s <= plan.MergeStart ? Apex.Race.PitLaneLayout.FastLaneCentre : Apex.Race.PitLaneLayout.Route(plan, s, -100f, true, pit.laneCentreFromEdge);
+            EdgeLine(plan.WallEnd, plan.MergeStart);
+            Gore(lines, g, pit, plan.WallEnd, plan.MergeStart, ExitPath, -1);
+            EdgeLine(plan.MergeStart, plan.MergeEnd, true);
             AddMesh(parent, "PitLaneLines", lines.ToMesh("PitLaneLines"), new[] { "Line" }, null);
-            // Team stripes at the garage end of the boxes.
-            var teams = new MeshData(Apex.Core.Roster.Teams.Length);
-            var keys = new string[Apex.Core.Roster.Teams.Length];
-            for (int t = 0; t < keys.Length; t++)
-            {
-                var team = Apex.Core.Roster.Teams[t];
-                keys[t] = "PitTeam" + t;
-                ApexMaterials.Register(keys[t], new Material(EnvironmentMaterials.Solid(new Color(team.r, team.g, team.b))) { name = keys[t] });
-            }
-            for (int box = 0; box < 20; box++)
-            {
-                int t = Mathf.Min(box / 2, keys.Length - 1);
-                float d = g.Wrap(pit.BoxDistance(box));
-                float lat = ci.PitLaneLateral(d);
-                float inner = lat + side * (Apex.Race.PitLaneLayout.BoxWidth * 0.5f + 0.15f), outer = inner + side * 0.6f;
-                Patch(teams, g, g.Wrap(d - 2.8f), g.Wrap(d + 2.8f), Mathf.Min(inner, outer), Mathf.Max(inner, outer), t);
-            }
-            AddMesh(parent, "PitTeamStripes", teams.ToMesh("PitTeamStripes"), keys, null);
         }
+
+        /// <summary>
+        /// Gore between the track edge line and a lane's inner boundary (path − 1.6 m) between two distances after the
+        /// entry: the boundary as a solid line and white chevrons pointing the way the cars go (<paramref name="dir"/>
+        /// +1 entry: the lane leaves the track; −1 exit: it joins).
+        /// </summary>
+        static void Gore(MeshData md, TrackGeometry g, CircuitDefinition.PitLane pit, float s0, float s1, Func<float, float> path, int dir)
+        {
+            float side = pit.side;
+            float Edge(float s) => g.WidthAt(g.Wrap(pit.entry + s)) * 0.5f;
+            Vector3 Pt(float s, float fromEdge) =>
+                (g.PositionAt(g.Wrap(pit.entry + s)) + g.RightAt(g.Wrap(pit.entry + s)) * (side * (Edge(s) + fromEdge))).ToUnity() + Vector3.up * 0.013f;
+            float Bound(float s) => path(s) - 1.6f;
+            // Boundary line where the gore is at least 0.4 m wide.
+            for (float s = s0; s < s1; s += 2f)
+            {
+                float e = Mathf.Min(s + 2f, s1);
+                if (Bound(s) < 0.7f || Bound(e) < 0.7f) continue;
+                QuadUp(md, Pt(s, Bound(s) - 0.1f), Pt(s, Bound(s) + 0.1f), Pt(e, Bound(e) - 0.1f), Pt(e, Bound(e) + 0.1f));
+            }
+            // Chevrons every 5 m: a 0.35 m wide diagonal bar from the edge line to the boundary.
+            for (float s = s0 + 2f; s < s1 - 2f; s += 5f)
+            {
+                float b = Bound(s);
+                if (b < 0.9f) continue;
+                float run = Mathf.Min(3f, b) * dir;   // the bar leans along the driving direction
+                QuadUp(md, Pt(s, 0.35f), Pt(s + 0.35f, 0.35f), Pt(s + run, b - 0.15f), Pt(s + run + 0.35f, b - 0.15f));
+            }
+        }
+
+        /// <summary>Quad on the road from two edges (a–b first, c–e second), turned to face up (MeshData.Quad wants b right
+        /// of a and c ahead of a, i.e. cross(b − a, c − a) pointing down).</summary>
+        static void QuadUp(MeshData md, Vector3 a, Vector3 b, Vector3 c, Vector3 e)
+        {
+            if (Vector3.Dot(Vector3.Cross(b - a, c - a), Vector3.up) > 0f) { var t = b; b = c; c = t; }
+            md.Quad(0, a, b, c, e, Vector2.zero, Vector2.right, Vector2.up, Vector2.one);
+        }
+
+        /// <summary>
+        /// Lettering painted on the road (Apex.UI.PixelFont), centred on (<paramref name="d"/>, <paramref name="lat"/>),
+        /// <paramref name="height"/> m tall, reading for a driver coming along the track (top of the letters ahead).
+        /// </summary>
+        static void PaintText(MeshData md, TrackGeometry g, string text, float d, float lat, float height)
+        {
+            float px = height / Apex.UI.PixelFont.H;
+            float width = Apex.UI.PixelFont.Width(text) * px;
+            foreach (var (x, y, len) in Apex.UI.PixelFont.Runs(text))
+            {
+                // Row 0 is the top of the letters: furthest ahead along the track; columns run left to right across it.
+                float s1 = d + height * 0.5f - y * px, s0 = s1 - px;
+                float l0 = lat - width * 0.5f + x * px, l1 = l0 + len * px;
+                PatchOrdered(md, g, s0, s1, l0, l1);
+            }
+        }
+
+        /// <summary>A filled rectangle with an outline gap (tyre mark): outline of <paramref name="lw"/> m.</summary>
+        static void Box(MeshData md, TrackGeometry g, float d0, float d1, float l0, float l1, float lw)
+        {
+            PatchOrdered(md, g, d0, d0 + lw, l0, l1);
+            PatchOrdered(md, g, d1 - lw, d1, l0, l1);
+            PatchOrdered(md, g, d0, d1, l0, l0 + lw);
+            PatchOrdered(md, g, d0, d1, l1 - lw, l1);
+        }
+
+        /// <summary><see cref="Patch"/> with raw (unwrapped) distances.</summary>
+        static void PatchOrdered(MeshData md, TrackGeometry g, float d0, float d1, float l0, float l1, int sub = 0) =>
+            Patch(md, g, g.Wrap(d0), g.Wrap(d1), l0, l1, sub);
 
         /// <summary>Flat quad on the road between two distances and two lateral offsets, 1.2 cm up.</summary>
         static void Patch(MeshData md, TrackGeometry g, float d0, float d1, float l0, float l1, int sub = 0)

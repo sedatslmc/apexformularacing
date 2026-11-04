@@ -67,7 +67,7 @@ namespace Apex.Tracks
         /// <summary>Pit area width from the track edge to the outer pit wall.</summary>
         public const float PitOuter = 13.5f;
         /// <summary>Pit wall offset from the track edge.</summary>
-        public const float PitWallFromEdge = 2.1f;
+        public const float PitWallFromEdge = Apex.Race.PitLaneLayout.WallFromEdge;
         /// <summary>The pit wall starts this far after the pit entry (the entry lane has fully opened by then).</summary>
         public const float PitWallStart = Apex.Race.PitLaneLayout.WallStart;
 
@@ -283,8 +283,9 @@ namespace Apex.Tracks
             var pit = definition.pit;
             float side = pit.side;
             apron = new SurfaceMesh("PitApron", 1, SurfaceType.Asphalt);
-            lane = new SurfaceMesh("PitLane", 1, SurfaceType.PitLane);
-            // Apron (first 2 m) and lane, in the entry and exit lanes as wide as the pit area there.
+            lane = new SurfaceMesh("PitLane", 2, SurfaceType.PitLane);
+            // Apron (first 2 m) and lane, in the entry and exit lanes as wide as the pit area there; the lane in two
+            // sub-meshes: fast lane asphalt (0) and the sealed working lane in front of the garages (1).
             Ribbon(apron, 0, g, i =>
             {
                 float wdt = MathF.Min(2f, pitWidth[i]);
@@ -292,26 +293,47 @@ namespace Apex.Tracks
                 float e = g.Widths[i] * 0.5f;
                 return side < 0 ? new Vector4(-(e + wdt), 0f, -e, 0f) : new Vector4(e, 0f, e + wdt, 0f);
             });
+            const float div = Apex.Race.PitLaneLayout.Divider;
             Ribbon(lane, 0, g, i =>
             {
                 if (pitWidth[i] <= 2.01f) return Vector4.Zero;
-                float e = g.Widths[i] * 0.5f;
-                return side < 0 ? new Vector4(-(e + pitWidth[i]), 0f, -(e + 2f), 0f) : new Vector4(e + 2f, 0f, e + pitWidth[i], 0f);
+                float e = g.Widths[i] * 0.5f, o = MathF.Min(pitWidth[i], pitMask[i] ? div : pitWidth[i]);
+                return side < 0 ? new Vector4(-(e + o), 0f, -(e + 2f), 0f) : new Vector4(e + 2f, 0f, e + o, 0f);
             });
-            // Pit wall from the entry to just after the exit line (the speed-limited lane); the entry and exit lanes beyond it are
-            // separated from the track by white lines only (CircuitBuilder.BuildPitLaneMarkings).
-            float wallEnd = pit.PlanFor(g.Length).WallEnd;
+            Ribbon(lane, 1, g, i =>
+            {
+                if (!pitMask[i] || pitWidth[i] <= div + 0.01f) return Vector4.Zero;
+                float e = g.Widths[i] * 0.5f;
+                return side < 0 ? new Vector4(-(e + pitWidth[i]), 0f, -(e + div), 0f) : new Vector4(e + div, 0f, e + pitWidth[i], 0f);
+            });
+            // Pit wall (collision solid: track face, lane face, top and end caps) from its nose in the entry lane, with the
+            // crash cushion in front of it, to just after the exit line; the exit lane beyond it is separated from the track
+            // by white lines only (CircuitBuilder.BuildPitLaneMarkings). The visible wall, fence and stands come from
+            // PitWallBuilder.
+            var plan = pit.PlanFor(g.Length);
             wall = new SurfaceMesh("PitWall", 1, SurfaceType.Wall);
             int n = g.Count;
+            float from = PitWallStart - Apex.Race.PitLaneLayout.AttenuatorLength;
+            const float inner = Apex.Race.PitLaneLayout.WallInner, outer = Apex.Race.PitLaneLayout.WallOuter, h0 = -0.2f, h1 = 1.0f;
+            bool On(int k)
+            {
+                float since = -pit.ToEntry(g.Distances[k], g.Length);
+                return since >= from && since <= plan.WallEnd;
+            }
             for (int i = 0; i < n; i++)
             {
                 int j = (i + 1) % n;
-                float di = ApexMath.PosMod(g.Distances[i] - pit.entry, g.Length);
-                float span = ApexMath.PosMod(pit.exit - pit.entry, g.Length);
-                if (!pitMask[i] || !pitMask[j] || di < PitWallStart || di > wallEnd) continue;
-                float oi = side * (g.Widths[i] * 0.5f + PitWallFromEdge), oj = side * (g.Widths[j] * 0.5f + PitWallFromEdge);
-                wall.Quad(0, P(g, i, oi, -0.2f), P(g, i, oi, 1.0f), P(g, j, oj, -0.2f), P(g, j, oj, 1.0f),
-                    Vector2.Zero, Vector2.UnitY, Vector2.UnitX, Vector2.One, true);
+                bool oi = On(i), oj = On(j);
+                if (!oi || !oj) continue;
+                float ei = g.Widths[i] * 0.5f, ej = g.Widths[j] * 0.5f;
+                Vector3 A(int k, float e, float lat, float h) => P(g, k, side * (e + lat), h);
+                wall.Quad(0, A(i, ei, inner, h0), A(i, ei, inner, h1), A(j, ej, inner, h0), A(j, ej, inner, h1), Vector2.Zero, Vector2.UnitY, Vector2.UnitX, Vector2.One, true);
+                wall.Quad(0, A(i, ei, outer, h0), A(i, ei, outer, h1), A(j, ej, outer, h0), A(j, ej, outer, h1), Vector2.Zero, Vector2.UnitY, Vector2.UnitX, Vector2.One, true);
+                wall.Quad(0, A(i, ei, inner, h1), A(i, ei, outer, h1), A(j, ej, inner, h1), A(j, ej, outer, h1), Vector2.Zero, Vector2.UnitY, Vector2.UnitX, Vector2.One, true);
+                // End caps at the nose and the tail.
+                foreach (var (k, e, open) in new[] { (i, ei, !On((i - 1 + n) % n)), (j, ej, !On((j + 1) % n)) })
+                    if (open)
+                        wall.Quad(0, A(k, e, inner, h0), A(k, e, inner, h1), A(k, e, outer, h0), A(k, e, outer, h1), Vector2.Zero, Vector2.UnitY, Vector2.UnitX, Vector2.One, true);
             }
         }
 

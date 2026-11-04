@@ -98,6 +98,56 @@ namespace Apex.Race
             }
         }
 
+        /// <summary>Seat height of a pit wall stool (top of the cushion, m above the stand's floor).</summary>
+        public const float SeatHeight = 0.66f;
+
+        /// <summary>
+        /// A race engineer on a stool at the pit wall desk (figure frame, feet on the stand's floor, facing the monitors):
+        /// hands on the keyboard with a light typing jitter, the head turning slowly between the monitors and the track,
+        /// now and then a hand to the headset and a nod while talking on the radio. <paramref name="seed"/> varies the
+        /// rhythm per person; <paramref name="deskHeight"/> is the keyboard's height above the floor.
+        /// </summary>
+        public static void SolveSeated(float time, int seed, float deskHeight, Frame[] parts)
+        {
+            float ph = seed * 1.7f;
+            var hip = new Vector3(0f, SeatHeight + 0.06f, -0.04f);
+            float lean = 0.12f + 0.04f * MathF.Sin(time * 0.31f + ph);
+            var torsoUp = new Vector3(0f, MathF.Cos(lean), MathF.Sin(lean));
+            var torsoFwd = new Vector3(0f, -MathF.Sin(lean), MathF.Cos(lean));
+            parts[(int)Part.Torso] = new Frame { origin = hip, right = Vector3.UnitX, up = torsoUp, forward = torsoFwd };
+            var neck = hip + torsoUp * TorsoLength;
+            // Head: slow look around (monitors, then the track to the side), a nod while talking.
+            float cycle = (time * 0.11f + seed * 0.37f) % 1f;
+            float yaw = cycle < 0.7f ? 0.35f * MathF.Sin(time * 0.6f + ph) : 0.9f * MathF.Sin((cycle - 0.7f) / 0.3f * MathF.PI);
+            bool talking = ((int)(time * 0.2f + seed * 0.5f)) % 3 == 0;
+            float nod = 0.12f + (talking ? 0.06f * MathF.Sin(time * 5f + ph) : 0f);
+            var lookFwd = new Vector3(MathF.Sin(yaw), 0f, MathF.Cos(yaw));
+            var headUp = Vector3.Normalize(new Vector3(0f, MathF.Cos(nod), 0f) + lookFwd * MathF.Sin(nod));
+            parts[(int)Part.Head] = Basis(neck, headUp, lookFwd, false);
+            // Legs: thighs on the stool, feet on the footrest bar in front.
+            for (int side = 0; side < 2; side++)
+            {
+                float sx = side == 0 ? -1f : 1f;
+                var root = hip + new Vector3(sx * HipHalfWidth, 0f, 0f);
+                var foot = new Vector3(sx * 0.14f, AnkleHeight + 0.18f, 0.36f);
+                var knee = Ik(root, foot, Thigh, Shin, new Vector3(0f, 0.6f, 1f), out var ankle);
+                parts[(int)(side == 0 ? Part.ThighL : Part.ThighR)] = Basis(root, root - knee, Vector3.UnitZ, true);
+                parts[(int)(side == 0 ? Part.ShinL : Part.ShinR)] = Basis(knee, knee - ankle, Vector3.UnitZ, true);
+            }
+            // Arms: on the keyboard (typing), the right hand at the headset while talking.
+            for (int side = 0; side < 2; side++)
+            {
+                float sx = side == 0 ? -1f : 1f;
+                var shoulder = hip + torsoUp * (TorsoLength - ShoulderDrop) + new Vector3(sx * ShoulderHalfWidth, 0f, 0f);
+                float tap = MathF.Max(0f, MathF.Sin(time * 9f + ph + side * 2.1f)) * 0.012f;
+                var hand = new Vector3(sx * 0.17f, deskHeight + 0.03f + tap, 0.42f);
+                if (talking && side == 1) hand = neck + new Vector3(0.13f, 0.12f, 0.02f);
+                var elbow = Ik(shoulder, hand, UpperArm, Forearm + Hand, new Vector3(sx * 0.8f, -0.4f, -0.6f), out var wrist);
+                parts[(int)(side == 0 ? Part.UpperArmL : Part.UpperArmR)] = Basis(shoulder, shoulder - elbow, Vector3.UnitZ, true);
+                parts[(int)(side == 0 ? Part.ForearmL : Part.ForearmR)] = Basis(elbow, elbow - wrist, Vector3.UnitZ, true);
+            }
+        }
+
         /// <summary>
         /// Two-bone IK: the middle joint for a chain root → end of lengths a, b, bending towards <paramref name="pole"/>.
         /// <paramref name="end"/> is the reached end point (the target, or as close as the chain reaches).

@@ -342,8 +342,8 @@ namespace Apex.Tests
             Assert.That(layout.pitBuilding.placed, Is.True, "pit building");
             Assert.That(layout.timingTower.placed, Is.True, "timing tower");
             Assert.That(layout.raceControl.placed, Is.True, "race control");
-            Assert.That(layout.bayZ.Count, Is.EqualTo(20), "a garage bay per grid slot");
-            Assert.That(layout.pitLength, Is.GreaterThan(19 * def.pit.boxSpacing));
+            Assert.That(layout.bayZ.Count, Is.EqualTo(def.pit.boxCount), "a garage per box (one per team on bosphorus_a)");
+            Assert.That(layout.pitLength, Is.GreaterThan((def.pit.boxCount - 1) * def.pit.boxSpacing));
             Assert.That(Math.Abs(layout.podiumZ), Is.LessThan(layout.pitLength * 0.5f));
             // The building stands behind the pit lane, never over it or another part of the circuit.
             var pb = layout.pitBuilding;

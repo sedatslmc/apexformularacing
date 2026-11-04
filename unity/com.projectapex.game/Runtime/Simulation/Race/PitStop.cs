@@ -43,7 +43,30 @@ namespace Apex.Race
         public float serviceTotal;
         public bool lastMistake;
 
+        /// <summary>At rest on the box, the crew settling the car onto the marks (stage InLane; service has not started).</summary>
+        public bool settling;
+        public float settleTime, settleDuration;
+        /// <summary>Service done, but the release is held: a car in the fast lane (PitBoxStop.BlocksRelease).</summary>
+        public bool releaseHeld;
+        /// <summary>How the car stood on its marks when it came to rest (for the HUD guide).</summary>
+        public PitBoxStop.Fit fit = PitBoxStop.Fit.TooShort;
+        /// <summary>Metres after the entry where the merge onto the track began (NaN: not yet; held back by traffic).</summary>
+        public float mergeFrom = float.NaN;
+        /// <summary>Pit lane speed check for this passage.</summary>
+        public readonly PitSpeedMonitor speed = new PitSpeedMonitor();
+
         public bool InPitLane => stage == Stage.InLane || stage == Stage.Stopped || stage == Stage.Leaving;
+
+        /// <summary>Back to normal racing (keeps the next compound).</summary>
+        public void Finish()
+        {
+            stage = Stage.None;
+            settling = false;
+            releaseHeld = false;
+            mergeFrom = float.NaN;
+            fit = PitBoxStop.Fit.TooShort;
+            speed.Reset();
+        }
 
         public void Request(TireCompound compound)
         {

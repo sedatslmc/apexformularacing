@@ -46,6 +46,8 @@ namespace Apex.Game
         public VehicleSimulation Sim => car.Sim;
         public bool AutoDriven => !isPlayer || pitAssistActive;
         public bool pitAssistActive;
+        /// <summary>The pit autopilot stands on the brakes this step (on the box mark).</summary>
+        public bool pitBrake;
     }
 
     /// <summary>
@@ -173,7 +175,7 @@ namespace Apex.Game
                 personality.pace *= rc.isPlayer ? 1f : Roster.DifficultyScale(config.difficulty);
                 rc.ai = new AIDriver(Line, personality, config.seed * 31 + rc.index);
                 rc.entry = Director.AddEntry(rc.index, rc.name, rc.code, team.name, rc.isPlayer, slot);
-                rc.boxIndex = Mathf.Clamp(rc.teamIndex * 2 + (rc.isPlayer ? 0 : (di % 2)), 0, 19);
+                rc.boxIndex = Circuit.Pit != null ? Circuit.Pit.BoxFor(rc.teamIndex, rc.isPlayer ? 0 : di % 2, Roster.Teams.Length) : 0;
                 // Practice/qualifying: AI cars leave the grid one after another.
                 rc.startHold = type == SessionType.Race || rc.isPlayer ? 0f : 2f + slot * 2.5f;
                 if (rc.isPlayer) Player = rc;
@@ -477,7 +479,7 @@ namespace Apex.Game
                     speed = rc.Sim.ForwardSpeed,
                     position = pos.ToNum(),
                     forward = rc.car.transform.forward.ToNum(),
-                    inPit = rc.pit.InPitLane,
+                    inPit = PitHidden(rc),
                 };
                 states.Add(rc.state);
             }
@@ -525,7 +527,7 @@ namespace Apex.Game
         void DriveCar(RaceCar rc, float dt)
         {
             var sim = rc.Sim;
-            bool moveAllowed = Started && Director.CarsMayMove && SimTime >= rc.startHold && rc.pit.stage != PitState.Stage.Stopped;
+            bool moveAllowed = Started && Director.CarsMayMove && SimTime >= rc.startHold && rc.pit.stage != PitState.Stage.Stopped && !rc.pit.settling;
             if (rc.isPlayer && !PlayerInputEnabled) moveAllowed = false;
             sim.holdBrake = !moveAllowed;
             if (!moveAllowed)
@@ -554,6 +556,7 @@ namespace Apex.Game
                 sim.throttle = c.throttle;
                 sim.brake = c.brake;
                 sim.steer = c.steer;
+                if (rc.pitBrake) { sim.throttle = 0f; sim.brake = 1f; }
             }
             else if (Input != null)
             {
@@ -587,6 +590,100 @@ namespace Apex.Game
 
         // --- Pit lane -------------------------------------------------------------------
 
+        /// <summary>
+        /// The car is in the pit lane behind the wall: race traffic ignores it and it ignores race traffic. In the exit lane
+        /// after the wall it is visible to the race cars (they keep room alongside while it merges).
+        /// </summary>
+        bool PitHidden(RaceCar rc)
+        {
+            if (!rc.pit.InPitLane || Circuit.Pit == null) return false;
+            float since = -Circuit.Pit.ToEntry(rc.raw, Circuit.Geometry.Length);
+            return since <= Circuit.Pit.PlanFor(Circuit.Geometry.Length).WallEnd;
+        }
+
+        /// <summary>Parking aid for a pit stop driven by hand (SettingsData.pitParkAssist).</summary>
+        public bool ParkAssist { get; set; } = true;
+        /// <summary>Guide for the player's approach to the box (HUD), empty when not relevant.</summary>
+        public string PlayerBoxGuide { get; private set; } = "";
+
+        /// <summary>Signed metres from a car to the centre of its box (negative once past it).</summary>
+        float ToBox(RaceCar rc)
+        {
+            var g = Circuit.Geometry;
+            float L = g.Length;
+            float d = ApexMath.PosMod(g.Wrap(Circuit.Pit.BoxDistance(rc.boxIndex)) - rc.raw, L);
+            return d > L * 0.5f ? d - L : d;
+        }
+
+        /// <summary>Box pose (car origin on the ground plane, facing the driving direction) of a box.</summary>
+        Pose BoxPose(int box)
+        {
+            float d = Circuit.Geometry.Wrap(Circuit.Pit.BoxDistance(box));
+            return Circuit.PoseAt(d, Circuit.PitLaneLateral(d), 0f);
+        }
+
+        /// <summary>Lateral (m) and heading (degrees, + = nose to the right) error of a car against its box.</summary>
+        (float lat, float yaw) BoxError(RaceCar rc)
+        {
+            var bp = BoxPose(rc.boxIndex);
+            var t = rc.car.transform;
+            var right = bp.rotation * Vector3.right;
+            float lat = Vector3.Dot(t.position - bp.position, right);
+            var f = Vector3.ProjectOnPlane(t.forward, Vector3.up);
+            float yaw = Vector3.SignedAngle(Vector3.ProjectOnPlane(bp.rotation * Vector3.forward, Vector3.up), f, Vector3.up);
+            return (lat, yaw);
+        }
+
+        /// <summary>Another car of the same box is on it, or nearer to it in the working lane (double stack).</summary>
+        bool BoxTaken(RaceCar rc, float toBox)
+        {
+            foreach (var o in Cars)
+            {
+                if (o == rc || o.removed || o.boxIndex != rc.boxIndex) continue;
+                var st = o.pit.stage;
+                if (st == PitState.Stage.Stopped || (st == PitState.Stage.InLane && o.pit.settling)) return true;
+                if (st == PitState.Stage.InLane && ToBox(o) < toBox && ToBox(o) > -PitBoxStop.PushBackLimit) return true;
+                // Just released: still pulling out of the box.
+                if (st == PitState.Stage.Leaving && ToBox(o) > -8f && ToBox(o) < 3f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Safe release: no car in the fast lane about to pass the box (PitBoxStop.BlocksRelease).</summary>
+        bool ReleaseClear(RaceCar rc)
+        {
+            var pit = Circuit.Pit;
+            var g = Circuit.Geometry;
+            foreach (var o in Cars)
+            {
+                if (o == rc || o.removed || !o.pit.InPitLane || o.pit.stage == PitState.Stage.Stopped || o.pit.settling) continue;
+                // Metres from the other car to this box (positive: still behind it).
+                float L = g.Length;
+                float gapBehind = ApexMath.PosMod(g.Wrap(pit.BoxDistance(rc.boxIndex)) - o.raw, L);
+                if (gapBehind > L * 0.5f) gapBehind -= L;
+                float fromEdge = pit.side * o.lateral - g.WidthAt(o.raw) * 0.5f;
+                if (PitBoxStop.BlocksRelease(gapBehind, o.Sim.ForwardSpeed, fromEdge)) return false;
+            }
+            return true;
+        }
+
+        /// <summary>Merge check at the pit exit against race traffic (PitBoxStop.BlocksMerge).</summary>
+        bool MergeClear(RaceCar rc)
+        {
+            var g = Circuit.Geometry;
+            float L = g.Length;
+            foreach (var o in Cars)
+            {
+                if (o == rc || o.removed || o.pit.InPitLane) continue;
+                float ahead = ApexMath.PosMod(o.raw - rc.raw, L);
+                if (ahead > L * 0.5f) ahead -= L;
+                if (ahead > 40f || ahead < -120f) continue;
+                float fromEdge = Circuit.Pit.side * o.lateral - g.WidthAt(o.raw) * 0.5f;
+                if (PitBoxStop.BlocksMerge(ahead, rc.Sim.ForwardSpeed, o.Sim.ForwardSpeed, fromEdge)) return false;
+            }
+            return true;
+        }
+
         void UpdatePit(RaceCar rc, float dt)
         {
             var pit = Circuit.Pit;
@@ -597,10 +694,11 @@ namespace Apex.Game
             float L = g.Length;
             // Signed distance since the entry (negative in the entry lane before it).
             float since = -pit.ToEntry(rc.raw, L);
-            float sinceEntry = ApexMath.PosMod(rc.raw - pit.entry, L);
             var plan = pit.PlanFor(L);
-            float laneLat = Circuit.PitLaneLateral(rc.raw);
             float edge = g.WidthAt(rc.raw) * 0.5f;
+            float fromEdge = pit.side * rc.lateral - edge;
+            rc.pitBrake = false;
+            if (rc.isPlayer) PlayerBoxGuide = "";
             switch (ps.stage)
             {
                 case PitState.Stage.Requested:
@@ -609,18 +707,22 @@ namespace Apex.Game
                     float toEntry = -since;
                     if (auto && toEntry > 0f && toEntry < pit.entryTaper + 60f)
                     {
-                        // Line up on the pit side, then follow the entry lane as it opens beside the track.
+                        // Line up on the pit side, then follow the entry lane as it branches off beside the track.
                         rc.pitAssistActive = rc.isPlayer;
-                        rc.ai.forcedLateral = pit.side * (edge + PitLaneLayout.LaneTarget(1f - toEntry / pit.entryTaper));
-                        rc.ai.speedCap = Mathf.Sqrt(pit.SpeedLimit * pit.SpeedLimit + 2f * 9f * toEntry);   // braked down to the limit by the entry
+                        var cmd = PitLaneLayout.Drive(plan, since, ToBox(rc), false, pit.laneCentreFromEdge, pit.SpeedLimit, sim.ForwardSpeed);
+                        rc.ai.forcedLateral = pit.side * (edge + cmd.fromEdge);
+                        rc.ai.speedCap = cmd.speedCap;
                     }
-                    // The player is in once over the white entry line (entry lane or lane itself).
-                    bool entered = auto ? sinceEntry < 20f
-                        : (since > -pit.entryTaper && since < 80f && pit.side * rc.lateral > edge + 1f);
+                    if (rc.isPlayer && toEntry > 0f && toEntry < pit.entryTaper + 400f)
+                        PlayerBoxGuide = $"BOX {rc.boxIndex + 1} · Einfahrt {Mathf.Max(0f, toEntry - pit.entryTaper):0} m";
+                    // The player is in once over the white entry line (entry lane or the lane itself).
+                    bool entered = auto ? since >= 0f && since < 20f
+                        : (since > -pit.entryTaper && since < 80f && fromEdge > 1f);
                     if (entered)
                     {
                         ps.stage = PitState.Stage.InLane;
-                        if (rc.isPlayer) Message?.Invoke($"Boxengasse – Limit {pit.speedLimitKmh:0} km/h ab der Linie", ApexStyle.Accent, 1);
+                        ps.speed.Reset();
+                        if (rc.isPlayer) Message?.Invoke($"Boxengasse – Limit {pit.speedLimitKmh:0} km/h ab der Linie · Box {rc.boxIndex + 1}", ApexStyle.Accent, 1);
                     }
                     break;
                 }
@@ -633,50 +735,78 @@ namespace Apex.Game
                     sim.speedLimit = limited ? pit.SpeedLimit : float.PositiveInfinity;
                     if (rc.isPlayer && limited && !wasLimited && since < plan.limitSpan * 0.5f) Message?.Invoke($"Begrenzer {pit.speedLimitKmh:0} km/h", ApexStyle.Accent, 0);
                     if (rc.isPlayer && wasLimited && !limited && since > plan.limitSpan) Message?.Invoke("Begrenzer aus – Ausfahrt", Color.white, 0);
+                    // Speeding: the limiter brakes, but a car arriving too fast at the line is over the limit for a moment.
+                    if (ps.speed.Update(limited, sim.ForwardSpeed, pit.SpeedLimit, dt) && Started && Type == SessionType.Race)
+                        Director.AddPenalty(rc.entry, Director.rules.pitSpeedingPenalty, $"Zu schnell in der Boxengasse (+{ps.speed.MaxExcess * 3.6f:0} km/h)");
                     bool auto = !rc.isPlayer || rc.pitAssistActive;
+                    float toBox = ToBox(rc);
+                    bool served = ps.stage == PitState.Stage.Leaving;
+                    // Exit: merge only when the race traffic allows (held in the lane until LatestMergeStart).
+                    if (served && since > plan.MergeStart && float.IsNaN(ps.mergeFrom) && (MergeClear(rc) || since >= plan.LatestMergeStart))
+                        ps.mergeFrom = since;
+                    if (ps.settling)
+                    {
+                        // The crew settles the car onto the marks (VehicleController.GuideTo), then the service starts.
+                        ps.settleTime += dt;
+                        if (ps.settleTime >= ps.settleDuration && (rc.car == null || !rc.car.Guiding)) BeginService(rc);
+                        if (rc.isPlayer) PlayerBoxGuide = "BOX · Crew richtet aus";
+                        break;
+                    }
                     if (auto)
                     {
-                        // Fast lane along the pit wall; turn into the working lane only for the own box and pull
-                        // out again after the stop (PitLaneLayout) – never through another team's box.
-                        float boxD = g.Wrap(pit.BoxDistance(rc.boxIndex));
-                        float toOwn = ApexMath.PosMod(boxD - rc.raw, L);
-                        if (toOwn > L * 0.5f) toOwn -= L;
-                        bool served = ps.stage == PitState.Stage.Leaving;
-                        float fromEdge = PitLaneLayout.Route(plan, since, toOwn, served, pit.laneCentreFromEdge);
-                        rc.ai.forcedLateral = pit.side * (edge + fromEdge);
-                        rc.ai.speedCap = since < plan.limitSpan - 2f ? pit.SpeedLimit : float.PositiveInfinity;
+                        // Fast lane along the pit wall; into the working lane only for the own box, square onto its marks
+                        // and out again after the stop (PitLaneLayout.Drive) – never through another team's box.
+                        float target = toBox;
+                        // Double stack: the teammate is on the box – wait 8 m behind it in the working lane.
+                        if (!served && BoxTaken(rc, toBox)) target = toBox - 8f;
+                        var cmd = PitLaneLayout.Drive(plan, since, target, served, pit.laneCentreFromEdge, pit.SpeedLimit, sim.ForwardSpeed,
+                            served ? (float.IsNaN(ps.mergeFrom) ? since : ps.mergeFrom) : float.NaN);
+                        rc.ai.forcedLateral = pit.side * (edge + cmd.fromEdge);
+                        rc.ai.speedCap = cmd.speedCap;
+                        rc.pitBrake = cmd.brake;
+                        // Held back from merging: lift so the race car passes.
+                        if (served && since > plan.MergeStart && float.IsNaN(ps.mergeFrom)) rc.ai.speedCap = Mathf.Min(rc.ai.speedCap, Mathf.Max(15f, sim.ForwardSpeed - 4f));
                     }
                     if (ps.stage == PitState.Stage.InLane)
                     {
-                        float box = g.Wrap(pit.BoxDistance(rc.boxIndex));
-                        float toBox = ApexMath.PosMod(box - rc.raw, L);
-                        if (toBox > L * 0.5f) toBox -= L;
-                        if (auto && toBox < 40f) rc.ai.speedCap = Mathf.Max(0f, toBox * 0.6f);
-                        bool inBox = Mathf.Abs(toBox) < (auto ? 2.5f : 4f) && Mathf.Abs(rc.lateral - laneLat) < 3f;
-                        if (inBox && Mathf.Abs(sim.ForwardSpeed) < 0.8f)
+                        var (latErr, yawErr) = BoxError(rc);
+                        if (rc.isPlayer) PlayerBoxGuide = PitBoxStop.Guide(rc.boxIndex, toBox, latErr, BoxTaken(rc, toBox));
+                        bool atRest = Mathf.Abs(sim.ForwardSpeed) < 0.3f;
+                        bool nearBox = toBox < PitBoxStop.AssistLong + 0.3f && toBox > -PitBoxStop.PushBackLimit && Mathf.Abs(latErr) < 1.5f;
+                        if (atRest && nearBox && !BoxTaken(rc, toBox))
                         {
-                            var (time, mistake) = crew.ServiceTime(ps.changeTires);
-                            // A new nose / rear wing takes the crew a few extra seconds.
-                            var dmg = sim.damage;
-                            if (sim.damageEnabled && (dmg.NeedsNewNose || dmg.rearWing > 0.3f)) time += 4.5f;
-                            ps.serviceTotal = time;
-                            ps.serviceRemaining = time;
-                            ps.lastMistake = mistake;
-                            ps.stage = PitState.Stage.Stopped;
+                            bool assist = auto || ParkAssist;
+                            ps.fit = PitBoxStop.Judge(toBox, latErr, yawErr);
+                            if (ps.fit == PitBoxStop.Fit.Good || PitBoxStop.Settleable(toBox, latErr, yawErr, assist))
+                            {
+                                // Settle onto the marks (assist / push back by the crew), or start right away when good
+                                // and driven by hand without the aid.
+                                bool move = assist || ps.fit != PitBoxStop.Fit.Good;
+                                ps.settling = true;
+                                ps.settleTime = 0f;
+                                ps.settleDuration = move ? PitBoxStop.SettleTime(toBox, latErr) : 0f;
+                                if (move && rc.car != null)
+                                {
+                                    var bp = BoxPose(rc.boxIndex);
+                                    rc.car.GuideTo(bp.position, bp.rotation, ps.settleDuration);
+                                }
+                                if (rc.isPlayer && ps.fit == PitBoxStop.Fit.TooFar) Message?.Invoke("Zu weit – die Crew schiebt zurück", ApexStyle.Caution, 1);
+                            }
                         }
-                        else if (toBox < -6f)
+                        else if (toBox < -6f && !rc.pit.settling)
                         {
                             ps.stage = PitState.Stage.Leaving;
                             if (rc.isPlayer) Message?.Invoke("Box verpasst – kein Service", ApexStyle.Caution, 2);
                         }
                     }
                     // Done once merged onto the track at the end of the exit lane (a player who rejoins early, too).
-                    bool merged = since > (auto ? plan.MergeEnd : plan.span + pit.exitTaper)
-                        || (since > plan.WallEnd + 10f && !auto && pit.side * rc.lateral < edge - 0.5f)
+                    float mergeDone = float.IsNaN(ps.mergeFrom) ? plan.MergeEnd : ps.mergeFrom + plan.MergeSpan;
+                    bool merged = since > (auto ? mergeDone : plan.span + pit.exitTaper)
+                        || (since > plan.WallEnd + 10f && !auto && fromEdge < -0.5f)
                         || since < -pit.entryTaper - 50f;
                     if (merged)
                     {
-                        ps.stage = PitState.Stage.None;
+                        ps.Finish();
                         sim.speedLimit = float.PositiveInfinity;
                         rc.ai.forcedLateral = float.NaN;
                         rc.ai.speedCap = float.PositiveInfinity;
@@ -687,20 +817,46 @@ namespace Apex.Game
                 case PitState.Stage.Stopped:
                 {
                     ps.serviceRemaining -= dt;
+                    if (rc.isPlayer) PlayerBoxGuide = ps.releaseHeld ? "BOX · Freigabe wartet – Verkehr" : "BOX";
                     if (ps.serviceRemaining <= 0f)
                     {
-                        if (ps.changeTires) sim.FitTires(ps.nextCompound);
-                        sim.damage.Repair(ps.changeTires);
-                        rc.entry.pitStops++;
-                        rc.mandatoryStopDone = true;
-                        rc.lastStopTime = ps.serviceTotal;
+                        ps.serviceRemaining = 0f;
+                        if (!ps.releaseHeld)
+                        {
+                            if (ps.changeTires) sim.FitTires(ps.nextCompound);
+                            sim.damage.Repair(ps.changeTires);
+                            rc.entry.pitStops++;
+                            rc.mandatoryStopDone = true;
+                            rc.lastStopTime = ps.serviceTotal;
+                        }
+                        // Safe release: held while a car in the fast lane is about to pass the box.
+                        ps.releaseHeld = !ReleaseClear(rc);
+                        if (ps.releaseHeld) break;
                         ps.stage = PitState.Stage.Leaving;
+                        ps.mergeFrom = float.NaN;
                         if (rc.isPlayer)
                             Message?.Invoke($"Stopp {ps.serviceTotal:0.0} s – {CompoundSpec.For(ps.nextCompound).name}" + (ps.lastMistake ? " (Radmutter klemmte)" : ""), ApexStyle.Faster, 1);
                     }
                     break;
                 }
             }
+        }
+
+        /// <summary>The car stands on its marks: the crew lifts it and the service time starts.</summary>
+        void BeginService(RaceCar rc)
+        {
+            var ps = rc.pit;
+            var sim = rc.Sim;
+            ps.settling = false;
+            var (time, mistake) = crew.ServiceTime(ps.changeTires);
+            // A new nose / rear wing takes the crew a few extra seconds.
+            var dmg = sim.damage;
+            if (sim.damageEnabled && (dmg.NeedsNewNose || dmg.rearWing > 0.3f)) time += 4.5f;
+            ps.serviceTotal = time;
+            ps.serviceRemaining = time;
+            ps.lastMistake = mistake;
+            ps.releaseHeld = false;
+            ps.stage = PitState.Stage.Stopped;
         }
 
         /// <summary>AI strategy: worn tires, wrong tires for the conditions, mandatory stop.</summary>

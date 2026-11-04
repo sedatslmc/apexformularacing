@@ -1,74 +1,177 @@
-# Boxengasse, Boxencrew und Boxenstopp-Animation
+# Boxenanlage: Boxengasse, Boxenstopp, Pitwall, Boxengebäude
 
-**Stand:** 2026-11-04.
+**Stand:** 2026-11-04, Boxenanlagen-Brief („professionelle Boxengasse, Pit Entry, Pit Exit und Pitwall").
 
 **Status:**
-- **Implementiert und getestet:** Logik in `Apex.Simulation` mit NUnit-Tests. Dazu Fahrtests auf der echten Boxengassen-Fläche von `bosphorus_a`, von der Einfahrtsspur bis zum Einfädeln hinter der Ausfahrt.
-- **Darstellung:** gegen die Unity-Referenzen kompiliergeprüft, **im Editor nicht gesehen**. Die Modelle sind als OBJ exportiert und mit three.js gerendert.
-- **Platzhalter-Art:** Die Crew-Modelle sind selbst gebaut und prozedural, nicht fotorealistisch. Sie bestehen aus starren Körperteilen an einem einfachen Skelett, ohne Hautverformung.
+- **Implementiert und getestet (Logik):**
+  - Spurplan, Fahrbefehle der KI, Anhalten an der Box, Stoppfenster, sichere Freigabe, Einfädeln, Tempolimit-Kontrolle, Pitwall-Monitore und sitzende Ingenieure.
+  - Alles in `Apex.Simulation` mit NUnit-Tests.
+  - Fahrtests auf der echten Kollisionsfläche von `bosphorus_a`: Einfahrt bis Einfädeln, sowie automatisches Anhalten an Box 1, 5 und 10.
+- **Implementiert, nur kompiliergeprüft:**
+  - Unity-Seite: RaceController, sanftes Ausrichten im VehicleController, Markierungen, Pitwall, Boxengebäude, Anzeigen, HUD-Hinweis.
+  - Gebaut gegen die Unity-Referenzen. **Im Editor nicht gesehen und nicht gefahren.**
+- **Platzhalter-Art:** Alle Modelle sind selbst gebaut und prozedural (Gebäude, Garagen, Pitwall, Personen, Monitore), nicht fotorealistisch. Die Bilder unten sind three.js-Renders bzw. Pläne aus den Daten, keine Spielaufnahmen.
 
-## Änderungen 2026-11-04
-- **Crew:** 14 statt 17 Personen. Je Rad stehen drei, dazu eine Person vorn und eine hinten. Stabilisierer und Freigabe-Mann entfallen, die Freigabe gibt die Ampel.
-- **Modelle:** eigene Crew-Modelle mit Gliedern, Gehzyklus, Knien und Händen an Rad, Schlagschrauber oder Wagenheber.
-- **Einfahrt:**
-  - Eine eigene Einfahrtsspur öffnet sich über 150 m neben der Strecke.
-  - Eine durchgehende weiße Linie an der Streckenkante markiert sie früh.
-- **Ausfahrt:**
-  - Das Tempolimit endet an der Ausfahrtslinie.
-  - Dahinter beschleunigt man auf einer eigenen Spur hinter der Mauer, dann hinter einer weißen Linie, und fädelt erst danach ein.
+## Analyse vorher (Stand PR #33)
+- **Einfahrt:** Die Spur öffnete sich über 150 m neben der Strecke. Die Mauer begann aber erst 10 m nach der Einfahrt, davor gab es weder Sperrfläche noch Anpralldämpfer.
+- **Boxen:** 20 Boxen im Abstand von 9 m. Der Einschwenkweg auf die Boxenlinie führte über die Nachbarbox. Ein dort stehendes Auto oder die bereitstehende Crew lag im Weg.
+- **Anhalten:** „In der Box“ hieß ±2,5 m längs und ±3 m quer. Das Auto blieb stehen, wo es stand, auch schräg; die Crew rückte nach.
+- **Freigabe:** sofort nach der Servicezeit, ohne Blick auf die schnelle Spur.
+- **Ausfahrt:** Beim Einfädeln war das Auto für den Rennverkehr unsichtbar (`inPit`). Weder die KI auf der Strecke noch das ausfahrende Auto achteten aufeinander.
+- **Tempolimit:** Der Begrenzer bremste, Überschreitungen wurden aber nicht erkannt.
+- **Pitwall:** eine dünne Kollisionsfläche bei 2,1 m, ohne sichtbare Mauer, Zaun oder Stände.
+- **Gebäude:** zweistöckiger Riegel mit dunklen Garagennischen, ohne Innenleben.
 
-## Vorher
-- **Vorhanden:** Fahrbahn, Boxenmauer, Boxengebäude mit 20 Garagen, gelbe Boxenrahmen, Ein- und Ausfahrtschilder, der Stopp-Ablauf in `RaceController`.
-- **Fehlte:** Es gab **keine Crew**. Beim Stopp stand das Auto einfach still, bis die Servicezeit um war.
-- **Fehler in der Spurführung:** Automatisch gefahrene Autos fuhren die ganze Boxengasse auf der Linie der Boxen, also durch alle anderen Boxen hindurch.
-
-## Spuren und Markierungen (`PitLaneLayout`, `CircuitBuilder.BuildPitLaneMarkings`)
-- **Aufteilung, gemessen von der Streckenkante:**
+## Spuren und Querschnitt (`PitLaneLayout`)
+- **Querschnitt, gemessen von der Streckenkante:**
 
   | Bereich | Abstand |
   |---|---|
-  | Vorfeld | 0–2 m |
-  | schnelle Spur | 2–5,5 m (Mitte 3,75 m) |
-  | Arbeitsspur mit den Boxen | ab 5,5 m (Auto in der Box bei 7,5 m) |
-  | Crews | bis zur Garagenfront |
+  | Streifen an der Strecke | 0–0,45 m |
+  | Boxenmauer (Beton, Fangzaun darauf) | 0,45–0,85 m |
+  | Pitwall-Deck mit den Teamständen | 0,85–2,45 m |
+  | schnelle Spur (Fast Lane) | 2,55–5,5 m, Mitte 3,75 m, Asphalt |
+  | Arbeitsspur (Working Lane) | ab 5,5 m, Auto in der Box bei 7,5 m, versiegelter hellerer Belag (`PitWorkLane`) |
+  | Crews | bis zur Garagenfront (15 m) |
 
-- **Fahrweg** (`PitLaneLayout.Route`, gleich für KI, Boxen-Assistent und Fahrtest):
-  - Spätestens 210 m vor der Einfahrt reiht sich das Auto auf der Boxenseite ein. Danach folgt es der Einfahrtsspur, während sie sich öffnet, und bremst auf das Limit.
-  - In der Boxengasse fährt es auf der schnellen Spur. 28 m vor der eigenen Box biegt es in die Arbeitsspur ein. Nach dem Stopp fährt es über 24 m zurück auf die schnelle Spur.
-  - Ab der Ausfahrtslinie beschleunigt es in der Spur. Auf den letzten bis zu 80 m wechselt es hinter der weißen Linie auf die Strecke. Das ist `Plan.MergeStart` bis `Plan.MergeEnd`, und dort endet der Boxenstopp.
-- **Spurplan** (`PitLaneLayout.Plan`, Meter ab der Einfahrt):
+- **Spurplan** (`PitLaneLayout.Plan`, Meter ab der Einfahrt, Werte für Bosphorus):
 
   | Abschnitt | Bereich | Abgrenzung zur Strecke |
   |---|---|---|
-  | Einfahrtsspur | −150 … 0 m (`entry_taper`), Breite wächst weich auf 13,5 m | durchgehende weiße Linie an der Streckenkante |
-  | Boxenmauer | 10 m … Ausfahrtslinie + 10 m | Mauer |
-  | Tempolimit | 15 m … Ausfahrtslinie (`limit_end`, sonst `exit`) | weiße Querlinien |
-  | Beschleunigungsspur | Ausfahrtslinie … Ende der Boxengasse + `exit_taper` | erst Mauer, dann weiße Linie |
+  | Einfahrtsspur zweigt ab | −150 … 0 m, die Fläche wächst weich auf 13,5 m | durchgehende weiße Linie an der Streckenkante, dann Sperrfläche (weiße Schrägstriche) zwischen Linie und Spurbegrenzung |
+  | Anpralldämpfer | −35 … −30 m | gelb-schwarz, vor dem Mauerkopf |
+  | Boxenmauer | −30 m … Ausfahrtslinie + 10 m | Mauer mit Fangzaun |
+  | Tempolimit | 15 m … Ausfahrtslinie (280 m) | weiße Querlinien, „80“ und „END“ auf dem Asphalt |
+  | Boxen | 10 Boxen, 80 … 233 m, Abstand 17 m | – |
+  | Beschleunigungsspur | 280 … 333 m in der Spur | bis 290 m Mauer, dann Spurbegrenzung, Sperrfläche und weiße Linie |
+  | Einfädeln | 333 … 413 m | gestrichelte Kantenlinie |
 
-- **Bosphorus (`bosphorus_a`):**
-  - Hinter dem Ende der Boxengasse (Runde ~520 m) läuft die Strecke nach 1–3 m wieder zurück. Dort ist kein Platz für eine Spur.
-  - Deshalb liegt die Ausfahrtslinie bei 400 m (`limit_end`), 120 m vor dem Ende, und `exit_taper` ist 20 m.
-  - Man beschleunigt in der Boxengasse: 10 m hinter der Mauer, dann hinter der weißen Linie, und ist bei ~533 m auf der Strecke.
-  - Die Werte stehen in `build_track_a.py` und in beiden JSON-Dateien. Ohne `limit_end` gilt der allgemeine Fall: Ausfahrtslinie am Ende, Spur 170 m danach.
-- **Fahrbahn** (`RoadSurface.pitWidth`):
-  - Vorfeld und Spur sind so breit wie der Boxenbereich an der jeweiligen Stelle.
-  - Neben der Einfahrts- und Ausfahrtsspur rückt die Barriere nach außen, der Auslauf beginnt erst an der Spurkante.
-- **Spielerin oder Spieler ohne Assistent:**
-  - Der Stopp gilt als begonnen, sobald man über die weiße Einfahrtslinie fährt; dann ist man nicht mehr in den Tracklimits.
-  - Der Begrenzer greift erst an der Linie bei 15 m.
-  - Hinter der Ausfahrtslinie ist er aus, mit der Meldung „Begrenzer aus – Ausfahrt“.
-- **Markierungen:**
-  - Weiße Trennlinie zwischen den Spuren, so weit die Boxenmauer reicht.
-  - Weiße Querlinien bei Beginn und Ende des Tempolimits.
-  - Weiße Einfahrts- und Ausfahrtslinie an der Streckenkante.
-  - Ein Streifen in der Teamfarbe am Garagenende jeder Box (Box b gehört Team b/2).
-  - Schilder: „PİT GİRİŞİ“ 60 m vor dem Beginn der Einfahrtsspur, „PİT 80 km/h“ an der Limitlinie, „PİT ÇIKIŞI“ an der Ausfahrtslinie.
-- **Tests:**
-  - `RoadSurfaceDriveTests.F_PitLaneIsDrivableEntryToExit`: erste, mittlere und letzte Box, von 210 m vor der Einfahrt bis nach dem Einfädeln, ohne Kontakt.
-    - 30 m hinter der Ausfahrtslinie noch in der Spur.
-    - Vor dem Einfädeln mehr als das 1,4-Fache des Limits; gemessen 199 km/h bei allen drei Boxen.
-  - `PitCrewTests.EntryAndExitLanesLeadSmoothlyFromAndBackToTheTrack`: allgemeiner Fall und Bosphorus-Fall. Keine Sprünge im Fahrweg, mindestens 100 m von der Ausfahrtslinie bis zur Strecke, kein Einfädeln durch die Mauer.
-  - `PitCrewTests.CarsUseTheFastLaneAndTurnInOnlyForTheirBox`.
+- **Geometrie:**
+  - Der Weg von der Strecke in die Spur ist eine weiche S-Kurve: 5,35 m Versatz auf 150 m. Seitlich höchstens 0,054 m je Meter, es gibt also keine abrupte Richtungsänderung.
+  - Die Spur liegt im Streckenrahmen neben der Start-Ziel-Geraden. Die Lage der realen Straßen bleibt unverändert, es wurde nichts verschoben.
+- **Bosphorus-Besonderheit:**
+  - Hinter dem Ende der Boxenfläche (Runde ~520 m) läuft die Strecke nach 1–3 m wieder zurück. Eine Spur hinter der Boxenfläche hätte Fahrbahn und Barriere der Gegenrichtung überdeckt; das war ein geprüfter, verworfener Versuch.
+  - Deshalb liegt die Ausfahrtslinie 120 m vor dem Ende der Fläche. Man beschleunigt in der Spur selbst, erst hinter der Mauer, dann hinter der weißen Linie, und fädelt vor dem Ende ein.
+  - Im Fahrtest erreicht das Auto bis zum Einfädeln 199 km/h.
+- **Eine Box pro Team** (wie im Reglement, `box_count` 10, `box_spacing` 17 m):
+  - Bei 9 m Abstand war kein Einschwenken möglich, ohne über die Nachbarbox zu fahren. Ein F1-Auto braucht für 3,75 m Versatz mit vernünftigem Radius rund 15–18 m.
+  - Teamkollegen stapeln sich: Das zweite Auto wartet 8 m hinter der Box, bis das erste weg ist.
+  - Andere Strecken behalten 20 Boxen (Standard `box_count` = 20).
+- **Fahrweg** (`PitLaneLayout.Drive`, gleich für KI, Boxen-Assistent und Fahrtest):
+  - Bremsen auf das Limit bis zur Limitlinie.
+  - Schnelle Spur, 40 m vor der Box Einschwenken, die letzten 12 m gerade auf der Boxenlinie.
+  - Anhalteprofil mit 3,2 m/s², auf dem letzten Meter Kriechtempo, Vollbremsung auf der Marke.
+  - Nach dem Stopp über 24 m zurück auf die schnelle Spur, dann Ausfahrt.
+
+## Markierungen (`CircuitBuilder.BuildBoxMarkings`, `BuildPitLaneMarkings`)
+- **Je Box**, nach der echten Fahrzeuggeometrie (`VehicleSetup`: Achsen und Spurweiten, die gleichen Zahlen wie die Crew):
+  - gelber Boxenrahmen 7,2 × 3,6 m
+  - weiße Marken an den vier Reifenpositionen und ein Stoppbalken vor jedem Vorderrad
+  - gestrichelte Führungslinie in Teamfarbe zur Boxenmitte
+  - Boxnummer groß auf dem Asphalt, Teamstreifen am Garagenende
+- **Spur:**
+  - Trennlinie zwischen Fast Lane und Working Lane
+  - Einfahrts- und Ausfahrtslinie, Spurbegrenzung, Sperrflächen-Chevrons
+  - Limitlinien, „PIT“, „80“ und „END“ in einer eigenen 5×7-Pixelschrift (`Apex.UI.PixelFont`)
+- **Schilder** (zweisprachig Englisch/Türkisch):
+  - „PIT ENTRY / PİT GİRİŞİ“ 60 m vor dem Abzweig
+  - Countdown-Tafeln „PIT 150 / 100 / 50“
+  - „PIT LIMIT 80 / HIZ SINIRI“ an der Limitlinie
+  - „PIT EXIT / PİT ÇIKIŞI“ an der Ausfahrtslinie
+  - „PADDOCK · PADOK“ an den Gebäudeenden
+- **Eigener Boxenplatz:** Solange der Stopp angefordert ist, leuchtet ein cyanfarbener Rahmen auf der eigenen Box, darüber dreht sich ein Pfeil.
+
+![Boxengasse Bosphorus – Lageplan aus PitLaneLayout, schematisch, keine Spielaufnahme](img/pit_lane_plan.png)
+
+## Anhalten an der Box (`PitBoxStop`)
+- **Stoppfenster**, in dem die Crew das Auto annimmt: längs ±0,5 m, quer ±0,35 m, schräg ±5°.
+  - Erst dann beginnt die Servicezeit und das Auto wird angehoben.
+- **Automatisch** (KI und Boxen-Assistent):
+  - Fahrtest auf der echten Fläche, Ergebnis an Box 1, 5 und 10 jeweils:
+    - längs 4 cm vor der Mitte
+    - quer 2–10 cm neben der Linie
+    - 0,7–2,4° schräg
+- **Von Hand:**
+  - Der HUD-Hinweis zeigt zuerst Box und Entfernung, auf den letzten Metern dann den Rest und die Korrektur. Beispiele: „BOX 3 · noch 3,2 m · 0,6 m nach links“, „BOX 3 · STOPP · mittig“.
+  - Einparkhilfe (Einstellung „Einparkhilfe Box“, Standard an): Steht das Auto innerhalb von 1,2 m längs, 0,7 m quer und 12°, schiebt die Crew es auf die Marken.
+  - Die Bewegung dauert 0,35–1,8 s, weich beschleunigt und gebremst (`VehicleController.GuideTo`, kinematisch, nur waagrecht und Gierwinkel). Keine Teleportation.
+  - Ohne Einparkhilfe muss man selbst ins Fenster fahren.
+  - Bis 2,5 m zu weit schiebt die Crew das Auto immer zurück („Zu weit – die Crew schiebt zurück“). Noch weiter gilt die Box als verpasst.
+- **Box belegt:** Steht der Teamkollege auf der Box, wartet das Auto 8 m dahinter. Für Spieler zeigt der Hinweis „BOX n belegt – dahinter warten“.
+- **Sichere Freigabe:** Nach der Servicezeit bleibt die Ampel rot, solange ein Auto auf der schnellen Spur gleich vorbeikommt. Das ist der Fall von 7 m daneben bis 10 m + 2,2 s Fahrt dahinter. Der Hinweis lautet dann „Freigabe wartet – Verkehr“.
+- **Einfädeln:**
+  - Ab der Mauer sieht der Rennverkehr das ausfahrende Auto (`inPit` endet dort), die KI hält seitlich Abstand.
+  - Das ausfahrende Auto wartet in der Spur, bis niemand daneben ist oder schnell von hinten kommt. Es nimmt dabei Gas weg.
+  - Spätestens 30 m nach dem geplanten Einfädelpunkt fädelt es ein, solange die Spur noch breit genug ist.
+- **Tempolimit:**
+  - Der Begrenzer greift ab der Linie bei 15 m.
+  - Wer mehr als 0,3 m/s über dem Limit länger als 0,25 s fährt, bekommt eine Zeitstrafe. Sie ist einstellbar (`RaceRules.pitSpeedingPenalty`, Standard 5 s) und wird einmal je Durchfahrt verhängt.
+  - Das Limit selbst kommt aus der Strecke (`speed_limit_kmh`, 80).
+  - Eine LED-Anzeige 25 m nach der Linie zeigt die Geschwindigkeit des einfahrenden Autos, rot bei Überschreitung.
+- **Boxenausfahrt-Ampel:** rot, bis die Autos fahren dürfen; danach grün.
+
+## Pitwall (`PitWallBuilder`, `PitWallGeometry`, `PitWallComponent`, `PitWallDisplay`)
+- **Mauer:**
+  - Beton mit türkisfarbener Kappe
+  - Sponsortafeln der fiktiven Marken aus dem Strecken-Kit auf der Streckenseite
+  - Fangzaun 2,85 m über der Mauer
+  - gelb-schwarzer Anpralldämpfer vor dem Kopf
+  - Kollisionskörper als geschlossener Block aus `RoadSurface`
+- **Ein Stand je Team**, gegenüber der eigenen Garage, 6 m lang, mit Kollider:
+  - erhöhter Boden, Pult mit zwei Reihen Monitoren
+  - Status-LEDs und Kabelstränge
+  - vier Hocker mit Fußstütze
+  - Dach in Teamfarbe mit weißem Streifen, beleuchteter Unterseite und einem geometrischen Teamzeichen (keine echten Logos)
+- **Renningenieure** (vier je Stand):
+  - Hemd in Teamfarbe, Kopf mit Headset und Mikrofon
+  - Sitzpose `PitCrewFigure.SolveSeated`: Hände auf der Tastatur mit leichtem Tippen, langsames Umschauen zwischen Monitoren und Strecke
+  - Ab und zu eine Hand am Headset und Nicken beim Funken
+  - Instanziert gezeichnet, nur bis 160 m Entfernung.
+- **Live-Monitore:** Eine 256×128-Textur wird zweimal pro Sekunde aus den Renndaten gezeichnet:
+  - **Zeiten:** Positionen, Kürzel, Teamfarben, Abstände, BOX-Markierung, Sektorfarben
+  - **Telemetrie:** Geschwindigkeitsverlauf des Spielerautos, Gas und Bremse
+  - **Reifen:** Mischung, Verschleiß, Stopps
+  - **Wetterradar:** Regenzellen nach Regenstärke, Streckennässe
+  - Die gleiche Textur liegt auf den Garagen-Monitoren und den zwei großen LED-Leinwänden auf dem Dach.
+
+![Pitwall-Monitore mit Beispieldaten (PitWallDisplay, eigene Pixelschrift) – keine Spielaufnahme](img/pitwall_screens.png)
+
+![Pitwall-Stand mit Renningenieuren (three.js-Render der Platzhalter-Modelle) – keine Spielaufnahme](img/pitwall_stand.png)
+
+## Boxengebäude und Garagen (`EventGeometry.PitBuilding`)
+- **Erdgeschoss:** je Team eine Garage, 16 m breit:
+  - zwei Tore mit Rolltor-Trommeln und Blende in Teamfarbe
+  - beleuchtete Boxnummer
+  - **Innen:**
+    - Epoxid-Boden, Lichtbänder an der Decke
+    - Rückwand in Teamfarbe mit drei Live-Monitoren
+    - Reifenregale an beiden Seiten (Räder in Heizdecken)
+    - zwei Reifenwagen, Werkzeugwagen, Datenstation mit zwei Monitoren und Hocker
+    - Transportkisten, Ersatz-Frontflügel an der Wand
+- **Obergeschoss:**
+  - verglaste Teamsuiten mit Stahlpfosten
+  - Balkon über der Boxengasse mit Glasgeländer
+  - rot-weißes Band, türkisfarbene Balkonkante
+- **Dach:**
+  - Terrasse mit Podium und Pokal (wie bisher)
+  - verglaster VIP-Pavillon auf der Hälfte ohne Podium
+  - zwei LED-Leinwände mit Live-Zeiten
+- **Türkische Identität:**
+  - İznik-Fliesen an den Stirnseiten (wie bisher)
+  - Event-Emblem und „BOSPHORUS GRAND PRIX · ISTANBUL“ (wie bisher)
+  - Je eine große senkrecht hängende türkische Flagge an den Gebäudeenden. Das sind bewusst nur zwei; die Flaggen auf dem Dach gibt es weiterhin.
+  - Zweisprachige Schilder.
+- **Nachts:** Garagenlicht, Boxnummern, Monitore, Pitwall-Dach und LEDs leuchten über Emission. Echte Lichtquellen kamen nicht dazu, aus Rücksicht auf die Leistung.
+- **Wie bisher vorhanden:** Rennleitung („YARIŞ KONTROL“), Zeitturm mit Live-Reihenfolge, Startbrücke mit funktionierenden Startlichtern, Startaufstellung, Haupttribünen an der Start-Ziel-Geraden, TV-Türme, Streckenposten, wehende Event-Flaggen.
+
+![Garagen von der Boxengasse und von innen (three.js-Render der Platzhalter-Modelle) – keine Spielaufnahme](img/pit_garages.png)
+
+## Nicht umgesetzt (offen)
+- **Pit-Lollipop:** Die Freigabe gibt die elektronische Ampel je Box.
+- **Autos in den Garagen** (optional im Brief): nicht gebaut, aus Rücksicht auf die Leistung.
+- **Fotografen und Medienbereich, Kommentatorenkabinen:** nicht eigens gebaut. Vorhanden sind TV-Türme und die Rennleitung.
+- **Begrenzer per Taste:** Der Begrenzer schaltet sich automatisch an der Linie ein. Wer zu schnell ankommt, wird trotzdem bestraft.
+- **Fahrtest mit mehreren Autos gleichzeitig:** Doppelstopp, sichere Freigabe und Einfädeln sind als Logik getestet (`PitBoxStopTests`). Einen Fahrtest mit mehreren Autos auf der Kollisionsfläche gibt es noch nicht; das gehört in den Editor-Test.
 
 ## Boxencrew (`PitCrewChoreography`, `PitCrewFigure`, `PitCrewGeometry`, `PitCrewComponent`)
 - **14 Personen je Box** in der Teamfarbe, eine Crew für jede Box, in der ein Auto der Session steht:
@@ -128,20 +231,34 @@ cd build/Apex.ModelPreview && dotnet run -c Release -- <out> --pitcrew
 Das liefert `pitcrew_stop_<Anteil>.obj` im Box-Rahmen, Boden bei y = 0. Die Bilder entstehen dann mit `tools/carrender` (Materialien `CrewOverall`, `CrewDark`, `CrewHelmet`).
 
 ## Tests
+- `PitBoxStopTests` (7):
+  - Stoppfenster und Einparkhilfe
+  - weiches, kurzes Ausrichten
+  - Anhalteprofil
+  - sichere Freigabe
+  - Einfädeln gegen Rennverkehr
+  - Tempolimit-Strafe einmal je Durchfahrt
+  - HUD-Hinweis
+- `RoadSurfaceDriveTests.H_AutomaticStopHaltsSquareOnTheBoxMarks` (Box 1, 5, 10): von 210 m vor der Einfahrt bis zum Stillstand in der Box, ohne Kontakt, im Stoppfenster.
+- `RoadSurfaceDriveTests.F_PitLaneIsDrivableEntryToExit` (Box 1, 6, 10): bis nach dem Einfädeln, Beschleunigung in der Ausfahrtsspur.
 - `PitCrewTests` (6):
   - Spuren, Einfahrt und Ausfahrt (2 Fälle)
-  - niemand auf der schnellen Spur, in allen Phasen
-  - richtige Reihenfolge innerhalb der Servicezeit, auch bei langen Stopps
-  - Wege frei vor der Ankunft, Crew danach zurück an der Garage
-- `PitCrewFigureTests` (6):
-  - 14 Personen, 3 je Rad, 1 vorn, 1 hinten
-  - **Skelett:** Gelenke verbunden, Achsen orthonormal. Füße nie unter dem Boden, Kopf über der Hüfte; geprüft für jede Rolle, Phase und Zeit.
-  - **Schlagschrauber:** kniet, Knie unten, Hände am Schlagschrauber an der Nabe.
-  - **Rad drauf:** Hände am Felgenrand, das Rad sitzt am Ende auf der Nabe.
-  - **Laufen:** wechselnde Schritte; im Stand stehen die Füße nebeneinander.
-  - **Wagenheber:** Griff unten, solange das Auto angehoben ist.
-- `RoadSurfaceDriveTests.F_PitLaneIsDrivableEntryToExit` (Boxen 0, 10, 19).
-- **Werkzeug:** `cd build/Apex.Tuning && dotnet run -c Release -- pitcrew` liefert die Positionen als CSV.
+  - niemand auf der schnellen Spur
+  - Reihenfolge innerhalb der Servicezeit
+  - Wege frei
+- `PitCrewFigureTests` (7):
+  - 14 Personen
+  - Skelett in allen Rollen und Phasen
+  - Schlagschrauber, Radträger, Laufen, Wagenheber
+  - sitzender Renningenieur (Hände auf der Tastatur, Füße auf der Stütze)
+- `PitWallDisplayTests` (2):
+  - Inhalt aller vier Monitorbereiche
+  - Pixelschrift mit den zweisprachigen Schildern
+- `EnvironmentTests.BosphorusEventStructuresFitBesideTheTrack`: eine Garage je Box.
+- **Werkzeuge:**
+  - `cd build/Apex.Tuning && dotnet run -c Release -- pitcrew` (Positionen als CSV)
+  - `… -- pitwall-screen <out.ppm> [Regen]` (Monitorbild)
+  - `cd build/Apex.ModelPreview && dotnet run -c Release -- <out> --pitcrew | --pitwall` (OBJ für `tools/carrender`)
 
 ## Im Editor zu prüfen
 - Ein Rennen mit Pflichtstopp und Boxen-Assistent, Stopp mit P anfordern.
@@ -159,3 +276,13 @@ Das liefert `pitcrew_stop_<Anteil>.obj` im Box-Rahmen, Boden bei y = 0. Die Bild
   - Sind die weißen Linien gut sichtbar?
   - Steht die Barriere neben der Einfahrtsspur richtig?
   - Fühlt sich das Beschleunigen hinter der Ausfahrtslinie bis zum Einfädeln gut an (Bosphorus ~133 m)?
+- **Box anfahren von Hand:**
+  - Stimmen Hinweis und Rahmen?
+  - Fühlt sich das Ausrichten der Crew natürlich an? Ruckelt der kinematische Schub nicht?
+  - Kommt die Strafe, wenn man zu schnell über die Linie fährt?
+- **Pitwall:**
+  - Sind die Monitore lesbar?
+  - Sitzen die Ingenieure richtig auf den Hockern?
+  - Wie viele Draw Calls entstehen nahe der Start-Ziel-Geraden?
+- **Garagen bei Nacht:** Wirken Licht und Emission gut, ohne Überstrahlen?
+- **Doppelstopp und Freigabe im Rennen mit vielen KI-Autos:** Gibt es Staus oder Kontakte in der schnellen Spur?

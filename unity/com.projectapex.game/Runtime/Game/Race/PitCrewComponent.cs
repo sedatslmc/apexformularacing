@@ -54,6 +54,13 @@ namespace Apex.Game
         readonly Matrix4x4[] wheels = new Matrix4x4[32], guns = new Matrix4x4[8], heads = new Matrix4x4[4], handles = new Matrix4x4[4];
         readonly PitCrewFigure.Frame[] frames = new PitCrewFigure.Frame[PitCrewFigure.PartCount];
         int garageSide;
+        // The player's own box, lit up while a stop is requested or under way (outline on the ground, arrow above).
+        Transform ownMarker, ownArrow;
+        // LED speed display after the limit line (speed of the car coming in, red when too fast) and the pit exit light.
+        TextMesh speedDisplay;
+        float speedDisplayAt;
+        Renderer exitRed, exitGreen;
+        Material lampOff;
         PitCrewChoreography.Car carShape = PitCrewChoreography.Car.Default;
 
         public void Build(CircuitInstance ci)
@@ -90,12 +97,14 @@ namespace Apex.Game
             foreach (var m in new[] { red, green })
                 if (m.HasProperty("_EmissionColor")) { m.EnableKeyword("_EMISSION"); m.SetColor("_EmissionColor", m.GetColor("_BaseColor") * 2.5f); }
 
+            BuildOwnMarker();
+            BuildLaneDisplays(ci);
             var g = ci.Geometry;
-            for (int b = 0; b < 20; b++)
+            for (int b = 0; b < pit.boxCount; b++)
             {
                 float d = g.Wrap(pit.BoxDistance(b));
                 var pose = ci.PoseAt(d, ci.PitLaneLateral(d), 0f);
-                int team = Mathf.Min(b / 2, Roster.Teams.Length - 1);
+                int team = pit.TeamOfBox(b, Roster.Teams.Length);
                 var tc = Roster.Teams[team];
                 var box = new Box
                 {
@@ -151,9 +160,130 @@ namespace Apex.Game
             return mesh;
         }
 
+        void BuildOwnMarker()
+        {
+            var cyan = new Material(EnvironmentMaterials.Solid(new Color(0f, 0.83f, 1f))) { name = "OwnBoxMarker" };
+            cyan.EnableKeyword("_EMISSION");
+            if (cyan.HasProperty("_EmissionColor")) cyan.SetColor("_EmissionColor", new Color(0f, 0.83f, 1f) * 2.2f);
+            var frame = new MeshBuilder();
+            const float hl = 4.0f, hw = 2.1f, lw = 0.18f, y = 0.025f;
+            frame.Box(new Vector3(0f, y, hl), new Vector3(hw * 2f, 0.01f, lw));
+            frame.Box(new Vector3(0f, y, -hl), new Vector3(hw * 2f, 0.01f, lw));
+            frame.Box(new Vector3(hw, y, 0f), new Vector3(lw, 0.01f, hl * 2f));
+            frame.Box(new Vector3(-hw, y, 0f), new Vector3(lw, 0.01f, hl * 2f));
+            ownMarker = MakeObject(frame.ToMesh("OwnBoxFrame"), cyan, "OwnBox");
+            var arrow = new MeshBuilder();
+            arrow.Box(new Vector3(-0.32f, 0.35f, 0f), new Vector3(0.18f, 0.9f, 0.18f), Quaternion.Euler(0f, 0f, 35f));
+            arrow.Box(new Vector3(0.32f, 0.35f, 0f), new Vector3(0.18f, 0.9f, 0.18f), Quaternion.Euler(0f, 0f, -35f));
+            ownArrow = MakeObject(arrow.ToMesh("OwnBoxArrow"), cyan, "OwnBoxArrow");
+            ownMarker.gameObject.SetActive(false);
+            ownArrow.gameObject.SetActive(false);
+        }
+
+        Transform MakeObject(Mesh mesh, Material mat, string name)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            return go.transform;
+        }
+
+        void BuildLaneDisplays(CircuitInstance ci)
+        {
+            var pit = ci.Pit;
+            var g = ci.Geometry;
+            var plan = pit.PlanFor(g.Length);
+            float deck = (PitLaneLayout.WallOuter + PitLaneLayout.DeckOuter) * 0.5f;
+            lampOff = new Material(EnvironmentMaterials.Solid(new Color(0.06f, 0.06f, 0.07f))) { name = "PitLampOff" };
+            // Speed display on a post on the deck, 25 m after the limit line, facing the cars coming in.
+            speedDisplayAt = g.Wrap(pit.entry + PitLaneLayout.LimiterStart + 25f);
+            var pose = ci.PoseAt(speedDisplayAt, pit.side * (g.WidthAt(speedDisplayAt) * 0.5f + deck), 0f);
+            var housing = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Destroy(housing.GetComponent<Collider>());
+            housing.name = "PitSpeedDisplay";
+            housing.transform.SetParent(transform, false);
+            housing.transform.SetPositionAndRotation(pose.position + Vector3.up * 2.4f, pose.rotation);
+            housing.transform.localScale = new Vector3(1.3f, 0.7f, 0.12f);
+            housing.GetComponent<Renderer>().sharedMaterial = lampOff;
+            var font = CircuitBuilder.BuiltinFont();
+            if (font != null)
+            {
+                var tgo = new GameObject("PitSpeedDigits");
+                tgo.transform.SetParent(transform, false);
+                // TextMesh reads from its −z side: turn it to face the cars coming in (−z of the lane frame).
+                tgo.transform.SetPositionAndRotation(pose.position + Vector3.up * 2.4f - pose.rotation * Vector3.forward * 0.07f, pose.rotation);
+                speedDisplay = tgo.AddComponent<TextMesh>();
+                speedDisplay.font = font;
+                speedDisplay.fontSize = 64;
+                speedDisplay.characterSize = 0.08f;
+                speedDisplay.anchor = TextAnchor.MiddleCenter;
+                speedDisplay.GetComponent<MeshRenderer>().sharedMaterial = font.material;
+            }
+            // Pit exit light at the exit line: red until the cars may leave, green after.
+            float dx = g.Wrap(pit.entry + plan.limitSpan);
+            var ep = ci.PoseAt(dx, pit.side * (g.WidthAt(dx) * 0.5f + deck), 0f);
+            Renderer Lamp(float y)
+            {
+                var l = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                Destroy(l.GetComponent<Collider>());
+                l.name = "PitExitLight";
+                l.transform.SetParent(transform, false);
+                l.transform.SetPositionAndRotation(ep.position + Vector3.up * y, ep.rotation);
+                l.transform.localScale = new Vector3(0.4f, 0.4f, 0.15f);
+                var r = l.GetComponent<Renderer>();
+                r.sharedMaterial = lampOff;
+                r.shadowCastingMode = ShadowCastingMode.Off;
+                return r;
+            }
+            exitRed = Lamp(2.9f);
+            exitGreen = Lamp(2.4f);
+        }
+
+        void UpdateLaneDisplays()
+        {
+            if (exitRed != null)
+            {
+                bool open = race.Started && race.Director.CarsMayMove;
+                exitRed.sharedMaterial = open ? lampOff : red;
+                exitGreen.sharedMaterial = open ? green : lampOff;
+            }
+            if (speedDisplay == null) return;
+            // The nearest car in the pit lane coming towards the display.
+            var g = race.Circuit.Geometry;
+            float best = float.MaxValue, speed = -1f;
+            foreach (var rc in race.Cars)
+            {
+                if (rc.removed || !rc.pit.InPitLane) continue;
+                float ahead = ApexMath.PosMod(speedDisplayAt - rc.raw, g.Length);
+                if (ahead < 70f && ahead < best) { best = ahead; speed = rc.Sim.ForwardSpeed; }
+            }
+            float limit = race.Circuit.Pit.SpeedLimit;
+            speedDisplay.text = speed < 0f ? "" : (speed * 3.6f).ToString("0");
+            speedDisplay.color = speed > limit + PitSpeedMonitor.Tolerance ? new Color(1f, 0.15f, 0.1f) : new Color(0.2f, 1f, 0.4f);
+        }
+
+        void UpdateOwnMarker()
+        {
+            var p = race.Player;
+            bool show = p != null && !p.removed && p.boxIndex >= 0 && p.boxIndex < boxes.Count
+                        && (p.pit.stage == PitState.Stage.Requested || (p.pit.stage == PitState.Stage.InLane && !p.pit.settling));
+            ownMarker.gameObject.SetActive(show);
+            ownArrow.gameObject.SetActive(show);
+            if (!show) return;
+            var bx = boxes[p.boxIndex];
+            ownMarker.SetPositionAndRotation(bx.position, bx.rotation);
+            float bob = Mathf.Sin(Time.time * 3f) * 0.15f;
+            ownArrow.SetPositionAndRotation(bx.position + Vector3.up * (3.2f + bob), Quaternion.Euler(0f, Time.time * 60f, 0f));
+        }
+
         void Update()
         {
             if (race == null || boxes.Count == 0) return;
+            UpdateOwnMarker();
+            UpdateLaneDisplays();
             float dt = Time.deltaTime;
             var cam = Camera.main;
             var camPos = cam != null ? cam.transform.position : Vector3.zero;
@@ -229,7 +359,8 @@ namespace Apex.Game
             var vis = rc.car != null ? rc.car.GetComponent<CarVisuals>() : null;
             bool off = box.phase == PitCrewChoreography.Phase.Service && PitCrewChoreography.WheelOffHub(box.t, box.service, box.changeTyres);
             if (vis != null) for (int w = 0; w < 4; w++) vis.SetWheelHidden(w, off);
-            bool greenNow = box.phase == PitCrewChoreography.Phase.Service ? PitCrewChoreography.ReleaseGreen(box.t, box.service) : box.phase != PitCrewChoreography.Phase.Ready;
+            // Red while the car must stay (also when the release is held for traffic in the fast lane), green on release.
+            bool greenNow = box.phase == PitCrewChoreography.Phase.Service ? PitCrewChoreography.ReleaseGreen(box.t, box.service) && !ps.releaseHeld : box.phase != PitCrewChoreography.Phase.Ready;
             if (greenNow != box.lampGreen) { box.lampGreen = greenNow; box.lamp.sharedMaterial = greenNow ? green : red; }
         }
 

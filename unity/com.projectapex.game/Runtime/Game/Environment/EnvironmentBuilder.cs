@@ -1012,7 +1012,7 @@ namespace Apex.Game
             var pit = ci.Pit;
             float side = pit.side;
             var parts = new PartSet();
-            float d0 = pit.BoxDistance(0) - 20f, d1 = pit.BoxDistance(19) + 20f;
+            float d0 = pit.BoxDistance(0) - 20f, d1 = pit.LastBox + 20f;
             // Paved paddock strip behind the garages, with a low skirt down to the terrain.
             for (float d = d0; d < d1; d += 4f)
             {

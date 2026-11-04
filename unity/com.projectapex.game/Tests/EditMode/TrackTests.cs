@@ -141,7 +141,7 @@ namespace Apex.Tests
             }
             Assert.That(def.pit, Is.Not.Null);
             Assert.That(def.pit.Contains(def.startLineDistance, g.Length), Is.True, "pit lane alongside the line");
-            Assert.That(def.pit.BoxDistance(19) - def.pit.BoxDistance(0), Is.LessThan(def.pit.exit - def.pit.entry - 60f), "20 boxes fit");
+            Assert.That(def.pit.LastBox - def.pit.BoxDistance(0), Is.LessThan(def.pit.exit - def.pit.entry - 60f), "the boxes fit");
         }
 
         [Test]
