@@ -99,6 +99,21 @@ namespace Apex.Core
         public bool motionBlur = true;
         /// <summary>Main menu in front of the real Istanbul scene (PC; built behind the boot overlay).</summary>
         public bool menuBackdrop = true;
+        /// <summary>Opening intro: 0 the first time only, 1 at every start, 2 never.</summary>
+        public int introMode;
+        /// <summary>The opening intro has been shown once.</summary>
+        public bool introSeen;
+        /// <summary>Race start presentation (camera shots before the grid); time trial and practice get a short one.</summary>
+        public bool raceIntro = true;
+        /// <summary>UI sound volume (menus, confirmations), separate from the master and music volume.</summary>
+        public float uiVolume = 0.8f;
+        /// <summary>Display (desktop): 0 exclusive full screen, 1 borderless full screen, 2 window.</summary>
+        public int displayMode = 1;
+        /// <summary>Index into the screen's resolutions (-1 = native / current).</summary>
+        public int resolutionIndex = -1;
+        public bool vsync = true;
+        /// <summary>Frame rate cap (0 = none; used when VSync is off, and always on mobile).</summary>
+        public int fpsLimit = 0;
         /// <summary>URP post-processing (tonemapping, colour grade, bloom, FXAA); only offered with URP.</summary>
         public bool postProcessing = true;
         /// <summary>A/B comparison: the player's car uses the setup and input from before the October 2026

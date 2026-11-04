@@ -63,7 +63,8 @@ namespace Apex.Game
             UiPalette.Current = UiPalette.For((ColourVision)Settings.colourVision);
             UiPalette.HighContrast = Settings.highContrast;
             ApexUi.TextScale = Settings.uiTextScale;
-            if (uiSounds != null) uiSounds.volume = Settings.masterVolume;
+            if (uiSounds != null) uiSounds.volume = Settings.masterVolume * Settings.uiVolume;
+            ApplyDisplay();
             if (menuMusic != null) menuMusic.volume = Settings.musicVolume * Settings.masterVolume;
             // Rebuild open screens in the new language once; the HUD (labels built once) only outside a session.
             if (appliedLanguage >= 0 && appliedLanguage != Settings.language && settingsView != null && settingsView.Visible) ShowSettingsView();
@@ -85,7 +86,9 @@ namespace Apex.Game
             if (label.StartsWith("HUD") || label.StartsWith("Geschwindigkeit")) return SettingsCategory.Hud;
             if (label.StartsWith("Reduzierte") || label.StartsWith("Sprache") || label.StartsWith("Farbsehen") || label.StartsWith("Hoher Kontrast") || label.StartsWith("Textgröße"))
                 return SettingsCategory.Accessibility;
-            if (label.StartsWith("Lautstärke") || label.StartsWith("Musik")) return SettingsCategory.Audio;
+            if (label.StartsWith("Lautstärke") || label.StartsWith("Musik") || label.StartsWith("UI-Lautstärke")) return SettingsCategory.Audio;
+            if (label.StartsWith("Intro") || label.StartsWith("Rennstart") || label.StartsWith("Einparkhilfe") || label.StartsWith("Boxen-Assistent")) return SettingsCategory.Gameplay;
+            if (label.StartsWith("Auflösung") || label.StartsWith("Anzeigemodus") || label.StartsWith("VSync") || label.StartsWith("Bildrate")) return SettingsCategory.Graphics;
             if (label.StartsWith("Grafik") || label.StartsWith("Menükulisse") || label.StartsWith("Umgebung") || label.StartsWith("Straßen") || label.StartsWith("Nachbearbeitung") || label.StartsWith("Bewegungsunschärfe"))
                 return SettingsCategory.Graphics;
             return SettingsCategory.Driving;

@@ -95,12 +95,12 @@ namespace Apex.UI
         public const float PodiumSeconds = 4f;
     }
 
-    public enum SettingsCategory { Graphics, Controls, Driving, Audio, Hud, Accessibility }
+    public enum SettingsCategory { Graphics, Controls, Driving, Audio, Hud, Accessibility, Gameplay }
 
     public static class SettingsCatalog
     {
         public static readonly SettingsCategory[] All =
-            { SettingsCategory.Graphics, SettingsCategory.Controls, SettingsCategory.Driving, SettingsCategory.Audio, SettingsCategory.Hud, SettingsCategory.Accessibility };
+            { SettingsCategory.Graphics, SettingsCategory.Audio, SettingsCategory.Controls, SettingsCategory.Driving, SettingsCategory.Gameplay, SettingsCategory.Hud, SettingsCategory.Accessibility };
 
         public static string Name(SettingsCategory c)
         {
@@ -108,7 +108,8 @@ namespace Apex.UI
             {
                 case SettingsCategory.Graphics: return Loc.T("Grafik");
                 case SettingsCategory.Controls: return Loc.T("Steuerung");
-                case SettingsCategory.Driving: return Loc.T("Fahrverhalten");
+                case SettingsCategory.Driving: return Loc.T("Fahrhilfen");
+                case SettingsCategory.Gameplay: return Loc.T("Gameplay");
                 case SettingsCategory.Audio: return Loc.T("Audio");
                 case SettingsCategory.Hud: return Loc.T("HUD");
                 default: return Loc.T("Barrierefreiheit");
@@ -119,10 +120,11 @@ namespace Apex.UI
         {
             switch (c)
             {
-                case SettingsCategory.Graphics: return Loc.T("Qualitätsstufe, Umgebung, Effekte");
+                case SettingsCategory.Graphics: return Loc.T("Auflösung, Anzeige, Qualitätsstufe, Umgebung, Effekte");
+                case SettingsCategory.Gameplay: return Loc.T("Intro, Rennstart-Präsentation, Boxenstopp");
                 case SettingsCategory.Controls: return Loc.T("Eingabegerät, Neigung, Touch-Tasten");
                 case SettingsCategory.Driving: return Loc.T("Fahrhilfen und Fahrprofil");
-                case SettingsCategory.Audio: return Loc.T("Lautstärke von Spiel und Musik");
+                case SettingsCategory.Audio: return Loc.T("Lautstärke von Spiel, Musik und Menü-Klängen");
                 case SettingsCategory.Hud: return Loc.T("Preset, Größe, Einheiten");
                 default: return Loc.T("Bewegung, Text, Kontrast, Farben, Sprache");
             }

@@ -79,7 +79,21 @@ namespace Apex.Game
         /// <summary>Pit area width from the track edge to the outer pit wall.</summary>
         internal const float PitOuter = RoadSurface.PitOuter;
 
+        /// <summary>Builds a circuit in one go (menu backdrop, tools).</summary>
         public static CircuitInstance Build(CircuitDefinition def, Transform parent = null)
+        {
+            CircuitInstance result = null;
+            var it = BuildSteps(def, parent, ci => result = ci, null);
+            while (it.MoveNext()) { }
+            return result;
+        }
+
+        /// <summary>
+        /// Builds a circuit in stages, yielding after each so a loading screen can draw its real progress:
+        /// <paramref name="stageDone"/> gets the stage id (Apex.UI.LoadingModel.SessionStages: geometry, surface, pit,
+        /// terrain, event, infrastructure, environment).
+        /// </summary>
+        public static System.Collections.IEnumerator BuildSteps(CircuitDefinition def, Transform parent, Action<CircuitInstance> done, Action<string> stageDone)
         {
             var root = new GameObject("Circuit_" + def.id);
             if (parent) root.transform.SetParent(parent, false);
@@ -100,6 +114,8 @@ namespace Apex.Game
             var plan = new TrackInfrastructurePlan(g, ci.Corners, line.offsets, line.speed);
             ci.Infrastructure = plan;
             TrackInfrastructureBuilder.EnsureMaterials();
+            stageDone?.Invoke("geometry");
+            yield return null;
 
             // All drivable surfaces and their colliders come from the one canonical RoadSurface, the same
             // triangles the offline drive tests and the road validation use.
@@ -116,6 +132,8 @@ namespace Apex.Game
             AddSurface(root.transform, surface.skirt, "Ground");
             ci.WallLeft = surface.wallLeft;
             ci.WallRight = surface.wallRight;
+            stageDone?.Invoke("surface");
+            yield return null;
             if (def.pit != null)
             {
                 AddSurface(root.transform, surface.pitApron, "Asphalt");
@@ -123,17 +141,32 @@ namespace Apex.Game
                 // Collision solid only: the visible wall, catch fence, crash cushion and team stands come from PitWallBuilder.
                 AddSurface(root.transform, surface.pitWall, "Wall").GetComponent<MeshRenderer>().enabled = false;
                 BuildPitLane(root.transform, ci);
+                stageDone?.Invoke("pit");
+                yield return null;
             }
             ci.Terrain = new TerrainField(g, def);
             AddSurface(root.transform, surface.BuildTerrain(ci.Terrain), ci.Terrain.land.HasLand ? "FarGround" : "Ground");
             BuildWater(root.transform, ci.Terrain, def);
             BuildStartLine(root.transform, ci);
-            if (EventBrandingBuilder.IsEvent(def)) Dressing("event identity", () => EventBrandingBuilder.Build(ci, root.transform));
+            stageDone?.Invoke("terrain");
+            yield return null;
+            if (EventBrandingBuilder.IsEvent(def))
+            {
+                Dressing("event identity", () => EventBrandingBuilder.Build(ci, root.transform));
+                stageDone?.Invoke("event");
+                yield return null;
+            }
             BuildGrid(root.transform, ci);
             BuildCornerBoards(root.transform, ci);
             Dressing("infrastructure", () => TrackInfrastructureBuilder.Build(ci, root.transform, pitMask));
-            if (def.landMasses.Count > 0) Dressing("environment", () => EnvironmentBuilder.Build(ci, root.transform));
-            return ci;
+            stageDone?.Invoke("infrastructure");
+            yield return null;
+            if (def.landMasses.Count > 0)
+            {
+                Dressing("environment", () => EnvironmentBuilder.Build(ci, root.transform));
+                stageDone?.Invoke("environment");
+            }
+            done?.Invoke(ci);
         }
 
         /// <summary>

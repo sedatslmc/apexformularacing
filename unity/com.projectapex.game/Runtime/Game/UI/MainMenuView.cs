@@ -125,6 +125,104 @@ namespace Apex.Game
             sounds.Play(UiSounds.Cue.Transition);
         }
 
+        // --- Title screen -------------------------------------------------------------------------------------
+
+        VisualElement titleLayer, titlePrompt, titleSweep;
+        readonly List<VisualElement> particles = new List<VisualElement>();
+        float titleTime;
+        public bool TitleActive { get; private set; }
+
+        /// <summary>
+        /// Title screen over the 3D scene ("press any key" / "tap to start"): the APEX logo, the tagline, the pulsing
+        /// prompt, the version, drifting light particles and a light sweep across the logo. Any input dismisses it.
+        /// </summary>
+        public void ShowTitle(string prompt, string version)
+        {
+            titleLayer?.RemoveFromHierarchy();
+            titleLayer = new VisualElement { pickingMode = PickingMode.Ignore };
+            titleLayer.style.position = Position.Absolute;
+            titleLayer.style.left = 0; titleLayer.style.right = 0; titleLayer.style.top = 0; titleLayer.style.bottom = 0;
+            ui.root.Add(titleLayer);
+            var shade = ApexUi.Box(titleLayer, Color.clear);
+            shade.style.position = Position.Absolute;
+            shade.style.left = 0; shade.style.right = 0; shade.style.top = 0; shade.style.bottom = 0;
+            ApexUi.Background(shade, ApexUi.Ramp(ApexUi.C(UiTokens.CarbonBlack), 0.75f, 0.1f, true));
+            var rng = new System.Random(5);
+            particles.Clear();
+            for (int i = 0; i < 26; i++)
+            {
+                var p = ApexUi.Box(titleLayer, ApexUi.C(i % 5 == 0 ? UiTokens.Gold : UiTokens.Cyan, 0.5f));
+                float size = 2f + (float)rng.NextDouble() * 3f;
+                ApexUi.Place(p, (float)rng.NextDouble() * 1920f, 300f + (float)rng.NextDouble() * 700f, size, size);
+                p.userData = (float)rng.NextDouble();
+                particles.Add(p);
+            }
+            var centre = new VisualElement { pickingMode = PickingMode.Ignore };
+            centre.style.position = Position.Absolute;
+            centre.style.left = 0; centre.style.right = 0; centre.style.top = 300;
+            centre.style.alignItems = Align.Center;
+            titleLayer.Add(centre);
+            var logo = new VisualElement { pickingMode = PickingMode.Ignore };
+            logo.style.flexDirection = FlexDirection.Row;
+            centre.Add(logo);
+            ApexUi.Text(logo, "AP", ApexUi.DisplayStrong, 170, ApexUi.C(UiTokens.Ivory), 46f);
+            ApexUi.Text(logo, "E", ApexUi.DisplayStrong, 170, ApexUi.C(UiTokens.Cyan), 46f);
+            ApexUi.Text(logo, "X", ApexUi.DisplayStrong, 170, ApexUi.C(UiTokens.Ivory), 46f);
+            var line = ApexUi.Box(centre, ApexUi.C(UiTokens.Red));
+            line.style.width = 220; line.style.height = 3; line.style.marginTop = 4;
+            ApexUi.Text(centre, TitleScreen.Tagline, ApexUi.BodyStrong, 22, ApexUi.C(UiTokens.Gold), 14f).style.marginTop = 18;
+            titleSweep = ApexUi.Box(titleLayer, Color.clear);
+            ApexUi.Background(titleSweep, ApexUi.Ramp(ApexUi.C(UiTokens.Ivory), 0f, 0.35f));
+            ApexUi.Place(titleSweep, 0, 330, 260, 200);
+            var promptBox = new VisualElement { pickingMode = PickingMode.Ignore };
+            promptBox.style.position = Position.Absolute;
+            promptBox.style.left = 0; promptBox.style.right = 0; promptBox.style.top = 820;
+            promptBox.style.alignItems = Align.Center;
+            titleLayer.Add(promptBox);
+            titlePrompt = ApexUi.Text(promptBox, prompt, ApexUi.BodyStrong, 22, ApexUi.C(UiTokens.Ivory), 8f);
+            var ver = ApexUi.Text(titleLayer, version, ApexUi.Body, UiTokens.Small, ApexUi.C(UiTokens.Steel, 0.7f), 1f);
+            ApexUi.Place(ver, 40, 1030);
+            titleTime = 0f;
+            TitleActive = true;
+            if (menuLayer != null) menuLayer.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>Title screen animation: prompt pulse, particles drifting up, the sweep over the logo.</summary>
+        public void TickTitle(float dt)
+        {
+            if (!TitleActive) return;
+            titleTime += dt;
+            float fadeIn = Mathf.Clamp01(titleTime / 0.6f);
+            titleLayer.style.opacity = fadeIn;
+            titlePrompt.style.opacity = 0.45f + 0.55f * (0.5f + 0.5f * Mathf.Sin(titleTime * 3f));
+            if (!ReducedMotion)
+            {
+                foreach (var p in particles)
+                {
+                    float phase = (float)p.userData;
+                    float y = Mathf.Repeat(phase * 700f + titleTime * (14f + phase * 20f), 700f);
+                    ApexUi.Translate(p, Mathf.Sin(titleTime * 0.5f + phase * 6f) * 20f, -y);
+                    p.style.opacity = Mathf.Sin(y / 700f * Mathf.PI) * 0.8f;
+                }
+                float sweep = Mathf.Repeat(titleTime, 4.5f) / 1.2f;
+                titleSweep.style.opacity = sweep < 1f ? Mathf.Sin(sweep * Mathf.PI) : 0f;
+                ApexUi.Translate(titleSweep, 560f + Mathf.Clamp01(sweep) * 640f, 0f);
+            }
+            else titleSweep.style.opacity = 0f;
+        }
+
+        /// <summary>Leaves the title screen into the main menu (with the confirm sound and the menu's entrance).</summary>
+        public void DismissTitle()
+        {
+            if (!TitleActive) return;
+            TitleActive = false;
+            titleLayer?.RemoveFromHierarchy();
+            titleLayer = null;
+            if (menuLayer != null) menuLayer.style.display = DisplayStyle.Flex;
+            screenTime = 0f;
+            sounds.Play(UiSounds.Cue.Start);
+        }
+
         // --- Main menu ----------------------------------------------------------------------------------------
 
         public void Show(Data d)
@@ -203,6 +301,12 @@ namespace Apex.Game
             ApexUi.Place(items, m, 230, 580, -1);
             menuLayer.Add(items);
             foreach (var e in d.entries) itemViews.Add(BuildItem(e));
+            // Description of the focused entry, under the list.
+            description = ApexUi.Text(items, "", ApexUi.Body, UiTokens.Body, ApexUi.C(UiTokens.Ivory, 0.82f), 0.2f);
+            description.style.whiteSpace = WhiteSpace.Normal;
+            description.style.marginTop = 10;
+            description.style.paddingLeft = 26;
+            description.style.maxWidth = 560;
 
             // Bottom: cards, hints, version.
             var cards = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -221,14 +325,17 @@ namespace Apex.Game
 
             ApplyFocus(true);
             screenTime = 0f;
+            if (TitleActive) menuLayer.style.display = DisplayStyle.None;
         }
+
+        Label description;
 
         ItemView BuildItem(MenuEntry e)
         {
             var v = new ItemView { entry = e };
             v.row = new VisualElement { pickingMode = PickingMode.Position, userData = v };
-            v.row.style.height = e.primary ? 104 : 62;
-            v.row.style.marginBottom = e.primary ? 22 : 6;
+            v.row.style.height = e.primary ? 104 : 52;
+            v.row.style.marginBottom = e.primary ? 18 : 4;
             v.row.style.justifyContent = Justify.Center;
             v.row.style.paddingLeft = 26;
             v.row.style.paddingRight = 20;
@@ -417,6 +524,7 @@ namespace Apex.Game
         void ApplyFocus(bool instant)
         {
             int f = nav.Focus(UiScreen.MainMenu);
+            if (description != null && itemViews.Count > 0) description.text = itemViews[f % itemViews.Count].entry.description;
             for (int i = 0; i < itemViews.Count; i++)
             {
                 var v = itemViews[i];

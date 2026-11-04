@@ -500,6 +500,17 @@ namespace Apex.Tests
                 foreach (ColourVision v in System.Enum.GetValues(typeof(ColourVision))) UiPalette.Name(v);
                 var f = TrackFacts.From(TestData.Circuit("test_loop"), TestData.Geometry("test_loop"), 0); var dir = f.Direction; f.clockwise = !f.clockwise; dir = f.Direction;
                 var pts = new int[Roster.Drivers.Length + 1]; ChampionshipModel.Standings(pts, 3, 0);
+                // Race Control 2.0: loading, title, steps, explanations.
+                foreach (var st in LoadingModel.SessionStages(true, true, true)) { var _ = st.label; }
+                foreach (LoadContext lc in System.Enum.GetValues(typeof(LoadContext))) { LoadingModel.Title(lc, "x"); LoadingModel.Subtitle(lc, "x", 1); }
+                for (int k = 0; k < LoadingModel.Tips.Length; k++) LoadingModel.TipAt(k * 6f, 0);
+                TitleScreen.Prompt(true); TitleScreen.Prompt(false);
+                foreach (var st in RaceSetupFlow.Steps) RaceSetupFlow.Name(st);
+                foreach (var md in RaceSetupFlow.Modes) { RaceSetupFlow.ModeName(md); RaceSetupFlow.ModeDescription(md); }
+                foreach (var o in SetupModel.Options(SetupMode.GrandPrix, c, Tracks, id => id)) RaceSetupFlow.Explain(o.key);
+                RaceSetupFlow.Explain("livery"); RaceSetupFlow.Explain("number");
+                RaceSetupFlow.Summary(SetupMode.GrandPrix, c, "X", "Istanbul", "A01"); RaceSetupFlow.Summary(SetupMode.TimeTrial, c, "X", "", "A01");
+                MainMenuModel.Build(new MenuContext { trackName = "X", laps = 1, careerAvailable = true });
                 Assert.That(Loc.Missing, Is.Empty, string.Join(" | ", Loc.Missing));
                 Assert.That(MainMenuModel.Build(new MenuContext { trackName = "X", laps = 2 })[0].label, Is.EqualTo("Start race"));
             }
