@@ -4,14 +4,14 @@ namespace Apex.Game
 {
     /// <summary>
     /// Follows the car's interpolated transform in LateUpdate. Modes: cockpit/halo
-    /// (primary), T-cam, chase and far chase. The cockpit view keeps the horizon
+    /// (primary), T-cam, chase, far chase and nose (low on the nose ahead of the front axle). The cockpit view keeps the horizon
     /// partly stabilised to reduce motion discomfort.
     /// </summary>
     public sealed class RaceCamera : MonoBehaviour
     {
-        public enum Mode { Cockpit, TCam, Chase, FarChase }
+        public enum Mode { Cockpit, TCam, Chase, FarChase, Nose }
 
-        public static readonly string[] ModeNames = { "Cockpit", "T-Cam", "Verfolger", "Verfolger weit" };
+        public static readonly string[] ModeNames = { "Cockpit", "T-Cam", "Verfolger", "Verfolger weit", "Nase" };
 
         public Transform target;
         public Mode mode = Mode.Cockpit;
@@ -44,6 +44,9 @@ namespace Apex.Game
         }
 
         public void Snap() => initialised = false;
+
+        /// <summary>Nose camera mount in car space (origin at the centre of mass; the nose tip is at z = 2.6).</summary>
+        public static readonly Vector3 NoseEye = new Vector3(0f, 0.16f, 1.75f);
 
         // Start sequence sweep (IntroCamera) and fixed shots (podium).
         float introTime = -1f;
@@ -121,6 +124,16 @@ namespace Apex.Game
                     Vector3 eye = target.TransformPoint(new Vector3(0f, 0.95f, -0.15f));
                     Vector3 up = Vector3.Slerp(target.up, Vector3.up, 0.3f);
                     transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd, up) * Quaternion.Euler(dynamics.Pitch * 0.8f, 0f, 0f));
+                    smoothedForward = flat;
+                    break;
+                }
+                case Mode.Nose:
+                {
+                    if (cam) cam.fieldOfView = 74f + fovGain * 0.8f;
+                    // Low on the nose cone, ahead of the front suspension: the wing endplates frame the road.
+                    Vector3 eye = target.TransformPoint(NoseEye);
+                    Vector3 up = Vector3.Slerp(target.up, Vector3.up, 0.15f);
+                    transform.SetPositionAndRotation(eye, Quaternion.LookRotation(fwd, up) * Quaternion.Euler(dynamics.Pitch * 0.4f, 0f, 0f));
                     smoothedForward = flat;
                     break;
                 }

@@ -69,6 +69,16 @@ namespace Apex.UI
             ["Auflösung, Anzeige, Qualitätsstufe, Umgebung, Effekte"] = "Resolution, display, quality tier, environment, effects",
             ["Intro, Rennstart-Präsentation, Boxenstopp"] = "Intro, race start presentation, pit stop",
             ["Lautstärke von Spiel, Musik und Menü-Klängen"] = "Volume of game, music and menu sounds", ["Einmal"] = "Once", ["Immer"] = "Always", ["Nie"] = "Never",
+            ["Beste Sektoren"] = "Best sectors", ["Letzte Runden"] = "Recent laps", ["Ideal"] = "Ideal", ["in Bestrunde {0}"] = "in best lap {0}",
+            ["ungültig"] = "invalid", ["Bestzeit"] = "Best", 
+            ["Noch keine gewertete Runde."] = "No valid lap yet.", ["Noch keine Runde gefahren."] = "No laps driven yet.",
+            ["Grafik: Schatten"] = "Graphics: shadows", ["Grafik: Kantenglättung"] = "Graphics: anti-aliasing", ["Grafik: Texturauflösung"] = "Graphics: texture resolution",
+            ["Wie Grafikstufe"] = "As graphics tier", ["Voll"] = "Full", ["Halb (spart Grafikspeicher)"] = "Half (saves video memory)", ["FXAA"] = "FXAA", ["SMAA"] = "SMAA", ["TAA"] = "TAA", ["MSAA 4×"] = "MSAA 4×",
+            ["Gamepad: Stick-Totzone (zusätzlich)"] = "Gamepad: extra stick dead zone", ["Gamepad: Trigger-Totzone"] = "Gamepad: trigger dead zone",
+            ["Gamepad: Gaskurve"] = "Gamepad: throttle curve", ["Gamepad: Bremskurve"] = "Gamepad: brake curve", ["Linear"] = "Linear",
+            ["Fein am Anfang ({0:0.0})"] = "Fine at the start ({0:0.0})", ["Direkt ({0:0.0})"] = "Direct ({0:0.0})",
+            ["Wiederholung"] = "Replay", ["WIEDERHOLUNG"] = "REPLAY", ["TV"] = "TV", ["Verfolger"] = "Chase", ["Nase"] = "Nose", ["Helikopter"] = "Helicopter",
+            ["Leertaste Pause · ←/→ 10 s · ↑/↓ Tempo · C Kamera · Tab Auto · Esc zurück"] = "Space pause · ←/→ 10 s · ↑/↓ speed · C camera · Tab car · Esc back",
         };
     }
 }

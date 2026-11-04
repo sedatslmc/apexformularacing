@@ -17,6 +17,29 @@ namespace Apex.InputLogic
         public const float ThrottleRate = 7f;
         public const float BrakeRate = 9f;
 
+        /// <summary>
+        /// Gamepad trigger to throttle/brake (options "Gamepad: ..."): values up to <paramref name="deadzone"/> read as 0
+        /// (a worn trigger that never rests at zero), the rest is rescaled to 0..1 and shaped with <paramref name="curve"/>
+        /// (&gt; 1 = finer at the start of the travel, &lt; 1 = more aggressive). Full travel always gives 1.
+        /// </summary>
+        public static float Pedal(float v, float deadzone, float curve)
+        {
+            float dz = ApexMath.Clamp(deadzone, 0f, 0.5f);
+            float a = ApexMath.Clamp01(v);
+            if (a <= dz) return 0f;
+            float u = (a - dz) / (1f - dz);
+            return System.MathF.Pow(u, ApexMath.Clamp(curve, 0.4f, 3f));
+        }
+
+        /// <summary>Additional stick dead zone on top of the Input System's (signed, rescaled so full lock stays full).</summary>
+        public static float StickDeadzone(float x, float deadzone)
+        {
+            float dz = ApexMath.Clamp(deadzone, 0f, 0.5f);
+            float a = ApexMath.Clamp01(System.MathF.Abs(x));
+            if (a <= dz) return 0f;
+            return System.MathF.Sign(x) * (a - dz) / (1f - dz);
+        }
+
         /// <summary>Stick response exponent: &gt; 1 gives finer control around the centre, full lock unchanged.</summary>
         public const float StickExponent = 1.35f;
 

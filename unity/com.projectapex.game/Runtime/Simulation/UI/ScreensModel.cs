@@ -64,7 +64,7 @@ namespace Apex.UI
         public void Disarm() => armed = -1;
     }
 
-    public enum ResultAction { ContinueToRace, NextRound, MainMenu }
+    public enum ResultAction { ContinueToRace, NextRound, MainMenu, Replay }
 
     public struct WeekendStep
     {
@@ -96,11 +96,13 @@ namespace Apex.UI
             return l;
         }
 
-        public static List<(ResultAction action, string label)> Actions(bool qualifyingOfGrandPrix, bool championshipNext)
+        /// <summary>Result actions; "Wiederholung" only when the session recorded a replay.</summary>
+        public static List<(ResultAction action, string label)> Actions(bool qualifyingOfGrandPrix, bool championshipNext, bool replay = false)
         {
             var l = new List<(ResultAction, string)>();
             if (qualifyingOfGrandPrix) l.Add((ResultAction.ContinueToRace, Loc.T("Weiter zum Rennen")));
             if (championshipNext) l.Add((ResultAction.NextRound, Loc.T("Nächste Meisterschaftsrunde")));
+            if (replay) l.Add((ResultAction.Replay, Loc.T("Wiederholung")));
             l.Add((ResultAction.MainMenu, Loc.T("Hauptmenü")));
             return l;
         }

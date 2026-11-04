@@ -512,6 +512,27 @@ namespace Apex.Game
             UpdateFlags(dt);
             UpdateStrategy(dt);
             CheckSessionEnd();
+            RecordReplay();
+        }
+
+        /// <summary>Session replay (docs/REPLAY.md): every car's pose at 20 Hz from the start signal on.</summary>
+        public ReplayClip Replay { get; private set; }
+        readonly List<(System.Numerics.Vector3, System.Numerics.Quaternion, float)> replayPoses = new List<(System.Numerics.Vector3, System.Numerics.Quaternion, float)>();
+
+        void RecordReplay()
+        {
+            if (!Started || Cars.Count == 0) return;
+            if (Replay == null || Replay.cars != Cars.Count) Replay = new ReplayClip(Cars.Count);
+            float t = (float)SimTime;
+            if (!Replay.Due(t)) return;
+            replayPoses.Clear();
+            foreach (var rc in Cars)
+            {
+                var tr = rc.car.transform;
+                var q = tr.rotation;
+                replayPoses.Add((tr.position.ToNum(), new System.Numerics.Quaternion(q.x, q.y, q.z, q.w), rc.Sim.ForwardSpeed));
+            }
+            Replay.Add(t, replayPoses);
         }
 
         readonly List<System.Numerics.Vector3> wakePos = new List<System.Numerics.Vector3>(), wakeFwd = new List<System.Numerics.Vector3>();

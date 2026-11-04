@@ -56,6 +56,11 @@ namespace Apex.Game
                 Application.quitting += Restore;
             }
             QualitySettings.lodBias = p.lodBias;
+#if UNITY_2022_2_OR_NEWER
+            QualitySettings.globalTextureMipmapLimit = p.textureMipLimit;
+#else
+            QualitySettings.masterTextureLimit = p.textureMipLimit;
+#endif
             QualitySettings.anisotropicFiltering = p.forceAnisotropic ? AnisotropicFiltering.ForceEnable : AnisotropicFiltering.Enable;
             // Built-in pipeline values (URP reads its own asset below).
             QualitySettings.pixelLightCount = p.maxAdditionalLights;

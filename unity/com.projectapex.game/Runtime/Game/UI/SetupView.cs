@@ -447,10 +447,14 @@ namespace Apex.Game
             // Map panel.
             var mapPanel = ApexUi.Panel(presentation, UiTokens.PanelAlpha);
             ApexUi.Place(mapPanel, 0, 210, w, 480);
+            // Time trial: the stored records (best sectors, recent laps) take the right part of the panel.
+            bool records = data.mode == SetupMode.TimeTrial;
+            float mw = records ? w - RecordsWidth : w;
             map = new TrackMapElement();
-            ApexUi.Place(map, 0, 0, w, f.cornerNames.Count > 0 ? 420 : 480);
+            ApexUi.Place(map, 0, 0, mw, f.cornerNames.Count > 0 ? 420 : 480);
             mapPanel.Add(map);
-            map.Set(TrackMap.Fit(info.def, info.geometry, w, f.cornerNames.Count > 0 ? 420 : 480, 34f, 360), 4f, true, Color.white, true);
+            map.Set(TrackMap.Fit(info.def, info.geometry, mw, f.cornerNames.Count > 0 ? 420 : 480, 34f, 360), 4f, true, Color.white, true);
+            if (records) BuildRecords(mapPanel, w - RecordsWidth, f);
             map.Progress = ReducedMotion ? 1f : 0f;
             mapTime = 0f;
             var legend = new VisualElement { pickingMode = PickingMode.Ignore };
@@ -514,6 +518,41 @@ namespace Apex.Game
                 ApexUi.Place(ml, 14, 134, cw - 28, 18);
                 trackCards.Add((card, tid));
             }
+        }
+
+        const float RecordsWidth = 330f;
+
+        /// <summary>Best sectors (with the ideal lap) and the last laps on this circuit, from the save game.</summary>
+        static void BuildRecords(VisualElement panel, float x, TrackFacts f)
+        {
+            var col = new VisualElement { pickingMode = PickingMode.Ignore };
+            ApexUi.Place(col, x, 0, RecordsWidth, 420);
+            col.style.paddingTop = 20; col.style.paddingRight = 22;
+            panel.Add(col);
+            var edge = ApexUi.Box(panel, ApexUi.C(UiTokens.Surface));
+            ApexUi.Place(edge, x - 1, 20, 1, 380);
+            ApexUi.Caption(col, Loc.T("Beste Sektoren"));
+            var sectors = TimeTrialRecords.Sectors(f.record, Mathf.Max(1, f.sectors));
+            if (sectors.Count == 0) ApexUi.Text(col, Loc.T("Noch keine gewertete Runde."), ApexUi.Body, 14, ApexUi.C(UiTokens.Steel)).style.marginTop = 8;
+            foreach (var r in sectors) RecordLine(col, r);
+            var cap = ApexUi.Caption(col, Loc.T("Letzte Runden"));
+            cap.style.marginTop = 18;
+            var recent = TimeTrialRecords.Recent(f.record, 6);
+            if (recent.Count == 0) ApexUi.Text(col, Loc.T("Noch keine Runde gefahren."), ApexUi.Body, 14, ApexUi.C(UiTokens.Steel)).style.marginTop = 8;
+            foreach (var r in recent) RecordLine(col, r);
+        }
+
+        static void RecordLine(VisualElement parent, RecordRow r)
+        {
+            var row = new VisualElement { pickingMode = PickingMode.Ignore };
+            row.style.flexDirection = FlexDirection.Row; row.style.alignItems = Align.Center; row.style.marginTop = 6; row.style.height = 24;
+            parent.Add(row);
+            var colour = r.tone == 1 ? ApexUi.C(UiPalette.Current.best) : r.tone == 2 ? ApexUi.C(UiPalette.Current.bad) : ApexUi.C(UiTokens.Ivory);
+            var l = ApexUi.Text(row, r.label.ToUpperInvariant(), ApexUi.BodyStrong, 12, ApexUi.C(UiTokens.Steel), 1.5f);
+            l.style.width = 96;
+            var v = ApexUi.Text(row, r.value, ApexUi.DisplayStrong, 20, colour, 1f);
+            v.style.width = 110;
+            ApexUi.Text(row, r.note, ApexUi.Body, 13, ApexUi.C(UiTokens.Steel), 0f, TextAnchor.MiddleRight).style.flexGrow = 1;
         }
 
         static void Fact(VisualElement parent, float w, string caption, string value, bool best = false)

@@ -488,6 +488,10 @@ namespace Apex.Game
                 new Row { label = "Lenkglättung", value = () => s.steeringSmoothing <= 0.001f ? "Aus" : $"{s.steeringSmoothing * 100f:0} %", change = d => s.steeringSmoothing += (d == 0 ? 1 : d) * 0.1f },
                 new Row { label = "Neigung: max. Winkel", value = () => $"{s.tiltMaxAngleDeg:0}°", change = d => s.tiltMaxAngleDeg += d == 0 ? 5 : d * 5 },
                 new Row { label = "Neigung: Empfindlichkeit", value = () => $"{s.tiltSensitivity:0.0}", change = d => s.tiltSensitivity += (d == 0 ? 1 : d) * 0.1f },
+                new Row { label = "Gamepad: Stick-Totzone (zusätzlich)", value = () => $"{s.padStickDeadzone * 100f:0} %", change = d => s.padStickDeadzone = Mathf.Clamp(s.padStickDeadzone + (d < 0 ? -0.02f : 0.02f), 0f, 0.3f) },
+                new Row { label = "Gamepad: Trigger-Totzone", value = () => $"{s.padTriggerDeadzone * 100f:0} %", change = d => s.padTriggerDeadzone = Mathf.Clamp(s.padTriggerDeadzone + (d < 0 ? -0.02f : 0.02f), 0f, 0.3f) },
+                new Row { label = "Gamepad: Gaskurve", value = () => PedalCurveLabel(s.padThrottleCurve), change = d => s.padThrottleCurve = Mathf.Clamp(Mathf.Round((s.padThrottleCurve + (d < 0 ? -0.1f : 0.1f)) * 10f) / 10f, 0.5f, 2.5f) },
+                new Row { label = "Gamepad: Bremskurve", value = () => PedalCurveLabel(s.padBrakeCurve), change = d => s.padBrakeCurve = Mathf.Clamp(Mathf.Round((s.padBrakeCurve + (d < 0 ? -0.1f : 0.1f)) * 10f) / 10f, 0.5f, 2.5f) },
                 new Row { label = "Neigung: Totzone", value = () => $"{s.tiltDeadZoneDeg:0.0}°", change = d => s.tiltDeadZoneDeg += (d == 0 ? 1 : d) * 0.5f },
                 new Row { label = "Neigung: Glättung", value = () => $"{s.tiltSmoothing * 1000f:0} ms", change = d => s.tiltSmoothing += (d == 0 ? 1 : d) * 0.01f },
                 new Row { label = "Neigung umkehren", value = () => OnOff(s.invertTilt), change = d => s.invertTilt = !s.invertTilt },
@@ -508,6 +512,12 @@ namespace Apex.Game
                         s.environmentDetail = p.environmentDetail;
                         s.ultraTextures = p.ultraTextures;
                     } },
+                new Row { label = "Grafik: Schatten", value = () => Apex.UI.Loc.T(GraphicsPreset.ShadowName(s.shadowQuality)),
+                    change = d => s.shadowQuality = Wrap(s.shadowQuality + 1 + (d < 0 ? -1 : 1), GraphicsPreset.ShadowLevels + 1) - 1 },
+                new Row { label = "Grafik: Kantenglättung", value = () => Apex.UI.Loc.T(GraphicsPreset.AntialiasingName(s.antialiasingMode)),
+                    change = d => s.antialiasingMode = Wrap(s.antialiasingMode + 1 + (d < 0 ? -1 : 1), GraphicsPreset.AntialiasingChoices + 1) - 1 },
+                new Row { label = "Grafik: Texturauflösung", value = () => Apex.UI.Loc.T(s.textureHalf < 0 ? "Wie Grafikstufe" : s.textureHalf == 0 ? "Voll" : "Halb (spart Grafikspeicher)"),
+                    change = d => s.textureHalf = Wrap(s.textureHalf + 1 + (d < 0 ? -1 : 1), 3) - 1 },
                 new Row { label = "Menükulisse Istanbul (PC, ab nächstem Menü)", value = () => Application.isMobilePlatform ? "– (Mobil)" : OnOff(s.menuBackdrop),
                     change = d => s.menuBackdrop = !s.menuBackdrop },
                 new Row { label = "Umgebungsdetails (ab nächster Session)",
@@ -573,6 +583,9 @@ namespace Apex.Game
             AddUiSettingRows(rows);
             return rows;
         }
+
+        static string PedalCurveLabel(float c) =>
+            Mathf.Abs(c - 1f) < 0.05f ? Apex.UI.Loc.T("Linear") : c > 1f ? Apex.UI.Loc.Format("Fein am Anfang ({0:0.0})", c) : Apex.UI.Loc.Format("Direkt ({0:0.0})", c);
 
         static string GraphicsTierLabel(int setting)
         {

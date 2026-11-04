@@ -83,7 +83,7 @@ namespace Apex.Game
         static SettingsCategory CategoryOf(string label)
         {
             if (label.StartsWith("Steuerung") || label.StartsWith("Neigung") || label.StartsWith("Linkshänder") || label.StartsWith("Tasten")
-                || label.StartsWith("Tastatur") || label.StartsWith("Taste:") || label.StartsWith("Touch-Lenkrad") || label.StartsWith("Lenkempfindlichkeit") || label.StartsWith("Lenkglättung")) return SettingsCategory.Controls;
+                || label.StartsWith("Tastatur") || label.StartsWith("Taste:") || label.StartsWith("Touch-Lenkrad") || label.StartsWith("Lenkempfindlichkeit") || label.StartsWith("Lenkglättung") || label.StartsWith("Gamepad")) return SettingsCategory.Controls;
             if (label.StartsWith("HUD") || label.StartsWith("Geschwindigkeit")) return SettingsCategory.Hud;
             if (label.StartsWith("Reduzierte") || label.StartsWith("Sprache") || label.StartsWith("Farbsehen") || label.StartsWith("Hoher Kontrast") || label.StartsWith("Textgröße"))
                 return SettingsCategory.Accessibility;
@@ -291,7 +291,7 @@ namespace Apex.Game
                 race = race, playerRow = res.playerRow,
                 xp = $"+{res.xpGained} XP",
                 levelUp = res.levelAfter > res.levelBefore ? Loc.Format("LEVEL {0} ERREICHT · NEU: {1}", res.levelAfter, Progression.Rewards[res.levelAfter - 1].name) : "",
-                actions = ResultsModel.Actions(quali && res.kind == SessionKind.GrandPrix, res.kind == SessionKind.Championship && Career.ChampionshipActive),
+                actions = ResultsModel.Actions(quali && res.kind == SessionKind.GrandPrix, res.kind == SessionKind.Championship && Career.ChampionshipActive, ReplayPlayer.Available(Race)),
             };
             d.rows.AddRange(res.rows);
             d.teams.AddRange(res.teams);
@@ -308,9 +308,28 @@ namespace Apex.Game
             {
                 // Podium shot: in front of the podium on the pit building, looking at the trophy.
                 raceCam.Hold(podium.TransformPoint(new Vector3(0f, 3.4f, -12f)), podium.TransformPoint(new Vector3(0f, 2.2f, 0f)));
+                StartCeremony(podium);
             }
             resultsView.ReducedMotion = Settings.reducedMotion;
             resultsView.Show(d);
+        }
+
+        PodiumCeremonyComponent ceremony;
+
+        /// <summary>Top three on the podium in their team colours (Apex.Race.PodiumCeremony).</summary>
+        void StartCeremony(Transform podium)
+        {
+            if (Race == null) return;
+            if (ceremony == null) ceremony = gameObject.AddComponent<PodiumCeremonyComponent>();
+            var top = new List<(Color, Color)>();
+            for (int p = 1; p <= 3; p++)
+            {
+                var rc = Race.Cars.Find(c => c.entry.position == p);
+                if (rc == null) break;
+                var tm = Roster.Teams[rc.teamIndex];
+                top.Add((new Color(tm.r, tm.g, tm.b), new Color(tm.ar, tm.ag, tm.ab)));
+            }
+            ceremony.Begin(podium, top, Settings.reducedMotion);
         }
 
         Transform FindPodium()
@@ -327,6 +346,7 @@ namespace Apex.Game
             {
                 case ResultAction.ContinueToRace: StartSession(SessionKind.GrandPrix, SessionType.Race, pendingRaceGrid); break;
                 case ResultAction.NextRound: StartSession(SessionKind.Championship, SessionType.Race); break;
+                case ResultAction.Replay: sm.TryTransition(GameState.Replay); break;
                 default: sm.TryTransition(GameState.MainMenu); break;
             }
         }
@@ -386,7 +406,7 @@ namespace Apex.Game
                 || from == GameState.PitApproach || from == GameState.PitStop;
             if (!sessionInternal) screenFade?.Flash(Settings.reducedMotion);
             if (!InRaceState) ApplyUiSettings();   // e.g. a language change made in the pause menu reaches the HUD here
-            if (to != GameState.Results) { resultsView?.Hide(); raceCam.ClearHold(); }
+            if (to != GameState.Results) { resultsView?.Hide(); raceCam.ClearHold(); ceremony?.End(); }
             else ShowResultsView();
             if (to != GameState.Garage) garageView?.Hide();
             else if (garageView != null) ShowGarageView();

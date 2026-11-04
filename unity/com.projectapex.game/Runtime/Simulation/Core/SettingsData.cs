@@ -70,6 +70,8 @@ namespace Apex.Core
         public float masterVolume = 0.8f;
         public float tiltMaxAngleDeg = 35f;
         public float tiltDeadZoneDeg = 2f;
+        /// <summary>Gamepad shaping (InputTuning.Pedal / StickDeadzone): extra stick dead zone, trigger dead zone, trigger curves.</summary>
+        public float padStickDeadzone = 0f, padTriggerDeadzone = 0.02f, padThrottleCurve = 1f, padBrakeCurve = 1f;
         public float tiltSensitivity = 1f;
         public float tiltSmoothing = 0.05f;
         /// <summary>Safety switch in case a device reports mirrored sensor axes.</summary>
@@ -125,6 +127,8 @@ namespace Apex.Core
         public bool ultraTextures = true;
         /// <summary>Graphics tier (<see cref="GraphicsTier"/>); -1 = automatic for the device. Render settings apply live.</summary>
         public int graphicsTier = -1;
+        /// <summary>Separate graphics choices on top of the tier; -1 = as the tier (GraphicsPreset.WithOverrides).</summary>
+        public int shadowQuality = -1, antialiasingMode = -1, textureHalf = -1;
         public string bestLapsJson = "";
 
         /// <summary>Upgrades older versions and clamps out-of-range values. Returns true if changed.</summary>
@@ -155,6 +159,10 @@ namespace Apex.Core
             changed |= ClampField(ref masterVolume, 0f, 1f);
             changed |= ClampField(ref tiltMaxAngleDeg, 15f, 70f);
             changed |= ClampField(ref tiltDeadZoneDeg, 0f, 8f);
+            changed |= ClampField(ref padStickDeadzone, 0f, 0.3f);
+            changed |= ClampField(ref padTriggerDeadzone, 0f, 0.3f);
+            changed |= ClampField(ref padThrottleCurve, 0.5f, 2.5f);
+            changed |= ClampField(ref padBrakeCurve, 0.5f, 2.5f);
             changed |= ClampField(ref tiltSensitivity, 0.5f, 2f);
             changed |= ClampField(ref tiltSmoothing, 0f, 0.3f);
             changed |= ClampField(ref touchButtonScale, 0.7f, 1.5f);
@@ -178,6 +186,9 @@ namespace Apex.Core
             changed |= ClampField(ref touchWheelRange, 0.06f, 0.25f);
             changed |= ClampInt(ref environmentDetail, 0, GraphicsPreset.EnvironmentLevels - 1);
             changed |= ClampInt(ref graphicsTier, -1, GraphicsPreset.TierCount - 1);
+            changed |= ClampInt(ref shadowQuality, -1, GraphicsPreset.ShadowLevels - 1);
+            changed |= ClampInt(ref antialiasingMode, -1, GraphicsPreset.AntialiasingChoices - 1);
+            changed |= ClampInt(ref textureHalf, -1, 1);
             if (!Enum.IsDefined(typeof(DrivingProfile), drivingProfile))
             {
                 ApplyProfile(DrivingProfile.Balanced);
