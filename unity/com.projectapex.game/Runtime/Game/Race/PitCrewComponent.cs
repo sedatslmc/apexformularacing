@@ -137,7 +137,7 @@ namespace Apex.Game
         static Material Instanced(string name, Color c) => new Material(EnvironmentMaterials.Solid(c)) { name = name, enableInstancing = true };
 
         /// <summary>One mesh with a submesh per material slot (empty slots stay as empty submeshes, so indices are fixed).</summary>
-        static Mesh ToMesh(string name, MeshBuilder[] slots)
+        internal static Mesh ToMesh(string name, MeshBuilder[] slots)
         {
             var verts = new List<Vector3>();
             var uvs = new List<Vector2>();

@@ -418,14 +418,22 @@ ein Icon-Set beauftragen, Musik lizenzieren.
 | HUD | Schalter je Element zusätzlich zum Preset: Streckenkarte, Reifeninformationen, Zeitentabelle, Sektorzeiten/Delta |
 | Klänge | Laden fertig, persönliche Bestzeit (auch Streckenrekord), Motor-Blip beim Rennstart. Synthetisiert, folgen der UI-Lautstärke |
 
-### 13.4 Weiterhin offen
-- **Zeitfahrmenü mit besten Sektoren und letzten Runden:** Der Speicherstand kennt bisher nur die Bestzeit je Strecke. Sektoren und Rundenliste müssen erst gespeichert werden.
+### 13.4 Nachgezogen (2026-11-04) und weiterhin offen
+Umgesetzt und in der Simulation getestet, in Unity **nicht geprüft**:
+
+| Bereich | Umsetzung |
+|---|---|
+| Wiederholung | Ergebnisbildschirm → „Wiederholung“ mit den Kameras TV, Verfolger, Nase, Cockpit und Helikopter, Zeitleiste und Tempo. Die Nasenkamera gibt es auch beim Fahren als fünften Kameramodus. Details: `docs/REPLAY.md`. |
+| Zeitfahren: Sektoren und Runden | `TrackRecordBook` (`records.json`) speichert jede Runde des Spielers mit ihren Sektoren. Gültige Runden aktualisieren die Bestzeit und die besten Einzelsektoren. Die letzten 10 Runden bleiben erhalten, ungültige werden markiert. Im Modus Zeitfahren zeigt die Streckenwahl rechts neben der Karte die besten Sektoren mit der Idealrunde und die letzten Runden mit dem Abstand zur Bestzeit. Die Werte werden erst ab dieser Version gesammelt. |
+| Grafik | Eigene Optionen für Schatten (Niedrig–Ultra), Kantenglättung (Aus/FXAA/SMAA/TAA/MSAA 4×) und Texturauflösung (Voll/Halb) über der Grafikstufe. „Wie Grafikstufe“ übernimmt deren Wert (`GraphicsPreset.WithOverrides`). |
+| Gamepad | zusätzliche Stick-Totzone, Trigger-Totzone, Gas- und Bremskurve (`InputTuning.Pedal`/`StickDeadzone`) |
+| Podium | Die drei Erstplatzierten stehen in ihren Teamfarben auf den Stufen. Die Figuren sind die Körpermodelle der Boxencrew, also Platzhalter-Art. Der Sieger hebt den Pokal, Teamfahnen wehen, zwei Kanonen schießen Konfetti (`PodiumCeremony`). **Nationalflaggen gibt es nicht**, weil die fiktiven Fahrer keine Nationalität haben. Statt erfundener Flaggen zeigen die Fahnen die Teamfarben. |
+
+Weiterhin offen:
 - **Eigene Garagenkulisse mit Kamerafahrt dorthin:** Die Garage nutzt die Bühne im Hauptmenü.
 - **Unscharfer Hintergrund in der Pause:** bewusst nur Abdunklung, wegen der Leistung.
-- **Podium mit Fahrerfiguren, Konfetti und Nationalflaggen:** Die Podiumsaufnahme mit Pokal gibt es; die Figuren fehlen.
 - **Mobil-Anordnung des HUD:** in Unity auf einem Telefon prüfen.
-- **Grafik:** Getrennte Schatten-, Textur- und Kantenglättungsstufe fehlen. Sie hängen bisher zusammen an der Grafikstufe.
-- **Brems- und Gaskurven, Deadzones je Gerät, Controller-Belegung:** nicht vorhanden. Die Tastatur-Belegung gibt es.
+- **Controller-Belegung (Tasten des Gamepads frei wählen):** fehlt. Die Tastatur-Belegung gibt es.
 
 ### 13.5 In Unity zu prüfen
 1. Intro und Rennstart: Bildausschnitte (Brücke 45 m über dem Wasser, Strecke von oben), keine Kamera in Gebäuden, Überspringen.
@@ -434,3 +442,6 @@ ein Icon-Set beauftragen, Musik lizenzieren.
 4. Schrittleiste und Erklärzeile der Rennvorbereitung ohne Überlappung bei 16:9, 21:9 und auf dem Telefon.
 5. Auflösung und Vollbild unter Windows und macOS.
 6. Pause-Statuskarten, Zielflagge, Reifenspalte, Teamwertung, Garagen-Cockpit, HUD-Schalter und die neuen Klänge.
+7. Podiumszeremonie: Stehen die Figuren auf den Stufen? Hält der Sieger den Pokal sichtbar über dem Kopf? Ist das Konfetti im Bild, und bleibt die Bildrate stabil?
+8. Zeitfahren: Erscheint die Rekordspalte neben der Karte ohne Überlappung mit den Kurvennamen?
+9. Grafikoptionen: Wirken Schatten, Kantenglättung und Texturauflösung sofort? Unter Unity 6 läuft die Texturstufe über `globalTextureMipmapLimit`.

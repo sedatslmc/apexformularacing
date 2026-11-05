@@ -272,9 +272,9 @@ namespace Apex.Game
             float padThrottle = 0f, padBrake = 0f, padSteer = 0f;
             if (pad != null)
             {
-                padThrottle = pad.rightTrigger.ReadValue();
-                padBrake = pad.leftTrigger.ReadValue();
-                padSteer = pad.leftStick.ReadValue().x;
+                padThrottle = InputTuning.Pedal(pad.rightTrigger.ReadValue(), settings.padTriggerDeadzone, settings.padThrottleCurve);
+                padBrake = InputTuning.Pedal(pad.leftTrigger.ReadValue(), settings.padTriggerDeadzone, settings.padBrakeCurve);
+                padSteer = InputTuning.StickDeadzone(pad.leftStick.ReadValue().x, settings.padStickDeadzone);
                 // The stickDeadzone processor already returns exactly 0 in the centre; a threshold here
                 // would cut the first percent of travel again (fine corrections at speed).
                 if (Mathf.Abs(padSteer) > 0.001f) analogSteer = true;

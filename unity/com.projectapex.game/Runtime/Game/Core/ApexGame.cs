@@ -36,6 +36,9 @@ namespace Apex.Game
         /// <summary>Selectable circuits. bosphorus_a_classic keeps the earlier Ortaköy hairpin for comparison with the R20 layout.</summary>
         public static readonly string[] TrackIds = { "bosphorus_a", "bosphorus_a_classic", "test_loop" };
         const string CareerFile = "career.json";
+        const string RecordsFile = "records.json";
+        /// <summary>Lap records per circuit: best sectors and recent laps (time trial menu).</summary>
+        public Apex.Career.TrackRecordBook Records { get; private set; }
         const string ConfigFile = "session.json";
 
         readonly GameStateMachine sm = new GameStateMachine();
@@ -64,6 +67,7 @@ namespace Apex.Game
         LoadingView loadingView;
         LoadingModel loadingModel;
         CinematicDirector cinematic;
+        ReplayPlayer replay;
         bool titleShownThisRun;
         SetupStep setupStartStep = SetupStep.Track;
         int swallowClickFrame = -1;
@@ -102,6 +106,8 @@ namespace Apex.Game
             Settings = SaveService.LoadSettings();
             Career = SaveService.Load(CareerFile, () => new CareerData());
             if (Career.MigrateAndValidate()) SaveService.Save(CareerFile, Career);
+            Records = SaveService.Load(RecordsFile, () => new Apex.Career.TrackRecordBook());
+            if (Records.tracks == null) Records.tracks = new System.Collections.Generic.List<Apex.Career.TrackRecord>();
             Config = SaveService.Load(ConfigFile, () => new SessionConfig());
             Config.Validate();
             showTelemetry = Settings.showTelemetry;
@@ -118,6 +124,7 @@ namespace Apex.Game
             cinematic = gameObject.AddComponent<CinematicDirector>();
             cinematic.cam = cam;
             cinematic.reducedMotion = Settings.reducedMotion;
+            replay = gameObject.AddComponent<ReplayPlayer>();
             sm.TryTransition(GameState.MainMenu);
         }
 
@@ -217,7 +224,7 @@ namespace Apex.Game
             if (!setupTracks.TryGetValue(id, out var t))
                 setupTracks[id] = t = new SetupView.TrackInfo { def = def, geometry = Geometry(id) };
             // Facts carry the personal best, which changes between visits.
-            t.facts = Apex.UI.TrackFacts.From(def, t.geometry, SaveService.BestLap(Settings, id));
+            t.facts = Apex.UI.TrackFacts.From(def, t.geometry, SaveService.BestLap(Settings, id), Records?.Find(id));
             return t;
         }
 
@@ -505,7 +512,7 @@ namespace Apex.Game
 
         void ApplyGraphics()
         {
-            var p = GraphicsPreset.For(GraphicsQuality.Resolve(Settings.graphicsTier));
+            var p = GraphicsPreset.For(GraphicsQuality.Resolve(Settings.graphicsTier)).WithOverrides(Settings.shadowQuality, Settings.antialiasingMode, Settings.textureHalf);
             GraphicsQuality.Apply(p, cam, sun);
             if (weatherVisuals != null) weatherVisuals.ApplyGraphics(p);
         }
@@ -1058,6 +1065,8 @@ namespace Apex.Game
             helpOpen = false;
             if (paused) input.ReleaseAll();
             input.drivingControls = to == GameState.Driving || to == GameState.Grid || to == GameState.RadioOverlay || to == GameState.PitApproach || to == GameState.PitStop;
+            if (from == GameState.Replay) replay?.End();
+            if (to == GameState.Replay) replay?.Begin(Race, cam, raceCam);
             if (to == GameState.MainMenu || to == GameState.Garage || to == GameState.TrackSelect)
             {
                 if (world != null) EndSession();
@@ -1097,6 +1106,14 @@ namespace Apex.Game
 
         void OnPlayerLap(int lap, double time, bool valid, bool personalBest)
         {
+            var laps = Race.Player.entry.timer.completedLaps;
+            var sectors = laps.Count > 0 ? laps[laps.Count - 1].sectors : null;
+            string sessionName = kind == SessionKind.TimeTrial ? "Zeitfahren" : Race.Type == SessionType.Race ? "Rennen" : Race.Type == SessionType.Qualifying ? "Qualifying" : "Training";
+            if (Records != null)
+            {
+                Records.Submit(trackId, time, valid, sectors, sessionName);
+                SaveService.Save(RecordsFile, Records);
+            }
             if (valid && SaveService.SubmitLap(Settings, trackId, time))
             {
                 sessionRecord = time;
@@ -1308,6 +1325,9 @@ namespace Apex.Game
                     break;
                 case GameState.Results:
                     if (BackPressed) sm.TryTransition(GameState.MainMenu);
+                    break;
+                case GameState.Replay:
+                    if (BackPressed || (replay != null && !replay.Playing)) sm.TryTransition(GameState.Results);
                     break;
                 case GameState.Grid:
                 case GameState.Driving:

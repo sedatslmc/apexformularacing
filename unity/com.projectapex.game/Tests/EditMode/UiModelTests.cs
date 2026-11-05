@@ -412,6 +412,7 @@ namespace Apex.Tests
             Assert.That(ResultsModel.Weekend(false, true), Is.Empty);
             Assert.That(ResultsModel.Actions(true, false)[0].action, Is.EqualTo(ResultAction.ContinueToRace));
             Assert.That(ResultsModel.Actions(false, true).ConvertAll(a => a.action), Is.EqualTo(new List<ResultAction> { ResultAction.NextRound, ResultAction.MainMenu }));
+            Assert.That(ResultsModel.Actions(false, false, true).ConvertAll(a => a.action), Is.EqualTo(new List<ResultAction> { ResultAction.Replay, ResultAction.MainMenu }));
             Assert.That(ResultsModel.ShowPodium(true, true, 2, true), Is.True);
             Assert.That(ResultsModel.ShowPodium(true, true, 4, true) || ResultsModel.ShowPodium(true, true, 1, false) || ResultsModel.ShowPodium(false, true, 1, true), Is.False);
         }
@@ -497,7 +498,13 @@ namespace Apex.Tests
                 det.Update(snap, 0, feed); snap.status = Apex.Race.TrackStatus.Green; snap.position = 2; snap.lap = 2; det.Update(snap, 1, feed); det.Update(snap, 3, feed);
                 snap.position = 4; det.Update(snap, 4, feed); det.Update(snap, 6, feed); snap.finished = true; det.Update(snap, 7, feed);
                 snap.finished = false; det.Reset(); det.Update(snap, 8, feed); snap.finished = true; snap.position = 1; det.Update(snap, 9, feed);
-                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); PauseModel.Status(b, 1, 2, 1, 2, "", "", "", 0f); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b); }
+                foreach (var b in new[] { true, false }) { PauseModel.Entries(b, true); PauseModel.Status(b, 1, 2, 1, 2, "", "", "", 0f); ResultsModel.Weekend(true, b); ResultsModel.Actions(b, !b, true); }
+                foreach (var n in Apex.Race.ReplayTransport.CameraNames) Loc.T(n);
+                var book = new Apex.Career.TrackRecordBook();
+                book.Submit("t", 90.0, true, new[] { 30.0, 31.0, 29.0 }, "Zeitfahren");
+                book.Submit("t", 91.0, true, new[] { 29.0, 32.0, 29.0 }, "Training");
+                book.Submit("t", 89.0, false, new[] { 29.0, 31.0, 29.0 }, "Rennen");
+                TimeTrialRecords.Sectors(book.Find("t"), 3); TimeTrialRecords.Recent(book.Find("t"), 6);
                 foreach (var (r, q, pos, fin) in new[] { (true, false, 1, true), (true, false, 2, true), (true, false, 5, false), (false, true, 1, false), (false, true, 4, false), (false, false, 2, false) })
                     ResultsModel.Headline(r, q, pos, 10, fin);
                 foreach (var cat in SettingsCatalog.All) { SettingsCatalog.Name(cat); SettingsCatalog.Description(cat); }

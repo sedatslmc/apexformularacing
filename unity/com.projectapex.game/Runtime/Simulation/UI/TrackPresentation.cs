@@ -18,12 +18,14 @@ namespace Apex.UI
         public float elevationRange;
         /// <summary>Personal best lap (s); 0 = none.</summary>
         public double bestLap;
+        /// <summary>Stored lap records (best sectors, recent laps), or null before the first lap here.</summary>
+        public Apex.Career.TrackRecord record;
         /// <summary>Named corners in lap order (empty when the track has no authored corner names).</summary>
         public readonly List<string> cornerNames = new List<string>();
 
         public string Direction => Loc.T(clockwise ? "im Uhrzeigersinn" : "gegen den Uhrzeigersinn");
 
-        public static TrackFacts From(CircuitDefinition def, TrackGeometry g, double bestLap)
+        public static TrackFacts From(CircuitDefinition def, TrackGeometry g, double bestLap, Apex.Career.TrackRecord record = null)
         {
             var f = new TrackFacts
             {
@@ -33,6 +35,7 @@ namespace Apex.UI
                 corners = g.CornersFor(def).Count,
                 sectors = def.sectorFractions.Length,
                 bestLap = bestLap,
+                record = record,
             };
             float minY = float.MaxValue, maxY = float.MinValue;
             double area = 0;
@@ -48,6 +51,59 @@ namespace Apex.UI
             foreach (var c in TrackMap.CornersInLapOrder(def, g.Length)) if (!string.IsNullOrEmpty(c.name)) f.cornerNames.Add(c.name);
             return f;
         }
+    }
+
+    /// <summary>One row of the time trial records panel.</summary>
+    public struct RecordRow
+    {
+        public string label, value, note;
+        /// <summary>0 = normal, 1 = best (purple), 2 = invalid lap (red).</summary>
+        public int tone;
+    }
+
+    /// <summary>
+    /// Time trial records panel (track selection in time trial mode): best single sectors with the theoretical best
+    /// and the most recent laps with their gap to the best lap. Only stored data; empty lists before the first lap.
+    /// </summary>
+    public static class TimeTrialRecords
+    {
+        public static List<RecordRow> Sectors(Apex.Career.TrackRecord r, int sectors)
+        {
+            var l = new List<RecordRow>();
+            if (r == null) return l;
+            for (int i = 0; i < sectors; i++)
+            {
+                double best = i < r.bestSectors.Length ? r.bestSectors[i] : 0.0;
+                double inLap = i < r.bestLapSectors.Length ? r.bestLapSectors[i] : 0.0;
+                l.Add(new RecordRow
+                {
+                    label = $"S{i + 1}",
+                    value = best > 0 ? FormatSector(best) : "–",
+                    note = best > 0 && inLap > 0 && inLap - best > 5e-4 ? Loc.Format("in Bestrunde {0}", FormatSector(inLap)) : "",
+                    tone = best > 0 ? 1 : 0,
+                });
+            }
+            double theo = r.TheoreticalBest;
+            if (theo > 0 && r.bestSectors.Length == sectors)
+                l.Add(new RecordRow { label = Loc.T("Ideal"), value = MainMenuModel.FormatLap(theo), note = r.bestLap > 0 ? "-" + FormatSector(Math.Max(0.0, r.bestLap - theo)) : "", tone = 0 });
+            return l;
+        }
+
+        public static List<RecordRow> Recent(Apex.Career.TrackRecord r, int max)
+        {
+            var l = new List<RecordRow>();
+            if (r == null) return l;
+            for (int i = 0; i < r.recent.Count && i < max; i++)
+            {
+                var lap = r.recent[i];
+                bool best = lap.valid && r.bestLap > 0 && Math.Abs(lap.time - r.bestLap) < 1e-6;
+                string note = !lap.valid ? Loc.T("ungültig") : best ? Loc.T("Bestzeit") : r.bestLap > 0 ? "+" + FormatSector(lap.time - r.bestLap) : "";
+                l.Add(new RecordRow { label = Loc.T(string.IsNullOrEmpty(lap.session) ? "Runde" : lap.session), value = MainMenuModel.FormatLap(lap.time), note = note, tone = !lap.valid ? 2 : best ? 1 : 0 });
+            }
+            return l;
+        }
+
+        public static string FormatSector(double s) => s.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>A circuit drawn top-down (north up) into a rectangle: polyline, sector per point, start line, corner numbers.</summary>

@@ -64,6 +64,50 @@ namespace Apex.Core
         public float motionBlur;
         /// <summary>Motion blur sample quality 0 low .. 2 high.</summary>
         public int motionBlurQuality;
+        /// <summary>Texture mip levels skipped at load (0 = full resolution, 1 = half).</summary>
+        public int textureMipLimit;
+
+        /// <summary>Separate shadow levels (options menu): low, medium, high, ultra.</summary>
+        public const int ShadowLevels = 4;
+        /// <summary>Anti-aliasing choices: off, FXAA, SMAA, TAA, MSAA 4x.</summary>
+        public const int AntialiasingChoices = 5;
+
+        public static string ShadowName(int level) => level < 0 ? "Wie Grafikstufe" : level == 0 ? "Niedrig" : level == 1 ? "Mittel" : level == 2 ? "Hoch" : "Ultra";
+        public static string AntialiasingName(int choice) =>
+            choice < 0 ? "Wie Grafikstufe" : choice == 0 ? "Aus" : choice == 1 ? "FXAA" : choice == 2 ? "SMAA" : choice == 3 ? "TAA" : "MSAA 4×";
+
+        /// <summary>
+        /// The tier's values with the player's separate choices on top (-1 keeps the tier's value): shadow level
+        /// (distance, cascades, map resolution, soft filter), anti-aliasing (post AA or MSAA; TAA forces MSAA off,
+        /// as URP requires) and texture resolution (0 full, 1 half).
+        /// </summary>
+        public GraphicsPreset WithOverrides(int shadowLevel, int antialiasingChoice, int textureHalf)
+        {
+            var p = this;
+            if (shadowLevel >= 0)
+            {
+                switch (Math.Min(shadowLevel, ShadowLevels - 1))
+                {
+                    case 0: p.shadowDistance = 100f; p.shadowCascades = 1; p.shadowResolution = 1024; p.softShadowQuality = 0; break;
+                    case 1: p.shadowDistance = 200f; p.shadowCascades = 2; p.shadowResolution = 2048; p.softShadowQuality = 1; break;
+                    case 2: p.shadowDistance = 320f; p.shadowCascades = 4; p.shadowResolution = 2048; p.softShadowQuality = 2; break;
+                    default: p.shadowDistance = 450f; p.shadowCascades = 4; p.shadowResolution = 4096; p.softShadowQuality = 2; break;
+                }
+                var sp = CascadeSplits(p.shadowCascades, 1f, p.shadowDistance, 0.75f);
+                p.split1 = sp[0];
+                p.split2 = sp.Length > 1 ? sp[1] : 1f;
+                p.split3 = sp.Length > 2 ? sp[2] : 1f;
+            }
+            if (antialiasingChoice >= 0)
+            {
+                int c = Math.Min(antialiasingChoice, AntialiasingChoices - 1);
+                p.msaa = c == 4 ? 4 : 1;
+                p.antialiasing = c == 1 ? PostAntialiasing.Fxaa : c == 2 ? PostAntialiasing.Smaa : c == 3 ? PostAntialiasing.Taa : PostAntialiasing.None;
+                p.antialiasingQuality = Math.Max(1, p.antialiasingQuality);
+            }
+            if (textureHalf >= 0) p.textureMipLimit = textureHalf > 0 ? 1 : 0;
+            return p;
+        }
 
         public const int TierCount = 5;
         /// <summary>Environment detail levels: 0 low (mobile), 1 medium, 2 high, 3 extreme (PC: more people and
